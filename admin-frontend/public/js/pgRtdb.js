@@ -44,6 +44,7 @@ let _tokenCache = { token: null, exp: 0, uid: null };
 let _getTokenP = null;
 let _forceRefreshP = null;
 let _authHooked = false;
+let _tenantAuthorityP = null;
 const _inflightGet = new Map();
 const _refreshTimers = new Map();
 
@@ -140,7 +141,47 @@ async function getBearerToken({ forceRefresh = false } = {}) {
 }
 
 export function getClientDataBackend() {
-  return _mode === "unknown" ? "firebase" : _mode;
+  return _mode;
+}
+
+export async function resolveClientDataBackend() {
+  return ensureMode();
+}
+
+export function classifyClientError(error) {
+  const status = Number(error?.status) || 0;
+  const code = error?.code === "PG_UNAVAILABLE" ? "PG_UNAVAILABLE" : null;
+  if (status === 401) return { code: "AUTH_REQUIRED", status: 401 };
+  if (status === 403) return { code: "TENANT_FORBIDDEN", status: 403 };
+  if (status === 404) return { code: "NOT_FOUND", status: 404 };
+  if (status === 409 || error?.code === "CREDENTIAL_CONFLICT") return { code: "CREDENTIAL_CONFLICT", status: 409 };
+  if (status === 503 || code === "PG_UNAVAILABLE") return { code: "PG_UNAVAILABLE", status: 503 };
+  return { code: "UNEXPECTED", status: 500 };
+}
+
+async function ensureTenantAuthority(path) {
+  const requestedRestId = restIdOf(path);
+  if (!requestedRestId) return;
+  const user = await waitForAuthUser();
+  if (!user) throw httpError(401, { error: "AUTH_REQUIRED" });
+  if (!_tenantAuthorityP) {
+    _tenantAuthorityP = (async () => {
+      try {
+        const result = await user.getIdTokenResult(true);
+        const claims = result?.claims || {};
+        return {
+          uid: user.uid,
+          restId: claims.restId ?? claims.restaurantId ?? null,
+        };
+      } catch {
+        throw httpError(403, { error: "TENANT_FORBIDDEN" });
+      }
+    })().finally(() => { _tenantAuthorityP = null; });
+  }
+  const authority = await _tenantAuthorityP;
+  if (authority.uid !== user.uid || authority.restId !== requestedRestId) {
+    throw httpError(403, { error: "TENANT_FORBIDDEN" });
+  }
 }
 
 async function ensureMode() {
@@ -155,12 +196,15 @@ async function ensureMode() {
       if (typeof j.restaurantCount === "number") {
         try { window.__canonicalRestaurantCount = j.restaurantCount; } catch { /* non-browser */ }
       }
-      _mode = j.dataBackend === "postgres" ? "postgres" : "firebase";
+      if (j.dataBackend !== "postgres" && j.dataBackend !== "firebase") {
+        throw new Error("Backend mode unavailable");
+      }
+      _mode = j.dataBackend;
       return _mode;
     })
     .catch(() => {
-      _mode = "firebase";
-      return _mode;
+      _modeP = null;
+      throw httpError(503, { error: "PG_UNAVAILABLE" });
     });
   return _modeP;
 }
@@ -203,9 +247,10 @@ async function authHeaders(path, { forceRefresh = false } = {}) {
 }
 
 function httpError(status, json) {
-  const err = new Error(json.error || `HTTP ${status}`);
-  err.status = status;
-  err.body = json;
+  const classification = classifyClientError({ status, code: json?.error });
+  const err = new Error(classification.code);
+  err.status = classification.status;
+  err.code = classification.code;
   return err;
 }
 
@@ -275,6 +320,7 @@ function toFb(r) {
 }
 
 async function usePg(r) {
+  await ensureTenantAuthority(pathOf(r));
   const mode = await ensureMode();
   return mode === "postgres" && isMapped(pathOf(r));
 }
@@ -316,7 +362,7 @@ async function pgGet(r) {
   if (_inflightGet.has(qkey)) return _inflightGet.get(qkey);
   const pending = (async () => {
     const json = await api("POST", "/api/pg/rtdb/get", { path }, path);
-    if (json.fallback) return (await fbGet(toFb(r))).val();
+    if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
     let value = json.value;
     if (r._query) value = applyQuery(value, r._query);
     return value;
@@ -498,11 +544,12 @@ export async function set(r, value) {
   if (!(await usePg(r))) return fbSet(toFb(r), value);
   const path = pathOf(r);
   const json = await api("POST", "/api/pg/rtdb/set", { path, value }, path);
-  if (json.fallback) return fbSet(toFb(r), value);
+  if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
 }
 
 export async function update(r, values) {
   const path = pathOf(r);
+  await ensureTenantAuthority(path);
   const keys = values && typeof values === "object" ? Object.keys(values) : [];
   const looksMulti = keys.some((k) => k.includes("/"));
   if ((await ensureMode()) !== "postgres") return fbUpdate(toFb(r), values);
@@ -511,14 +558,14 @@ export async function update(r, values) {
     : isMapped(path);
   if (!anyMapped) return fbUpdate(toFb(r), values);
   const json = await api("POST", "/api/pg/rtdb/update", { path, value: values }, path || keys[0]);
-  if (json.fallback) return fbUpdate(toFb(r), values);
+  if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
 }
 
 export async function remove(r) {
   if (!(await usePg(r))) return fbRemove(toFb(r));
   const path = pathOf(r);
   const json = await api("POST", "/api/pg/rtdb/remove", { path }, path);
-  if (json.fallback) return fbRemove(toFb(r));
+  if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
 }
 
 export function push(r, value) {
@@ -536,7 +583,7 @@ export function push(r, value) {
     }
     if (value !== undefined) {
       const json = await api("POST", "/api/pg/rtdb/set", { path: childPath, value }, childPath);
-      if (json.fallback) await fbSet(native, value);
+      if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
     }
     return wrapped;
   });
@@ -560,7 +607,7 @@ export async function runTransaction(r, updater) {
   const next = updater(current);
   if (next === undefined) return { committed: false, snapshot: snap(path, current) };
   const json = await api("POST", "/api/pg/rtdb/transaction", { path, next }, path);
-  if (json.fallback) return fbRunTransaction(toFb(r), updater);
+  if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
   let value = json.value !== undefined ? json.value : next;
   if (typeof value === "object" && value !== null && (typeof next === "number" || typeof next === "string")) {
     value = next;
@@ -568,5 +615,4 @@ export async function runTransaction(r, updater) {
   return { committed: true, snapshot: snap(path, value) };
 }
 
-ensureMode();
 window.__nestaRealtimeState = window.__nestaRealtimeState || "idle";

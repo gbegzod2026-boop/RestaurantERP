@@ -20,6 +20,8 @@
     "db:test": "node --test \"db/tests/*.test.mjs\"",
     "db:test:unit": "node --test db/tests/normalize.test.mjs db/tests/migration.test.mjs",
     "db:test:rls": "node db/tests/rls.test.mjs && node db/tests/rls-wave1.test.mjs && node db/tests/rls-wave2.test.mjs",
+    "db:test:rls:strict": "node db/tests/run-rls-strict.mjs",
+    "test:pg-http": "node --test db/tests/pg-http-errors.test.mjs",
     "test:security": "node --test db/tests/security-authority.test.mjs"
   },
   "dependencies": {

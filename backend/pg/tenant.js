@@ -54,10 +54,13 @@ export function tenantScopeDecision(identity, requested) {
   return { restId };
 }
 
-export function requirePgTenant() {
+export function createRequirePgTenant({
+  resolveIdentityFn = resolveIdentity,
+  lookupRestaurantFn = lookupRestaurantByLegacyId,
+} = {}) {
   return async function (req, res, next) {
     try {
-      const identity = await resolveIdentity(req);
+      const identity = await resolveIdentityFn(req);
       if (!identity.verified) {
         const tokenError = String(identity.tokenError || "");
         console.warn("[PG-AUTH]", {
@@ -93,7 +96,7 @@ export function requirePgTenant() {
         return res.status(403).json({ error: "Access Denied" });
       }
 
-      const restaurant = await lookupRestaurantByLegacyId(restId);
+      const restaurant = await lookupRestaurantFn(restId);
       if (!restaurant) return res.status(404).json({ error: "Restaurant not found" });
 
       req.nestaAuth = {
@@ -121,6 +124,10 @@ export function requirePgTenant() {
       return res.status(500).json({ error: "Internal server error" });
     }
   };
+}
+
+export function requirePgTenant() {
+  return createRequirePgTenant();
 }
 
 export async function withRequestTenant(req, fn) {

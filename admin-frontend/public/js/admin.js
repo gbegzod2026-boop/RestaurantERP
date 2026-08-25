@@ -81,7 +81,7 @@ function translateIngName(name) {
 }
 
 import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, forceWebSockets, ref, onValue as _onValueRaw, update, get, set, remove, push, query, orderByChild, limitToLast, runTransaction, equalTo } from "./pgRtdb.js";
+import { getDatabase, forceWebSockets, resolveClientDataBackend, ref, onValue as _onValueRaw, update, get, set, remove, push, query, orderByChild, limitToLast, runTransaction, equalTo } from "./pgRtdb.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, inMemoryPersistence, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
@@ -184,17 +184,19 @@ window._shFirebaseErrors = []; // {time, path, message}
 // established — the write itself had been queued much earlier, before
 // that). Not the client-role bug (a separate, already-fixed pass) and not
 // a Rules gap — Rules correctly reject an unauthenticated request; the fix
-// is to stop sending one. auth.authStateReady() (not window._adminAuthReady,
-// which isn't assigned until further down this file — awaiting it here
-// would just await `undefined`) is the SDK's own guarantee that whatever
-// session Firebase already knows about — restored or not — is settled
-// before this fires, without waiting for this file's own restId/role
-// validation to finish too (these two paths aren't admin-only data, no
-// need to hold them back that long).
-(async () => {
-  try { await auth.authStateReady(); } catch (_e) { /* best-effort — proceed either way, matches previous behavior on failure */ }
+// is to stop sending one. The listeners now yield until _adminAuthReady is
+// assigned, then require its fresh-claim tenant validation to succeed.
+window._afterAdminTenantReady = async function (task) {
+  await Promise.resolve();
+  const readiness = await window._adminAuthReady;
+  if (!readiness?.ok) return { ran: false, readiness };
+  await task(readiness);
+  return { ran: true, readiness };
+};
 
-  window._printSettingsCache = {};
+window._printSettingsCache = {};
+window._tableTypeIconsCache = {};
+window._afterAdminTenantReady(async () => {
   onValue(ref(db, BASE_PATH + "/printSettings"), snap => {
     window._printSettingsCache = snap.val() || {};
   });
@@ -203,15 +205,38 @@ window._shFirebaseErrors = []; // {time, path, message}
   // belgilagan ikonlar (shared.js: getTableTypeMeta()ning customIcons
   // argumenti). Print settings bilan bir xil naqsh — bitta doimiy, qaysi
   // bo'lim ochilganidan qat'i nazar mavjud real-time cache.
-  window._tableTypeIconsCache = {};
   onValue(ref(db, BASE_PATH + "/settings/customTableTypeIcons"), snap => {
     window._tableTypeIconsCache = snap.val() || {};
     if (typeof window._rerenderTablesGrid === "function") window._rerenderTablesGrid();
   });
-})();
+}).catch(() => {});
+
+window.classifyAdminDataError = function (error) {
+  const status = Number(error?.status) || 0;
+  const code = String(error?.code || "");
+  if (status === 401 || code === "AUTH_REQUIRED") return { code: "AUTH_REQUIRED", status: 401 };
+  if (status === 403 || /permission[_-]denied/i.test(code)) return { code: "TENANT_FORBIDDEN", status: 403 };
+  if (status === 404 || code === "NOT_FOUND") return { code: "NOT_FOUND", status: 404 };
+  if (status === 409 || code === "CREDENTIAL_CONFLICT") return { code: "CREDENTIAL_CONFLICT", status: 409 };
+  if (status === 503 || code === "PG_UNAVAILABLE") return { code: "PG_UNAVAILABLE", status: 503 };
+  return { code: "UNEXPECTED", status: 500 };
+};
+
+window.getAdminDataErrorMessage = function (error) {
+  const { code } = window.classifyAdminDataError(error);
+  const messages = {
+    AUTH_REQUIRED: t("auth_session_expired", "Sessiya tugagan. Qayta kiring."),
+    TENANT_FORBIDDEN: t("access_denied", "Kirish taqiqlangan."),
+    NOT_FOUND: t("resource_not_found", "Ma'lumot topilmadi."),
+    CREDENTIAL_CONFLICT: t("staff_pin_taken", "Bu PIN kod boshqa xodimda band."),
+    PG_UNAVAILABLE: t("pg_unavailable", "Ma'lumotlar bazasi vaqtincha mavjud emas."),
+    UNEXPECTED: t("error_occurred", "Xatolik yuz berdi!"),
+  };
+  return messages[code];
+};
 
 function _shRecordError(path, err) {
-  const msg = (err && (err.message || String(err))) || t("sh_unknown_error", "Noma'lum xatolik");
+  const msg = window.classifyAdminDataError(err).code;
   window._shFirebaseErrors.unshift({ time: new Date(), path: path || "?", message: msg });
   if (window._shFirebaseErrors.length > 50) window._shFirebaseErrors.length = 50;
   if (typeof window._onShFirebaseError === "function") {
@@ -324,11 +349,19 @@ if (viewAsId && restIdFromUrl) {
 
 const currentUserId = sessionStorage.getItem("userId");
 
-if (!currentRestaurantId || !currentUserId) {
-  alert(t("alerts_not_logged_in") || "Siz tizimga kirmagansiz!");
+window._redirectAdminLoginOnce = function () {
+  if (window.__adminLoginRedirectStarted) return;
+  window.__adminLoginRedirectStarted = true;
   window.location.href = "login.html";
-} else {
-  get(ref(db, `restaurants/${currentRestaurantId}/users/${currentUserId}`)).then((snap) => {
+};
+
+window._afterAdminTenantReady(async () => {
+  if (!currentRestaurantId || !currentUserId) {
+    alert(t("alerts_not_logged_in") || "Siz tizimga kirmagansiz!");
+    window._redirectAdminLoginOnce();
+    return;
+  }
+  const snap = await get(ref(db, `restaurants/${currentRestaurantId}/users/${currentUserId}`));
     const userRole = snap.exists() ? snap.val().role : null;
     // admin.html'ga admin/owner/manager va kassir, shuningdek finance/hr/
     // inventory_manager/crm/delivery_manager kabi RBAC bilan cheklangan
@@ -342,10 +375,11 @@ if (!currentRestaurantId || !currentUserId) {
     const dedicatedPageRoles = ["chef", "head_chef", "waiter", "courier"];
     if (!snap.exists() || dedicatedPageRoles.includes(userRole)) {
       alert(t("alerts.not_admin_full") || "Siz admin emassiz!");
-      window.location.href = "login.html";
+      window._redirectAdminLoginOnce();
     }
-  }).catch(console.error);
-}
+}).catch((error) => {
+  console.error("Admin user readiness check failed:", window.classifyAdminDataError(error).code);
+});
 
 // 🌐 LOKAL TARMOQ IP MANZILINI OLISH (QR kod uchun)
 let _cachedNetworkOrigin = null;
@@ -669,7 +703,7 @@ window._adminAuthReady = (async () => {
       // this check stays regardless — admin.html must never trust a
       // non-staff role even if some other future flow leaks one in here.
       const isClientRole = sessionRole === "client";
-      const isMismatch = claimsCheckFailed || (sessionRestId && sessionRestId !== expectedRestId);
+      const isMismatch = claimsCheckFailed || sessionRestId !== expectedRestId;
       if (isClientRole) {
         console.error("[AUTH-DIAG admin.js] 🚫 CLIENT-ROLE SESSION REJECTED — admin.html never operates on a customer/QR-menu session, signing out:", {
           uid: existingUser.uid,
@@ -2216,13 +2250,14 @@ function showToast(text, type = "success") {
   const _restId = localStorage.getItem("restaurantId");
   if (!_restId) return;
 
-  (async () => {
-    try { await auth.authStateReady(); } catch (_e) { /* proceed once SDK has settled */ }
+  window._afterAdminTenantReady(async () => {
     onValue(ref(db, `restaurants/${_restId}/settings/notificationsEnabled`), snap => {
       window._adminNotifEnabled = snap.exists() ? snap.val() : true;
       console.log("🔔 Ovozli bildirishnoma:", window._adminNotifEnabled ? "YOQILGAN" : "O'CHIRILGAN");
     });
-  })();
+  }).catch((error) => {
+    console.error("Order sound readiness failed:", window.classifyAdminDataError(error).code);
+  });
   if (window._adminNotifEnabled === undefined) {
     window._adminNotifEnabled = true;
   }
@@ -8173,6 +8208,10 @@ function _genStrongPassword() {
 // session isn't authorized to check, so callers can tell "verified: no
 // staff has this PIN" apart from "couldn't verify, don't know."
 async function _fetchTakenPinsSet(excludeUserId = null) {
+  // PostgreSQL owns credential uniqueness and checks it atomically inside
+  // the canonical staff transaction. Never inspect Firebase credentials in
+  // postgres mode.
+  if ((await resolveClientDataBackend()) === "postgres") return null;
   if (!(await _hasCredentialAccess())) return null;
   try {
     const usersSnap = await get(ref(db, BASE_PATH + "/users"));
@@ -8255,7 +8294,59 @@ window.generateStaffPassword = function (inputId) {
 // admin would have no way to see or clean up). Shared by every "add new
 // staff" flow (addChef/addWaiter/addCashier/addCourier/saveNewStaff) so the
 // same compensation applies everywhere identically, not copy-pasted 5 times.
+async function _staffApi(path, { method = "GET", body } = {}) {
+  const user = auth?.currentUser;
+  if (!user) {
+    const err = new Error("AUTH_REQUIRED");
+    err.status = 401;
+    err.code = "AUTH_REQUIRED";
+    throw err;
+  }
+  let tokenResult;
+  try {
+    tokenResult = await user.getIdTokenResult(true);
+  } catch {
+    const err = new Error("TENANT_FORBIDDEN");
+    err.status = 403;
+    err.code = "TENANT_FORBIDDEN";
+    throw err;
+  }
+  const claims = tokenResult?.claims || {};
+  const claimRestId = claims.restId ?? claims.restaurantId ?? null;
+  if (claimRestId !== currentRestaurantId) {
+    const err = new Error("TENANT_FORBIDDEN");
+    err.status = 403;
+    err.code = "TENANT_FORBIDDEN";
+    throw err;
+  }
+  const token = tokenResult.token;
+  const separator = path.includes("?") ? "&" : "?";
+  const response = await fetch(`${path}${separator}restId=${encodeURIComponent(currentRestaurantId)}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const classified = window.classifyAdminDataError({ status: response.status, code: payload?.error });
+    const err = new Error(classified.code);
+    err.status = classified.status;
+    err.code = classified.code;
+    throw err;
+  }
+  return payload;
+}
+
 async function _writeNewStaffCredentialAndRecord(id, password, userData) {
+  if ((await resolveClientDataBackend()) === "postgres") {
+    return _staffApi("/api/staff", {
+      method: "POST",
+      body: { ...userData, password },
+    });
+  }
   await set(ref(db, CREDS_PATH + "/" + id + "/password"), password);
   try {
     await set(ref(db, BASE_PATH + "/users/" + id), userData);
@@ -8274,6 +8365,7 @@ async function _writeNewStaffCredentialAndRecord(id, password, userData) {
     }
     throw userWriteErr;
   }
+  return { id, ...userData };
 }
 
 window.addChef = async function () {
@@ -8321,10 +8413,15 @@ window.addChef = async function () {
   if (isHeadChef) {
     const usersSnap = await get(ref(db, BASE_PATH + "/users"));
     if (usersSnap.exists()) {
+      const staffWriteMode = await resolveClientDataBackend();
       const removeHeadOps = [];
       Object.entries(usersSnap.val()).forEach(([uid, u]) => {
         if (u.role === "chef" && u.isHeadChef === true) {
-          removeHeadOps.push(update(ref(db, BASE_PATH + "/users/" + uid), { isHeadChef: false }));
+          removeHeadOps.push(
+            staffWriteMode === "postgres"
+              ? _staffApi(`/api/staff/${encodeURIComponent(uid)}`, { method: "PATCH", body: { isHeadChef: false } })
+              : update(ref(db, BASE_PATH + "/users/" + uid), { isHeadChef: false })
+          );
         }
       });
       await Promise.all(removeHeadOps);
@@ -8446,7 +8543,7 @@ window.addWaiter = async function () {
 
   } catch (err) {
     console.error(t("waiter_add_error_log", "❌ Ofitsiant qo'shishda xato:"), err);
-    alert(t("notify.error", "Xatolik yuz berdi: ") + err.message);
+    alert(t("error_occurred", "Xatolik yuz berdi!"));
   }
 };
 
@@ -8489,7 +8586,7 @@ window.addCashier = async function () {
 
   } catch (err) {
     console.error(t("cashier_add_error_log", "❌ Kassir qo'shishda xato:"), err);
-    alert(t("notify.error", "Xatolik yuz berdi: ") + err.message);
+    alert(t("error_occurred", "Xatolik yuz berdi!"));
   }
 };
 
@@ -8522,7 +8619,7 @@ window.addCourier = async function () {
   try {
     // P0-2 residual-gap fix: password written to CREDS_PATH, not embedded
     // in the users/ record — see CREDS_PATH's definition above.
-    await _writeNewStaffCredentialAndRecord(id, password, {
+    const createdStaff = await _writeNewStaffCredentialAndRecord(id, password, {
       name: name,
       phone: phone || "",
       role: "courier",
@@ -8530,7 +8627,8 @@ window.addCourier = async function () {
       createdAt: Date.now()
     });
 
-    await set(ref(db, BASE_PATH + "/couriers/" + id), {
+    const createdStaffId = createdStaff?.id || id;
+    await set(ref(db, BASE_PATH + "/couriers/" + createdStaffId), {
       name: name,
       phone: phone || "",
       status: "offline",
@@ -8549,7 +8647,7 @@ window.addCourier = async function () {
 
   } catch (err) {
     console.error("❌ Kuryer qo'shishda xato:", err);
-    alert(t("notify.error", "Xatolik yuz berdi: ") + err.message);
+    alert(t("error_occurred", "Xatolik yuz berdi!"));
   }
 };
 
@@ -8637,7 +8735,9 @@ window.addEmployee = async function () {
         if (phone && role !== "courier") patch.phone = phone;
         if (serviceFeePercent !== null && !Number.isNaN(serviceFeePercent)) patch.serviceFeePercent = serviceFeePercent;
         if (Object.keys(patch).length > 0) {
-          await update(ref(db, BASE_PATH + "/users/" + uid), patch);
+          await ((await resolveClientDataBackend()) === "postgres"
+            ? _staffApi(`/api/staff/${encodeURIComponent(uid)}`, { method: "PATCH", body: patch })
+            : update(ref(db, BASE_PATH + "/users/" + uid), patch));
         }
       }
     }
@@ -8855,7 +8955,9 @@ window.saveNewStaff = async function () {
           patch.serviceBonus = serviceBonus;
           if (note) patch.note = note;
           if (Object.keys(patch).length > 0) {
-            await update(ref(db, BASE_PATH + "/users/" + uid), patch);
+            await ((await resolveClientDataBackend()) === "postgres"
+              ? _staffApi(`/api/staff/${encodeURIComponent(uid)}`, { method: "PATCH", body: patch })
+              : update(ref(db, BASE_PATH + "/users/" + uid), patch));
           }
         }
       }
@@ -9199,6 +9301,7 @@ async function _hasCredentialAccess() {
 }
 
 window.editStaff = async function (id, name) {
+  const staffBackendMode = await resolveClientDataBackend();
   // 🩺 Session/restaurant trace (root-cause investigation for the repeated
   // "Permission denied" reported here) — logged BEFORE any Firebase call,
   // never the raw token, just the claims every rule/backend check actually
@@ -9324,7 +9427,7 @@ window.editStaff = async function (id, name) {
   let pinIsHashed = false;
   let pinLoadFailed = false;
   if (_esCanAccessCredentials) {
-    let revealedViaEndpoint = false;
+  let revealedViaEndpoint = staffBackendMode === "postgres";
     try {
       const revealToken = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
       if (revealToken) {
@@ -9549,7 +9652,13 @@ window.saveStaffEdit = async function () {
     // the code can't: a write that silently doesn't persist (race, stale
     // session between the click and the await resolving, etc.). Never logs
     // the PIN value itself — only whether a write was attempted/confirmed.
-    if (password) {
+    const staffBackendMode = await resolveClientDataBackend();
+    if (staffBackendMode === "postgres") {
+      await _staffApi(`/api/staff/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        body: { ...updates, ...(password ? { password } : {}) },
+      });
+    } else if (password) {
       await update(ref(db, CREDS_PATH + "/" + id), { password });
       try {
         const verifySnap = await get(ref(db, CREDS_PATH + "/" + id + "/password"));
@@ -9582,8 +9691,10 @@ window.saveStaffEdit = async function () {
       } catch (encErr) {
         console.error("[PIN-SAVE-DIAG] Storing reversible credential copy failed (main PIN save unaffected):", encErr?.message);
       }
+      await update(ref(db, BASE_PATH + "/users/" + id), updates);
+    } else {
+      await update(ref(db, BASE_PATH + "/users/" + id), updates);
     }
-    await update(ref(db, BASE_PATH + "/users/" + id), updates);
 
     if (typeof window.logSystemAction === "function") {
       await window.logSystemAction("update", `✏️ ${t("staff_updated_log", "Xodim ma'lumotlari yangilandi:")} ${name}`);
@@ -9636,16 +9747,7 @@ window.deleteStaff = async function (id) {
     // permission system (not a hardcoded role literal) and then removes
     // both records via the Admin SDK — same authorization, a path that's
     // actually enforced. No Firebase Rules were changed.
-    const idToken = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
-    if (!idToken) throw new Error("No active session");
-    const resp = await fetch(`/api/staff/${encodeURIComponent(id)}?restId=${encodeURIComponent(currentRestaurantId)}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
-    if (!resp.ok) {
-      const body = await resp.json().catch(() => ({}));
-      throw new Error(body?.error || `Delete failed (${resp.status})`);
-    }
+    await _staffApi(`/api/staff/${encodeURIComponent(id)}`, { method: "DELETE" });
 
     if (typeof window.logSystemAction === "function") {
       await window.logSystemAction("delete", `🗑 ${t("staff_deleted_log", "Xodim o'chirildi:")} ${staffMember ? staffMember.name : id}`);
@@ -9658,8 +9760,9 @@ window.deleteStaff = async function (id) {
       alert(successMsg);
     }
   } catch (error) {
-    console.error(t("staff_delete_error_log", "Xodimni o'chirishda xato:"), error);
-    alert(t("error_occurred", "Xatolik yuz berdi!"));
+    const classified = window.classifyAdminDataError(error);
+    console.error(t("staff_delete_error_log", "Xodimni o'chirishda xato:"), classified.code);
+    alert(window.getAdminDataErrorMessage(error));
   }
 };
 
@@ -21639,11 +21742,6 @@ window.checkSubscriptionStatus = async function (restId) {
 document.addEventListener("DOMContentLoaded", async () => {
   const currentRestId = localStorage.getItem("restaurantId");
 
-  if (!currentRestId) {
-    window.location.href = "login.html";
-    return;
-  }
-
   // Cross-restaurant session mismatch fix: DOMContentLoaded used to fire and
   // proceed straight to checkSubscriptionStatus()/init() on its own
   // schedule, completely independent of whether the top-level auth IIFE
@@ -21655,7 +21753,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // restaurant mismatch), stop before any Firebase read/write is attempted
   // — no anonymous fallback, no silent continuation, no permission_denied
   // cascade from every downstream loadXxxSettings()/checkPermissions() call.
-  const authResult = await (window._adminAuthReady || Promise.resolve({ ok: true }));
+  const authResult = await window._adminAuthReady;
   if (!authResult.ok) {
     console.error("[AUTH-DIAG admin.js] 🛑 Stopping page initialization — session was not established for this restaurant:", authResult.reason);
     // Client-role guard (this pass): a distinct, accurate message for the
@@ -21670,7 +21768,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         ? t("session_client_role_forbidden_error", "Sessiya xatosi: bu sahifa mijoz (QR-menyu) sessiyasi bilan ochilmoqda. Iltimos, xodim akkaunti bilan qaytadan tizimga kiring.")
         : t("session_restaurant_mismatch_error", "Sessiya xatosi: bu sahifa boshqa restoran uchun ochilgan sessiya bilan yuklanmoqda. Superadmin panelidan qaytadan \"Kirish\" tugmasini bosing.")
     );
-    window.location.href = "login.html";
+    window._redirectAdminLoginOnce();
+    return;
+  }
+
+  if (!currentRestId) {
+    window._redirectAdminLoginOnce();
     return;
   }
 
@@ -35638,22 +35741,23 @@ window.confirmSplitPayment = async function () {
   // ── 3) Firebase Permission Denied xatolarini global tutish ──
   window.reportFirebasePermissionError = function (error, context) {
     if (!error) return;
-    const msg = String(error?.message || error?.code || error || "");
-    if (!/permission[_-]denied/i.test(msg)) return;
+    const classified = window.classifyAdminDataError(error);
+    if (classified.status !== 403) return;
     window.raiseSystemAlert(
       "firebase_permission_error",
       t("sa_alert_permission_title", "Firebase Permission Error"),
-      context ? `${context}: ${msg}` : msg,
+      context ? `${context}: ${classified.code}` : classified.code,
       "error"
     );
   };
 
   // ── 4) Inventory modulidagi xatolarni ushlash uchun umumiy funksiya ──
   window.reportInventoryError = function (error) {
+    const classified = window.classifyAdminDataError(error);
     window.raiseSystemAlert(
       "inventory_error",
       t("sa_alert_inventory_title", "Inventory error"),
-      String(error?.message || error || ""),
+      classified.code,
       "error"
     );
     // Bir xil turdagi permission xatosi bo'lsa alohida ham belgilaymiz

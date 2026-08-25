@@ -44,12 +44,15 @@ import { attachIo } from "./pg/hub.js";
 import { attachPgRealtime } from "./pg/socket.js";
 import { getDataBackend, usePostgres } from "./pg/config.js";
 import { isPgAvailable, maskedConfig, withTenantContext } from "./db/postgres.js";
-import { lookupRestaurantByLegacyId } from "./pg/tenant.js";
+import { isPgUnavailableError, lookupRestaurantByLegacyId } from "./pg/tenant.js";
 import { broadcastAll } from "./pg/hub.js";
 import * as pgOrders from "./pg/ordersService.js";
 import * as pgCatalog from "./pg/catalogService.js";
+import { assertPinAvailable, upsertEmployeeCredential } from "./pg/credentialService.js";
 import { pushId } from "./pg/pushId.js";
-import { requirePermission, resolveRequestPermissions } from "./rbac.js";
+import { requirePermission, resolveIdentity, resolveRequestPermissions } from "./rbac.js";
+import { classifyStaffMutationFailure, createStaffMutationAuthority } from "./staffMutationAuthority.js";
+import { preparePgStaffCreate, preparePgStaffPatch } from "./staffPayload.js";
 import { hashPassword, verifyPassword } from "./security/password.js";
 import { encryptSecret, decryptSecret } from "./security/crypto.js";
 import { attachSocketIO } from "./delivery/engine.js";
@@ -442,6 +445,8 @@ function getRestId(req) {
   return raw && isSafeId(String(raw)) ? raw : null;
 }
 
+const requireStaffMutationAuthority = createStaffMutationAuthority({ resolveIdentity, getRestId, usePostgres });
+
 function trackOrder(orderId, payload) {
   const key = String(orderId);
   rooms.orders.set(key, { ...(rooms.orders.get(key)||{}), ...payload });
@@ -808,7 +813,7 @@ app.put("/api/orders/:id/status", requirePermission("orders", "edit", getRestId)
 
 // ── Staff / Users ─────────────────────────────────────────────────────────────
 app.get("/api/staff", requirePermission("staff", "view", getRestId), async (req, res) => {
-  if (!(await ensureDatabase(res))) return;
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
   const restId = getRestId(req);
   if (!restId) return res.status(400).json({ error: "restId required" });
 
@@ -831,8 +836,8 @@ app.get("/api/staff", requirePermission("staff", "view", getRestId), async (req,
   res.json(list);
 });
 
-app.post("/api/staff", requirePermission("staff", "create", getRestId), async (req, res) => {
-  if (!(await ensureDatabase(res))) return;
+app.post("/api/staff", requireStaffMutationAuthority, requirePermission("staff", "create", getRestId), async (req, res) => {
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
   const restId = getRestId(req);
   if (!restId) return res.status(400).json({ error: "restId required" });
 
@@ -841,6 +846,47 @@ app.post("/api/staff", requirePermission("staff", "create", getRestId), async (r
 
   const role      = req.body?.role || "waiter";
   const staffId   = `${role}_${Date.now()}`;
+
+  if (usePostgres()) {
+    const prepared = preparePgStaffCreate(req.body, { isSafeId });
+    if (prepared.error) return res.status(400).json({ error: prepared.error });
+    const { requestedPin, staffData } = prepared;
+    const pgStaffId = prepared.staffId;
+    if (requestedPin && !/^\d{4}$/.test(requestedPin)) {
+      return res.status(400).json({ error: "Password must be exactly 4 digits" });
+    }
+    try {
+      const created = await withPgRest(restId, async (client, ctx, events) => {
+        let pin = requestedPin;
+        if (pin) {
+          await assertPinAvailable(client, { pin });
+        } else {
+          do {
+            pin = String(Math.floor(1000 + Math.random() * 9000));
+            try {
+              await assertPinAvailable(client, { pin });
+              break;
+            } catch (err) {
+              if (err?.code !== "CREDENTIAL_CONFLICT") throw err;
+              pin = "";
+            }
+          } while (!pin);
+        }
+        const employee = await pgCatalog.upsertEmployee(
+          client, ctx, pgStaffId, staffData, events
+        );
+        await upsertEmployeeCredential(client, { employeeId: employee._pgId, pin });
+        return employee;
+      }, { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
+      if (created?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
+      return res.status(201).json(normalizeStaff(pgStaffId, created));
+    } catch (err) {
+      if (err?.code === "CREDENTIAL_CONFLICT") {
+        return res.status(409).json({ error: "Employee code already in use in this restaurant" });
+      }
+      throw err;
+    }
+  }
 
   const usersSnap = await systemGet(`${basePath(restId)}/users`);
   const existingUsers = usersSnap.val() || {};
@@ -893,15 +939,63 @@ app.post("/api/staff", requirePermission("staff", "create", getRestId), async (r
   // P0-2 residual-gap fix: written to credentials/${restId}/${staffId}
   // instead of embedded in the user record.
   await systemSet(`credentials/${restId}/${staffId}`, { password: await hashPassword(plainCode) });
-  if (usePostgres()) {
-    const pgOut = await withPgRest(restId, async (client, ctx, events) => {
-      await pgCatalog.upsertEmployee(client, ctx, staffId, { ...staffData, login: staffId }, events);
-      return true;
-    }, { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
-    if (pgOut?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
-  }
   auditFromReq(req, restId, "staff", "create", { staffId, name, role });
   res.status(201).json({ ...normalizeStaff(staffId, staffData), password: plainCode });
+});
+
+app.patch("/api/staff/:id", requireStaffMutationAuthority, requirePermission("staff", "edit", getRestId), async (req, res) => {
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
+  const restId = getRestId(req);
+  if (!restId) return res.status(400).json({ error: "restId required" });
+  const staffId = String(req.params.id || "");
+  if (!isSafeId(staffId)) return res.status(400).json({ error: "Invalid staff id" });
+
+  if (usePostgres()) {
+    const prepared = preparePgStaffPatch(req.body, { isSafeId });
+    if (prepared.error) return res.status(400).json({ error: prepared.error });
+    const password = prepared.requestedPin;
+    if (password != null && !/^\d{4}$/.test(password)) {
+      return res.status(400).json({ error: "Password must be exactly 4 digits" });
+    }
+    const employeePatch = prepared.staffPatch;
+    try {
+      const updated = await withPgRest(restId, async (client, ctx, events) => {
+        const current = await pgCatalog.getEmployee(client, ctx.restaurantUuid, staffId);
+        if (!current) return null;
+        const employee = await pgCatalog.patchEmployee(client, ctx, staffId, employeePatch, events);
+        if (password != null) {
+          await assertPinAvailable(client, { pin: password, excludeEmployeeId: employee._pgId });
+          await upsertEmployeeCredential(client, { employeeId: employee._pgId, pin: password });
+        }
+        return employee;
+      }, { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
+      if (updated?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
+      if (!updated) return res.status(404).json({ error: "Staff not found" });
+      return res.json(normalizeStaff(staffId, updated));
+    } catch (err) {
+      if (err?.code === "CREDENTIAL_CONFLICT") {
+        return res.status(409).json({ error: "Employee code already in use in this restaurant" });
+      }
+      throw err;
+    }
+  }
+
+  const userPath = `${basePath(restId)}/users/${staffId}`;
+  const userSnap = await systemGet(userPath);
+  if (!userSnap.exists()) return res.status(404).json({ error: "Staff not found" });
+  const { password: _password, restId: _restId, restaurantId: _restaurantId, ...patch } = req.body || {};
+  const firebasePassword = req.body?.password == null ? null : String(req.body.password);
+  if (firebasePassword != null && !/^\d{4}$/.test(firebasePassword)) {
+    return res.status(400).json({ error: "Password must be exactly 4 digits" });
+  }
+  patch.updatedAt = Date.now();
+  await systemUpdate(userPath, patch);
+  if (firebasePassword != null) {
+    await systemUpdate(`credentials/${restId}/${staffId}`, { password: await hashPassword(firebasePassword) });
+  }
+  const updated = { ...userSnap.val(), ...patch };
+  auditFromReq(req, restId, "staff", "edit", { staffId, name: updated.name });
+  return res.json(normalizeStaff(staffId, updated));
 });
 
 // Console-error fix pass: admin.js's deleteStaff() used to remove
@@ -922,13 +1016,29 @@ app.post("/api/staff", requirePermission("staff", "create", getRestId), async (r
 // (systemRemove) bypasses the rule with that already-verified authority —
 // consistent with every other backend write in this file, and no weaker
 // than what a legitimate owner/admin could already do by hand.
-app.delete("/api/staff/:id", requirePermission("staff", "delete", getRestId), async (req, res) => {
-  if (!(await ensureDatabase(res))) return;
+app.delete("/api/staff/:id", requireStaffMutationAuthority, requirePermission("staff", "delete", getRestId), async (req, res) => {
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
   const restId = getRestId(req);
   if (!restId) return res.status(400).json({ error: "restId required" });
 
   const staffId = String(req.params.id || "");
   if (!isSafeId(staffId)) return res.status(400).json({ error: "Invalid staff id" });
+
+  if (usePostgres()) {
+    const deleted = await withPgRest(restId, async (client, ctx, events) => {
+      const current = await pgCatalog.getEmployee(client, ctx.restaurantUuid, staffId);
+      if (!current) return null;
+      if (current.role === "admin" && current.isSubAdmin !== true) {
+        return { __primaryAdmin: true };
+      }
+      await pgCatalog.upsertEmployee(client, ctx, staffId, null, events);
+      return current;
+    }, { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
+    if (deleted?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
+    if (!deleted) return res.status(404).json({ error: "Staff not found" });
+    if (deleted.__primaryAdmin) return res.status(403).json({ error: "Cannot delete the primary admin account" });
+    return res.json({ ok: true });
+  }
 
   const userPath = `${basePath(restId)}/users/${staffId}`;
   const userSnap = await systemGet(userPath);
@@ -988,8 +1098,8 @@ app.delete("/api/staff/:id", requirePermission("staff", "delete", getRestId), as
 // saveStaffEdit()'s own existing direct write handles that half, completely
 // unchanged, so the login flow this fix must never risk breaking is not
 // touched by this route at all.
-app.post("/api/staff/:id/credential", requirePermission("staff", "edit", getRestId), async (req, res) => {
-  if (!(await ensureDatabase(res))) return;
+app.post("/api/staff/:id/credential", requireStaffMutationAuthority, requirePermission("staff", "edit", getRestId), async (req, res) => {
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
   const restId = getRestId(req);
   if (!restId) return res.status(400).json({ error: "restId required" });
 
@@ -999,6 +1109,26 @@ app.post("/api/staff/:id/credential", requirePermission("staff", "edit", getRest
   const password = String(req.body?.password || "");
   if (!/^\d{4}$/.test(password)) {
     return res.status(400).json({ error: "Password must be exactly 4 digits" });
+  }
+
+  if (usePostgres()) {
+    try {
+      const updated = await withPgRest(restId, async (client, ctx) => {
+        const employee = await pgCatalog.getEmployee(client, ctx.restaurantUuid, staffId);
+        if (!employee) return null;
+        await assertPinAvailable(client, { pin: password, excludeEmployeeId: employee._pgId });
+        await upsertEmployeeCredential(client, { employeeId: employee._pgId, pin: password });
+        return employee;
+      }, { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
+      if (updated?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
+      if (!updated) return res.status(404).json({ error: "Staff not found" });
+      return res.json({ ok: true });
+    } catch (err) {
+      if (err?.code === "CREDENTIAL_CONFLICT") {
+        return res.status(409).json({ error: "Employee code already in use in this restaurant" });
+      }
+      throw err;
+    }
   }
 
   const userSnap = await systemGet(`${basePath(restId)}/users/${staffId}`);
@@ -1017,12 +1147,21 @@ app.post("/api/staff/:id/credential", requirePermission("staff", "edit", getRest
 // passwordEnc copy) — the caller (admin.js) falls back to its existing
 // hash-detection UI for that case, unchanged.
 app.get("/api/staff/:id/credential", requirePermission("staff", "edit", getRestId), async (req, res) => {
-  if (!(await ensureDatabase(res))) return;
+  if (!usePostgres() && !(await ensureDatabase(res))) return;
   const restId = getRestId(req);
   if (!restId) return res.status(400).json({ error: "restId required" });
 
   const staffId = String(req.params.id || "");
   if (!isSafeId(staffId)) return res.status(400).json({ error: "Invalid staff id" });
+
+  if (usePostgres()) {
+    const employee = await withPgRest(restId, (client, ctx) =>
+      pgCatalog.getEmployee(client, ctx.restaurantUuid, staffId),
+    { actingRole: req.nestaAuth?.role || "owner", userId: req.nestaAuth?.userId });
+    if (employee?.__missingRestaurant) return res.status(404).json({ error: "Restaurant not found" });
+    if (!employee) return res.status(404).json({ error: "Staff not found" });
+    return res.status(404).json({ error: "No credential available" });
+  }
 
   const encSnap = await systemGet(`credentials/${restId}/${staffId}/passwordEnc`);
   const encVal = encSnap.val();
@@ -1294,17 +1433,20 @@ app.use(express.static(staticPath, {
 // alerts once").
 const _recentErrorAlerts = new Map();
 app.use((err, req, res, _next) => {
-  console.error("Unhandled request error:", err);
+  console.error("Unhandled request error", { method: req.method, path: req.path });
   const restId = getRestId(req);
   if (restId) {
-    const key = `${restId}:${err.message}`;
+    const key = `${restId}:request-error`;
     const last = _recentErrorAlerts.get(key) || 0;
     if (Date.now() - last > 10 * 60 * 1000) {
       _recentErrorAlerts.set(key, Date.now());
-      NotificationService.send(NOTIFICATION_TYPES.SYSTEM_ERROR, restId, null, { message: err.message }).catch(() => {});
+      NotificationService.send(NOTIFICATION_TYPES.SYSTEM_ERROR, restId, null, { message: "A request failed" }).catch(() => {});
     }
   }
-  if (!res.headersSent) res.status(500).json({ error: "Internal server error" });
+  if (!res.headersSent) {
+    const failure = classifyStaffMutationFailure(err, isPgUnavailableError);
+    res.status(failure.status).json(failure.body);
+  }
 });
 
 const PORT = Number(process.env.PORT || 4000);

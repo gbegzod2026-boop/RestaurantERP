@@ -11,6 +11,18 @@ function json(v) {
   return JSON.stringify(v == null ? {} : v);
 }
 
+function mergeObjects(current, patch) {
+  if (!current || typeof current !== "object" || Array.isArray(current)) return patch;
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return patch;
+  const merged = { ...current };
+  for (const [key, value] of Object.entries(patch)) {
+    merged[key] = value && typeof value === "object" && !Array.isArray(value)
+      ? mergeObjects(current[key], value)
+      : value;
+  }
+  return merged;
+}
+
 export async function getSettings(client, restaurantUuid) {
   const { rows } = await client.query(
     `SELECT settings FROM restaurant_settings WHERE restaurant_id = $1`,
@@ -96,6 +108,20 @@ export async function listEmployeesMap(client, restaurantUuid) {
   return mapByLegacy(rows, employeeToRtdb);
 }
 
+export async function getEmployee(client, restaurantUuid, legacyId) {
+  const { rows } = await client.query(
+    `SELECT * FROM employees WHERE restaurant_id = $1 AND legacy_rtdb_id = $2`,
+    [restaurantUuid, legacyId]
+  );
+  return rows[0] ? employeeToRtdb(rows[0]) : null;
+}
+
+export async function patchEmployee(client, ctx, legacyId, patch, events) {
+  const current = await getEmployee(client, ctx.restaurantUuid, legacyId);
+  if (!current) return null;
+  return upsertEmployee(client, ctx, legacyId, mergeObjects(current, patch), events);
+}
+
 export async function upsertEmployee(client, ctx, legacyId, payload, events) {
   const { restaurantUuid, restId } = ctx;
   if (payload == null) {
@@ -118,15 +144,16 @@ export async function upsertEmployee(client, ctx, legacyId, payload, events) {
      ON CONFLICT (restaurant_id, legacy_rtdb_id) DO UPDATE SET
         name = COALESCE(EXCLUDED.name, employees.name),
         role = COALESCE(EXCLUDED.role, employees.role),
-        active = EXCLUDED.active,
+        login = COALESCE(EXCLUDED.login, employees.login),
+        active = COALESCE(EXCLUDED.active, employees.active),
         modules = COALESCE(EXCLUDED.modules, employees.modules),
         actions = COALESCE(EXCLUDED.actions, employees.actions),
         extra = COALESCE(employees.extra, '{}'::jsonb) || EXCLUDED.extra
      RETURNING *`,
     [
       legacyId, restaurantUuid,
-      payload.name || login, login, payload.role || "waiter",
-      payload.active !== false,
+      payload.name ?? login, login, payload.role ?? "waiter",
+      payload.active == null ? true : payload.active !== false,
       payload.modules != null ? json(payload.modules) : null,
       payload.actions != null ? json(payload.actions) : null,
       json(extra),

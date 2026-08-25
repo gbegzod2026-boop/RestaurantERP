@@ -67,13 +67,13 @@ export async function resolveIdentity(req) {
       } catch (err) {
         // Expired/malformed token is not a verified identity. Do not trust
         // x-user-id as a substitute — that header is not a credential.
-        logSecurityEvent({ type: "id_token_invalid", ip: req.ip, path: req.originalUrl, details: { reason: err.message } });
+        logSecurityEvent({ type: "id_token_invalid", ip: req.ip, path: req.originalUrl, details: { reason: err.code || "invalid_token" } });
         return {
           userId: null,
           restId: null,
           role: null,
           verified: false,
-          tokenError: err.code || String(err.message || "invalid_token"),
+          tokenError: err.code || "invalid_token",
         };
       }
     }
@@ -259,6 +259,13 @@ export async function resolveRequestPermissions(restId, userId) {
   return { role, modules: cfg.modules, actions: cfg.actions };
 }
 
+/** Tenant routes require a verified, explicitly tenant-scoped claim. */
+export function tenantAuthorityDecision(identity, requestedRestId) {
+  if (!identity?.verified) return { status: 401 };
+  if (!identity.restId || identity.restId !== requestedRestId) return { status: 403 };
+  return { restId: identity.restId };
+}
+
 /**
  * Express middleware factory: requirePermission("staff", "create").
  * Denies with 403 Access Denied unless the requesting user's role grants
@@ -302,8 +309,8 @@ export function requirePermission(moduleId, action, getRestId) {
       // e.g. an employee of restaurant A presenting a valid session while
       // restId=B is in the request. Deny outright rather than falling
       // through to a lookup that would legitimately fail anyway.
-      if (identity.restId && identity.restId !== restId) {
-        logSecurityEvent({ type: "authz_denied", restId, userId, ip: req.ip, path: req.originalUrl, details: { reason: "restId_mismatch", moduleId, action, tokenRestId: identity.restId } });
+      if (tenantAuthorityDecision(identity, restId).status === 403) {
+        logSecurityEvent({ type: "authz_denied", restId, userId, ip: req.ip, path: req.originalUrl, details: { reason: "restId_missing_or_mismatch", moduleId, action, tokenRestId: identity.restId || null } });
         return res.status(403).json({ error: "Access Denied" });
       }
 
@@ -326,7 +333,11 @@ export function requirePermission(moduleId, action, getRestId) {
 
       next();
     } catch (err) {
-      res.status(403).json({ error: "Access Denied" });
+      const code = String(err?.code || "");
+      if (["08000", "08001", "08003", "08004", "08006", "08007", "08P01", "40001", "40P01", "53300", "53400", "55000", "57P01", "57P02", "57P03", "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENETUNREACH", "EHOSTUNREACH"].includes(code)) {
+        return res.status(503).json({ error: "PG_UNAVAILABLE" });
+      }
+      res.status(500).json({ error: "Internal error" });
     }
   };
 }

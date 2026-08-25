@@ -221,7 +221,16 @@ async function writeNode(client, ctx, col, id, rest, value, events, op) {
   }
   if (col === "users") {
     if (!id) return null;
-    if (rest[0]) return catalog.upsertEmployee(client, ctx, id, { [rest[0]]: value }, events);
+    if (rest[0]) {
+      const patch = {};
+      let cursor = patch;
+      for (let i = 0; i < rest.length - 1; i++) {
+        cursor[rest[i]] = {};
+        cursor = cursor[rest[i]];
+      }
+      cursor[rest[rest.length - 1]] = value;
+      return catalog.patchEmployee(client, ctx, id, patch, events);
+    }
     return catalog.upsertEmployee(client, ctx, id, value, events);
   }
   if (col === "menu") {
@@ -346,6 +355,9 @@ export async function rtdbUpdate(client, ctx, path, patch, events) {
   }
   if (col === "tables" && segments[3] && segments.length === 4) {
     return { value: await catalog.patchTable(client, ctx, segments[3], patch, events) };
+  }
+  if (col === "users" && segments[3] && segments.length === 4) {
+    return { value: await catalog.patchEmployee(client, ctx, segments[3], patch, events) };
   }
   return rtdbSet(client, ctx, path, patch, events);
 }

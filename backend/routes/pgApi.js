@@ -44,7 +44,7 @@ function sendEvents(events) {
   broadcastAll(events);
 }
 
-function sendPgFailure(res, err) {
+export function sendPgFailure(res, err) {
   if (isPgUnavailableError(err)) return res.status(503).json({ error: "PG_UNAVAILABLE" });
   return res.status(500).json({ error: "Internal server error" });
 }

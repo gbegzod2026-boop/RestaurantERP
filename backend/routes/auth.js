@@ -36,6 +36,8 @@ import { logSecurityEvent } from "../security/auditLog.js";
 import { decryptSecret, sha256Hex } from "../security/crypto.js";
 import { verifyTotpCode } from "../security/totp.js";
 import { requireSuperAdmin } from "../security/requireSuperAdmin.js";
+import { usePostgres } from "../pg/config.js";
+import { authenticateStaffWithPostgres, CredentialConflictError } from "../pg/credentialService.js";
 
 console.log("========== AUTH ROUTER LOADED ==========");
 
@@ -47,6 +49,15 @@ router.get("/test", (req, res) => {
 });
 
 const MANAGER_LOGIN_ROLES = new Set(["owner", "admin", "manager"]);
+const TRANSIENT_POSTGRES_CODES = new Set([
+  "08000", "08001", "08003", "08004", "08006", "08007", "08P01",
+  "40001", "40P01", "53300", "53400", "55000", "57P01", "57P02", "57P03",
+  "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENETUNREACH", "EHOSTUNREACH",
+]);
+
+export function isTransientPostgresError(error) {
+  return TRANSIENT_POSTGRES_CODES.has(String(error?.code || ""));
+}
 
 function subscriptionGate(restData) {
   const infoStatus = restData.info?.status;
@@ -129,7 +140,7 @@ async function mintSessionToken(restId, userId, role, isSubAdmin = false) {
     // SDK itself already sanitizes (uid/code only, no credential is ever
     // part of an Admin Auth SDK error) — consistent with this file's
     // no-secret-logging rule elsewhere.
-    console.error("[auth] mintSessionToken failed:", err.code || err.message);
+    console.error("[auth] mintSessionToken failed:", err.code || "AUTH_TOKEN_MINT_FAILED");
     return null;
   }
 }
@@ -327,6 +338,24 @@ router.post("/staff-login", async (req, res) => {
   }
 
   try {
+    if (usePostgres()) {
+      const employee = await authenticateStaffWithPostgres(restId, pin);
+      if (!employee) {
+        logSecurityEvent({ type: "login_failed", restId, ip: req.ip, details: { mode: "staff_pin" } });
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      if (employee.active === false) return res.status(403).json({ error: "Account disabled" });
+      const userId = employee.legacy_rtdb_id || String(employee.id);
+      const token = await mintSessionToken(restId, userId, employee.role, employee.extra?.isSubAdmin === true);
+      logSecurityEvent({ type: "login_success", restId, userId, ip: req.ip, details: { mode: "staff_pin" } });
+      return res.json({
+        ok: true,
+        user: { id: userId, name: employee.name, role: employee.role },
+        restId,
+        token,
+      });
+    }
+
     const restSnap = await systemGet(`restaurants/${restId}`);
     if (!restSnap.exists()) return res.status(401).json({ error: "Invalid credentials" });
     const restData = restSnap.val();
@@ -388,7 +417,12 @@ router.post("/staff-login", async (req, res) => {
       token, // Firebase custom token, or null if Admin SDK isn't configured yet
     });
   } catch (err) {
-    console.error("[auth/staff-login] error:", err);
+    if (err instanceof CredentialConflictError) {
+      logSecurityEvent({ type: "login_pin_conflict", restId, ip: req.ip, details: { mode: "staff_pin" } });
+      return res.status(409).json({ error: "PIN conflict — contact your administrator" });
+    }
+    if (isTransientPostgresError(err)) return res.status(503).json({ error: "PG_UNAVAILABLE" });
+    console.error("[auth/staff-login] failed:", err?.code || "UNEXPECTED_ERROR");
     res.status(500).json({ error: "Internal error" });
   }
 });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { isCanonicalPlatformSuperAdmin } from "../../security/requireSuperAdmin.js";
 import { isPgUnavailableError, tenantScopeDecision } from "../../pg/tenant.js";
+import { tenantAuthorityDecision } from "../../rbac.js";
 
 test("arbitrary unscoped Firebase account has no platform authority", () => {
   assert.equal(isCanonicalPlatformSuperAdmin({ uid: "ordinary-user", email: "admin@example.test" }), false);
@@ -38,6 +39,13 @@ test("tenant scope enforces 401, same-tenant access, and unconditional mismatch 
   assert.deepEqual(tenantScopeDecision({ verified: true, restId: "tenant-a" }, "tenant-a"), { restId: "tenant-a" });
   assert.equal(tenantScopeDecision({ verified: true, restId: "tenant-a", isSuperAdmin: true }, "tenant-b").status, 403);
   assert.equal(tenantScopeDecision({ verified: true, restId: null, platformSuperAdmin: true }, "tenant-a").status, 403);
+});
+
+test("RBAC tenant routes require an exact verified tenant claim", () => {
+  assert.equal(tenantAuthorityDecision({ verified: false }, "tenant-a").status, 401);
+  assert.deepEqual(tenantAuthorityDecision({ verified: true, restId: "tenant-a" }, "tenant-a"), { restId: "tenant-a" });
+  assert.equal(tenantAuthorityDecision({ verified: true, restId: "tenant-b" }, "tenant-a").status, 403);
+  assert.equal(tenantAuthorityDecision({ verified: true, restId: null, platformSuperAdmin: true }, "tenant-a").status, 403);
 });
 
 test("tenant bridge has no request-controlled platform escalation", async () => {
