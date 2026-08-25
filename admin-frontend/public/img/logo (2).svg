@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="100%" height="100%">
+  <defs>
+    <style>
+      /* Вы можете изменить этот цвет (HEX), чтобы перекрасить весь логотип */
+      .logo-color {
+        fill: #3aa14a;
+      }
+      .logo-stroke {
+        stroke: #3aa14a;
+        fill: none;
+        stroke-width: 14;
+      }
+    </style>
+  </defs>
+
+  <circle cx="128" cy="128" r="112" class="logo-stroke" />
+
+  <path d="M 58 85
+           A 7 7 0 0 1 72 85
+           L 72 135
+           A 6 6 0 0 0 84 135
+           L 84 85
+           A 7 7 0 0 1 98 85
+           L 98 135
+           A 6 6 0 0 0 110 135
+           L 110 85
+           A 7 7 0 0 1 124 85
+           L 124 145
+           C 124 175, 101 175, 101 195
+           L 104 235
+           L 78 235
+           L 81 195
+           C 81 175, 58 175, 58 145
+           Z" class="logo-color" />
+
+  <rect x="136" y="150" width="14" height="45" rx="7" class="logo-color" />
+  <rect x="162" y="125" width="14" height="70" rx="7" class="logo-color" />
+  <rect x="188" y="100" width="14" height="95" rx="7" class="logo-color" />
+</svg>

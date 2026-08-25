@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="uz" id="html-root">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nesta ERP — Restoran uchun to'liq raqamli ERP platforma</title>
+  <meta name="description"
+    content="Nesta ERP — restoranlar uchun POS, oshxona, kuryer, ombor, moliya, CRM va Telegram bot boshqaruv markazini bitta bulutli tizimda birlashtiruvchi restoran ERP platformasi.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="icon" href="img/logo (2).svg" type="image/png" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Syne:wght@700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+  <!-- ══════════════ NAV ══════════════ -->
+  <nav>
+    <a href="#" class="nav-logo" id="navLogo"><span class="dot" id="navLogoDot"></span><img id="navLogoImg" alt="" class="brand-logo-img"><span id="navLogoText">Nesta<span>ERP</span></span></a>
+    <ul class="nav-links">
+      <li><a href="#overview" data-i18n="l_nav_overview">Tizim</a></li>
+      <li><a href="#modules" data-i18n="l_nav_modules">Modullar</a></li>
+      <li><a href="#roles" data-i18n="l_nav_roles">Rollar</a></li>
+      <li><a href="#screens" data-i18n="l_nav_screens">Ko'rinish</a></li>
+      <li><a href="#faq" data-i18n="l_nav_faq">FAQ</a></li>
+    </ul>
+    <div class="nav-right">
+      <div class="lang-switcher">
+        <button class="lang-btn active" data-lang="uz" data-i18n="lang_uz">UZ</button>
+        <button class="lang-btn" data-lang="ru" data-i18n="lang_ru">RU</button>
+        <button class="lang-btn" data-lang="en" data-i18n="lang_en">EN</button>
+      </div>
+      <a href="guid.html" class="btn btn-ghost btn-sm" data-i18n="l_nav_docs">Qo'llanma</a>
+      <a href="login.html" class="btn btn-accent btn-sm" data-i18n="l_nav_login">Kirish</a>
+    </div>
+    <div class="hamburger" id="hamburger"><span></span><span></span><span></span></div>
+  </nav>
+
+  <!-- ══════════════ HERO ══════════════ -->
+  <section id="hero">
+    <div class="section-inner hero-grid">
+      <div>
+        <span class="hero-eyebrow"><span class="blink"></span><span data-i18n="l_hero_eyebrow">Restoran uchun to'liq ERP
+            platforma</span></span>
+        <h1 class="hero-title" data-i18n="l_hero_title">Restoraningizni <span class="accent">bitta
+            platformadan</span> boshqaring</h1>
+        <p class="hero-sub" data-i18n="l_hero_sub">POS, oshxona ekrani, yetkazib berish, ombor, moliya, CRM va Telegram
+          bot boshqaruv markazi — barchasi real vaqtda, bitta bulutli tizimda ishlaydi.</p>
+        <div class="hero-actions">
+          <a href="login.html" class="btn btn-accent" data-i18n="l_hero_btn_login">Tizimga kirish</a>
+          <a href="#contact" class="btn btn-ghost-light" data-i18n="l_hero_btn_demo">Demo so'rash</a>
+          <a href="guid.html" class="btn btn-ghost-light" data-i18n="l_hero_btn_docs">Qo'llanma</a>
+        </div>
+        <div class="hero-meta">
+          <div class="hero-meta-item"><b data-i18n="l_hero_meta_v1">3</b> <span data-i18n="l_hero_meta_l1">tilda
+              ishlaydi</span></div>
+          <div class="hero-meta-item"><b data-i18n="l_hero_meta_v2">13</b> <span data-i18n="l_hero_meta_l2">rol uchun
+              alohida interfeys</span></div>
+          <div class="hero-meta-item"><b data-i18n="l_hero_meta_v3">24/7</b> <span data-i18n="l_hero_meta_l3">Telegram
+              bot orqali monitoring</span></div>
+        </div>
+      </div>
+      <div class="mock-wrap">
+        <span class="mock-live-tag"><span class="blink"></span> LIVE</span>
+        <div class="mock-card">
+          <div class="mock-side">
+            <div class="mock-logo"><span class="dot"></span>Nesta ERP</div>
+            <div class="mock-nav-item active">📊 <span data-i18n="l_mock_nav_dashboard">Dashboard</span></div>
+            <div class="mock-nav-item">🍽 <span data-i18n="l_mock_nav_orders">Buyurtmalar</span></div>
+            <div class="mock-nav-item">🍳 <span data-i18n="l_mock_nav_kitchen">Oshxona</span></div>
+            <div class="mock-nav-item">📦 <span data-i18n="l_mock_nav_warehouse">Ombor</span></div>
+            <div class="mock-nav-item">💰 <span data-i18n="l_mock_nav_finance">Moliya</span></div>
+            <div class="mock-nav-item">🛵 <span data-i18n="l_mock_nav_delivery">Yetkazish</span></div>
+          </div>
+          <div class="mock-main">
+            <div class="mock-topbar">
+              <span class="mock-title" data-i18n="l_mock_today_status">Bugungi holat</span>
+              <span class="mock-clock" id="mock-clock">--:--:--</span>
+            </div>
+            <div class="mock-kpis">
+              <div class="mock-kpi">
+                <div class="v">126</div>
+                <div class="l" data-i18n="l_mock_kpi_orders">Buyurtma</div>
+              </div>
+              <div class="mock-kpi">
+                <div class="v">18.5M</div>
+                <div class="l" data-i18n="l_mock_kpi_sales">Savdo</div>
+              </div>
+              <div class="mock-kpi">
+                <div class="v">14 <span data-i18n="minutes_short">daq</span></div>
+                <div class="l" data-i18n="l_mock_kpi_avg_time">O'rt. vaqt</div>
+              </div>
+            </div>
+            <div class="mock-table">
+              <div class="mock-row head"><span data-i18n="l_mock_col_order">Buyurtma</span><span data-i18n="l_mock_col_type">Turi</span><span data-i18n="l_mock_col_status">Holat</span></div>
+              <div class="mock-row"><span class="mock-rname">#1042 · <span data-i18n="table_label">Stol</span> 5</span><span data-i18n="l_mock_type_dinein">Zal</span><span
+                  class="mock-badge ready" data-i18n="status_ready">Tayyor</span></div>
+              <div class="mock-row"><span class="mock-rname">#1043 · <span data-i18n="l_mock_nav_delivery">Yetkazish</span></span><span data-i18n="l_mock_type_courier">Kuryer</span><span
+                  class="mock-badge cooking" data-i18n="l_mock_status_cooking">Tayyorlanmoqda</span></div>
+              <div class="mock-row"><span class="mock-rname">#1044 · <span data-i18n="table_label">Stol</span> 2</span><span data-i18n="l_mock_type_dinein">Zal</span><span
+                  class="mock-badge ready" data-i18n="status_ready">Tayyor</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="mock-float f1"><span class="ico">🔔</span> <span data-i18n="l_hero_float1">Yangi buyurtma!</span>
+        </div>
+        <div class="mock-float f2"><span class="ico">🛵</span> <span data-i18n="l_hero_float2">Kuryer yo'lda</span>
+        </div>
+      </div>
+    </div>
+    <div class="trust-strip">
+      <div class="trust-inner">
+        <span class="trust-item" data-i18n="l_trust_1">🌐 O'zbek · Rus · Ingliz</span>
+        <span class="trust-item" data-i18n="l_trust_2">💳 Click · Payme · Uzum</span>
+        <span class="trust-item" data-i18n="l_trust_3">⚡ Firebase real vaqt</span>
+        <span class="trust-item" data-i18n="l_trust_4">🤖 Telegram boshqaruv markazi</span>
+        <span class="trust-item" data-i18n="l_trust_5">🔐 Rol asosidagi ruxsatlar</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ STATS ══════════════ -->
+  <section id="stats">
+    <div class="section-inner u-539b047e">
+      <span class="stats-live-badge"><span class="blink"></span> <span data-i18n="l_stats_live">Jonli
+          ma'lumotlar</span></span>
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="num" id="stat-restaurants">—</div>
+          <div class="lbl" data-i18n="l_stats_restaurants">Faol restoranlar</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="stat-customers">—</div>
+          <div class="lbl" data-i18n="l_stats_customers">Ro'yxatdan o'tgan mijozlar</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="stat-orders">—</div>
+          <div class="lbl" data-i18n="l_stats_orders">Qayta ishlangan buyurtmalar</div>
+        </div>
+        <div class="stat-box">
+          <div class="num" id="stat-revenue">—</div>
+          <div class="lbl" data-i18n="l_stats_revenue">Umumiy aylanma (so'm)</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ SYSTEM OVERVIEW ══════════════ -->
+  <section id="overview">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_ov_eyebrow">Tizim haqida</span>
+      <div class="overview-grid">
+        <div>
+          <h2 class="head" data-i18n="l_ov_title">Nesta ERP — bitta platformada to'liq restoran ERP</h2>
+          <p class="lede u-8c960343" data-i18n="l_ov_lede">Nesta ERP POS, CRM, oshxona boshqaruvi,
+            yetkazib berish, ombor va moliyani bitta bulutli tizimga birlashtiradi. Har bir bo'lim Firebase Realtime
+            Database orqali bir-biriga real vaqtda ulangan — buyurtma kassada ko'rinishi bilanoq oshxona ekranida ham
+            darhol paydo bo'ladi.</p>
+          <div class="overview-pillars">
+            <div class="pillar">
+              <div class="ico">🍽</div><b data-i18n="l_ov_p1_t">POS &amp; Kassa</b><span data-i18n="l_ov_p1_d">To'lov
+                qabul qilish, chek chop etish</span>
+            </div>
+            <div class="pillar">
+              <div class="ico">🍳</div><b data-i18n="l_ov_p2_t">Oshxona</b><span data-i18n="l_ov_p2_d">Raqamli navbat va
+                tayyorlash nazorati</span>
+            </div>
+            <div class="pillar">
+              <div class="ico">🛵</div><b data-i18n="l_ov_p3_t">Yetkazib berish</b><span data-i18n="l_ov_p3_d">Ichki
+                kuryer yoki Yandex Go</span>
+            </div>
+            <div class="pillar">
+              <div class="ico">📦</div><b data-i18n="l_ov_p4_t">Ombor</b><span data-i18n="l_ov_p4_d">Masalliqlar,
+                xaridlar, ishlab chiqarish</span>
+            </div>
+            <div class="pillar">
+              <div class="ico">💰</div><b data-i18n="l_ov_p5_t">Moliya</b><span data-i18n="l_ov_p5_d">Xarajat, ish haqi,
+                foyda hisoboti</span>
+            </div>
+            <div class="pillar">
+              <div class="ico">🤖</div><b data-i18n="l_ov_p6_t">Bildirishnoma markazi</b><span
+                data-i18n="l_ov_p6_d">Telegram bot orqali to'liq nazorat</span>
+            </div>
+          </div>
+        </div>
+        <div class="overview-visual">
+          <div class="stack-item">
+            <div class="stack-ico">🔥</div>
+            <div><b data-i18n="l_ov_s1_t">Firebase Realtime Database</b><span data-i18n="l_ov_s1_d">Barcha modullar bir
+                manbaga ulangan</span></div>
+          </div>
+          <div class="stack-item">
+            <div class="stack-ico">🔐</div>
+            <div><b data-i18n="l_ov_s2_t">Rol asosidagi ruxsatlar (RBAC)</b><span data-i18n="l_ov_s2_d">13 tayyor rol +
+                moslashtiriladigan rollar</span></div>
+          </div>
+          <div class="stack-item">
+            <div class="stack-ico">🌐</div>
+            <div><b data-i18n="l_ov_s3_t">3 tillilik</b><span data-i18n="l_ov_s3_d">O'zbek, rus, ingliz — har bir
+                sahifada</span></div>
+          </div>
+          <div class="stack-item">
+            <div class="stack-ico">📱</div>
+            <div><b data-i18n="l_ov_s4_t">Har rol uchun alohida ilova</b><span data-i18n="l_ov_s4_d">Admin, kassir,
+                ofitsiant, oshpaz, kuryer</span></div>
+          </div>
+          <div class="stack-item">
+            <div class="stack-ico">🧾</div>
+            <div><b data-i18n="l_ov_s5_t">Audit jurnali</b><span data-i18n="l_ov_s5_d">Har bir muhim amal yozib
+                boriladi</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ WORKFLOW ══════════════ -->
+  <section id="workflow" class="u-ed3720ff">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_wf_eyebrow">Ish jarayoni</span>
+      <h2 class="head" data-i18n="l_wf_title">Buyurtmadan hisobotgacha — avtomatik zanjir</h2>
+      <p class="lede" data-i18n="l_wf_lede">Nesta ERP ikkita real ish jarayonini qo'llab-quvvatlaydi: zalda xizmat va
+        yetkazib berish. Ikkalasi ham bir xil kuzatuv va hisobot tizimiga ulanadi.</p>
+
+      <div class="flow-tabs">
+        <div class="flow-tab active" data-flow="dinein" data-i18n="l_wf_tab_dinein">Zalda xizmat</div>
+        <div class="flow-tab" data-flow="delivery" data-i18n="l_wf_tab_delivery">Yetkazib berish</div>
+      </div>
+
+      <div class="flow-panels">
+        <div class="active" data-panel="dinein">
+          <div class="flow-step"><span class="n">1</span>
+            <div class="ico">🧑‍🍳</div><b data-i18n="l_wf_d1_t">Ofitsiant</b><span data-i18n="l_wf_d1_d">Stol uchun
+              buyurtma kiritadi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">2</span>
+            <div class="ico">🍳</div><b data-i18n="l_wf_d2_t">Oshxona ekrani</b><span data-i18n="l_wf_d2_d">Buyurtma
+              navbatga tushadi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">3</span>
+            <div class="ico">👨‍🍳</div><b data-i18n="l_wf_d3_t">Oshpaz</b><span data-i18n="l_wf_d3_d">Tayyorlaydi,
+              "Tayyor" deb belgilaydi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">4</span>
+            <div class="ico">🍽</div><b data-i18n="l_wf_d4_t">Ofitsiant</b><span data-i18n="l_wf_d4_d">Mijozga olib
+              boradi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">5</span>
+            <div class="ico">💳</div><b data-i18n="l_wf_d5_t">Kassir</b><span data-i18n="l_wf_d5_d">To'lovni qabul
+              qiladi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">6</span>
+            <div class="ico">📊</div><b data-i18n="l_wf_d6_t">Hisobot</b><span data-i18n="l_wf_d6_d">Moliya va
+              boshqaruvga tushadi</span>
+          </div>
+        </div>
+        <div data-panel="delivery">
+          <div class="flow-step"><span class="n">1</span>
+            <div class="ico">📱</div><b data-i18n="l_wf_v1_t">Mijoz</b><span data-i18n="l_wf_v1_d">Ilovadan buyurtma
+              beradi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">2</span>
+            <div class="ico">🍳</div><b data-i18n="l_wf_v2_t">Oshxona</b><span data-i18n="l_wf_v2_d">Tayyorlanadi,
+              "Tayyor" bo'ladi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">3</span>
+            <div class="ico">🛵</div><b data-i18n="l_wf_v3_t">Avtomatik tayinlash</b><span data-i18n="l_wf_v3_d">Ichki
+              kuryerlar orasidan avtomatik</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">4</span>
+            <div class="ico">📍</div><b data-i18n="l_wf_v4_t">Kuryer</b><span data-i18n="l_wf_v4_d">Qabul qiladi va
+              yetkazadi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">5</span>
+            <div class="ico">✅</div><b data-i18n="l_wf_v5_t">Yetkazildi</b><span data-i18n="l_wf_v5_d">Mijoz
+              tasdiqlaydi</span>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-step"><span class="n">6</span>
+            <div class="ico">📊</div><b data-i18n="l_wf_v6_t">Hisobot</b><span data-i18n="l_wf_v6_d">Moliya va
+              boshqaruvga tushadi</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ MODULES ══════════════ -->
+  <section id="modules">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_mod_eyebrow">Tizim modullari</span>
+      <h2 class="head" data-i18n="l_mod_title">Restoranchi uchun kerak bo'lgan hamma narsa</h2>
+      <p class="lede" data-i18n="l_mod_lede">Har bir modul mustaqil ishlaydi, lekin bir xil ma'lumot bazasiga ulangan —
+        hech qanday qo'shimcha dastur yoki qo'lda sinxronlash kerak emas.</p>
+      <div class="modules-grid">
+
+        <div class="mod-card">
+          <div class="mod-icon">💳</div>
+          <h4 data-i18n="l_mod1_t">POS / Kassa</h4>
+          <p data-i18n="l_mod1_d">Naqd, Click, Payme va Uzum orqali to'lov qabul qilish, chek chop etish.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod1_b1">Bo'lib to'lash</li>
+            <li data-i18n="l_mod1_b2">Chegirma va promokod</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🍳</div>
+          <h4 data-i18n="l_mod2_t">Oshxona ekrani (KDS)</h4>
+          <p data-i18n="l_mod2_d">Raqamli buyurtma navbati, har bir taom uchun tayyorlanish taymeri.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod2_b1">Stop-list boshqaruvi</li>
+            <li data-i18n="l_mod2_b2">Oshpazlar o'rtasida chat</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🛵</div>
+          <h4 data-i18n="l_mod3_t">Yetkazib berish</h4>
+          <p data-i18n="l_mod3_d">Ichki kuryerlar o'rtasida avtomatik tayinlash tizimi.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod3_b1">Rad etsa — keyingi kuryerga</li>
+            <li data-i18n="l_mod3_b2">Xaritada jonli kuzatuv</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">📦</div>
+          <h4 data-i18n="l_mod4_t">Ombor va ishlab chiqarish</h4>
+          <p data-i18n="l_mod4_d">Masalliqlar, xaridlar, ta'minotchilar va ishlab chiqarish rejasi.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod4_b1">Bozorlik rejalashtiruvchi</li>
+            <li data-i18n="l_mod4_b2">Kam qolgan mahsulot ogohlantirishi</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">💰</div>
+          <h4 data-i18n="l_mod5_t">Moliya va ish haqi</h4>
+          <p data-i18n="l_mod5_d">Xarajatlar, daromad, foyda-zarar hisoboti, KPI asosida ish haqi.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod5_b1">Bonus/jarima jadvali</li>
+            <li data-i18n="l_mod5_b2">Avans to'lovlari</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">❤️</div>
+          <h4 data-i18n="l_mod6_t">CRM va Loyalty</h4>
+          <p data-i18n="l_mod6_d">Mijozlar bazasi, VIP chegirmalar, promokodlar, referal dastur.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod6_b1">Mijoz tarixi</li>
+            <li data-i18n="l_mod6_b2">Fikr-mulohazalar</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">📅</div>
+          <h4 data-i18n="l_mod7_t">Bronlar</h4>
+          <p data-i18n="l_mod7_d">Stol bronlarini qabul qilish, filtrlash va boshqarish.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod7_b1">Real vaqtda holat</li>
+            <li data-i18n="l_mod7_b2">Qidiruv va filtr</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">📈</div>
+          <h4 data-i18n="l_mod8_t">Hisobotlar va tahlil</h4>
+          <p data-i18n="l_mod8_d">Savdo, mijozlar, ta'minotchilar bo'yicha batafsil hisobotlar.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod8_b1">Peak Hours tahlili</li>
+            <li data-i18n="l_mod8_b2">Inventar prognozi</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🤖</div>
+          <h4 data-i18n="l_mod9_t">Bildirishnoma markazi + Telegram bot</h4>
+          <p data-i18n="l_mod9_d">Kunlik/haftalik/oylik hisobotlar va 30 dan ortiq voqea turi bo'yicha ogohlantirish.
+          </p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod9_b1">Telegram orqali boshqaruv paneli</li>
+            <li data-i18n="l_mod9_b2">3 tilda avtomatik xabar</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🔐</div>
+          <h4 data-i18n="l_mod10_t">Rollar va ruxsatlar</h4>
+          <p data-i18n="l_mod10_d">Har bir xodim faqat o'ziga tegishli bo'limlarni ko'radi.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod10_b1">Moslashtiriladigan rollar</li>
+            <li data-i18n="l_mod10_b2">Audit jurnali</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🖨️</div>
+          <h4 data-i18n="l_mod11_t">Printer va terminal</h4>
+          <p data-i18n="l_mod11_d">Chek, oshxona va hisobot printerlarini kategoriya bo'yicha sozlash.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod11_b1">Avtomatik chop etish</li>
+            <li data-i18n="l_mod11_b2">USB / tarmoq / Bluetooth</li>
+          </ul>
+        </div>
+
+        <div class="mod-card">
+          <div class="mod-icon">🧑‍💼</div>
+          <h4 data-i18n="l_mod12_t">Xodimlar va HR</h4>
+          <p data-i18n="l_mod12_d">Xodimlar ro'yxati, davomat kuzatuvi, smenalar.</p>
+          <ul class="mod-benefits">
+            <li data-i18n="l_mod12_b1">Davomat jadvali</li>
+            <li data-i18n="l_mod12_b2">Xodim samaradorligi</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ ROLES ══════════════ -->
+  <section id="roles" class="u-3f67b8ce">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_role_eyebrow">Har bir xodim uchun</span>
+      <h2 class="head" data-i18n="l_role_title">O'z vazifasiga mos interfeys</h2>
+      <p class="lede" data-i18n="l_role_lede">Har bir rol faqat o'ziga tegishli vazifalarni ko'radi — bu ishni
+        soddalashtiradi va xatoliklarni kamaytiradi.</p>
+      <div class="roles-grid">
+        <div class="role-card">
+          <div class="role-icon">👑</div>
+          <div class="role-name" data-i18n="l_r1_t">Egasi / Menejer</div>
+          <div class="role-desc" data-i18n="l_r1_d">Barcha modullarga to'liq kirish, umumiy nazorat</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">💳</div>
+          <div class="role-name" data-i18n="l_r2_t">Kassir</div>
+          <div class="role-desc" data-i18n="l_r2_d">To'lovlarni qabul qiladi, chek chiqaradi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">🧑‍🍳</div>
+          <div class="role-name" data-i18n="l_r3_t">Ofitsiant</div>
+          <div class="role-desc" data-i18n="l_r3_d">Stol buyurtmalarini kiritadi va kuzatadi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">👨‍🍳</div>
+          <div class="role-name" data-i18n="l_r4_t">Oshpaz / Bosh oshpaz</div>
+          <div class="role-desc" data-i18n="l_r4_d">Oshxona ekranida buyurtmalarni tayyorlaydi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">🛵</div>
+          <div class="role-name" data-i18n="l_r5_t">Kuryer</div>
+          <div class="role-desc" data-i18n="l_r5_d">Buyurtmani qabul qiladi va mijozga yetkazadi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">📦</div>
+          <div class="role-name" data-i18n="l_r6_t">Ombor menejeri</div>
+          <div class="role-desc" data-i18n="l_r6_d">Masalliqlar va xaridlarni boshqaradi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">💰</div>
+          <div class="role-name" data-i18n="l_r7_t">Moliyachi</div>
+          <div class="role-desc" data-i18n="l_r7_d">Daromad, xarajat va foyda hisobotlarini ko'radi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">❤️</div>
+          <div class="role-name" data-i18n="l_r8_t">CRM menejeri</div>
+          <div class="role-desc" data-i18n="l_r8_d">Mijozlar, bonuslar va promokodlar bilan ishlaydi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">🧑‍💼</div>
+          <div class="role-name" data-i18n="l_r9_t">HR</div>
+          <div class="role-desc" data-i18n="l_r9_d">Xodimlar, davomat va ish haqini boshqaradi</div>
+        </div>
+        <div class="role-card">
+          <div class="role-icon">📱</div>
+          <div class="role-name" data-i18n="l_r10_t">Mijoz</div>
+          <div class="role-desc" data-i18n="l_r10_d">Ilova orqali buyurtma beradi va kuzatadi</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ WHY NESTA ERP ══════════════ -->
+  <section id="why">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_why_eyebrow">Nega Nesta ERP</span>
+      <h2 class="head" data-i18n="l_why_title">Zamonaviy, tez va ishonchli</h2>
+      <p class="lede" data-i18n="l_why_lede">Har bir qaror real ma'lumotlarga asoslanadi — taxminlarga emas.</p>
+      <div class="why-grid">
+        <div class="why-card">
+          <div class="why-icon">⚡</div>
+          <h4 data-i18n="l_why1_t">Real vaqt</h4>
+          <p data-i18n="l_why1_d">Firebase Realtime Database orqali barcha bo'limlar bir zumda sinxronlashadi.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">☁️</div>
+          <h4 data-i18n="l_why2_t">Bulutli</h4>
+          <p data-i18n="l_why2_d">O'rnatish shart emas — brauzer orqali istalgan qurilmadan kirish mumkin.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🤖</div>
+          <h4 data-i18n="l_why3_t">Telegram bot boshqaruvi</h4>
+          <p data-i18n="l_why3_d">Hisobotlar va ogohlantirishlarni to'g'ridan-to'g'ri Telegramda oling.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🔐</div>
+          <h4 data-i18n="l_why4_t">Rol asosidagi ruxsatlar</h4>
+          <p data-i18n="l_why4_d">Har bir xodim faqat o'ziga ruxsat berilgan bo'limlarni ko'radi.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">📊</div>
+          <h4 data-i18n="l_why5_t">Chuqur hisobotlar</h4>
+          <p data-i18n="l_why5_d">Savdo, xodim va ombor bo'yicha batafsil tahliliy hisobotlar.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🌐</div>
+          <h4 data-i18n="l_why6_t">3 tillilik</h4>
+          <p data-i18n="l_why6_d">O'zbek, rus va ingliz tillarida — har bir sahifada.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ TECHNOLOGY STACK ══════════════ -->
+  <section id="techstack" class="u-3f67b8ce">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_tech_eyebrow">Texnologiya</span>
+      <h2 class="head" data-i18n="l_tech_title">Zamonaviy texnologik asos</h2>
+      <p class="lede" data-i18n="l_tech_lede">Nesta ERP sinovdan o'tgan, ishonchli texnologiyalar ustiga qurilgan.</p>
+      <div class="why-grid">
+        <div class="why-card">
+          <div class="why-icon">🔥</div>
+          <h4 data-i18n="l_tech1_t">Firebase Realtime Database</h4>
+          <p data-i18n="l_tech1_d">Barcha modullar uchun yagona, real vaqtda sinxronlanuvchi bulutli ma'lumotlar bazasi.
+          </p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🌐</div>
+          <h4 data-i18n="l_tech2_t">Brauzer asosida</h4>
+          <p data-i18n="l_tech2_d">O'rnatish shart emas — istalgan zamonaviy brauzerda (Chrome, Edge, Safari) ishlaydi.
+          </p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">📱</div>
+          <h4 data-i18n="l_tech3_t">Har qurilmaga moslashuvchan</h4>
+          <p data-i18n="l_tech3_d">Kompyuter, planshet va telefonda bir xil qulaylikda ishlaydi.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🤖</div>
+          <h4 data-i18n="l_tech4_t">Telegram Bot API</h4>
+          <p data-i18n="l_tech4_d">Rasmiy Telegram Bot API orqali xabar va boshqaruv paneli.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">💳</div>
+          <h4 data-i18n="l_tech5_t">Mahalliy to'lov integratsiyalari</h4>
+          <p data-i18n="l_tech5_d">Click, Payme va Uzum Bank API'lari bilan bevosita ulanish.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🗺️</div>
+          <h4 data-i18n="l_tech6_t">Yandex xizmatlari</h4>
+          <p data-i18n="l_tech6_d">Yandex Maps orqali manzil va yo'nalish; tashqi kuryer integratsiyasi (Yandex Go) tez orada.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ SCREENSHOTS ══════════════ -->
+  <section id="screens" class="u-3f67b8ce">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_scr_eyebrow">Tizim ko'rinishi</span>
+      <h2 class="head" data-i18n="l_scr_title">Interfeys qanday ishlaydi</h2>
+      <p class="lede" data-i18n="l_scr_lede">Real modul dizayniga asoslangan ko'rgazma — quyida oshxona ekrani va
+        Telegram boshqaruv panelining tuzilishi ko'rsatilgan.</p>
+      <div class="screens-tabs">
+        <div class="screen-tab active" data-screen="kds" data-i18n="l_scr_tab_kds">Oshxona ekrani</div>
+        <div class="screen-tab" data-screen="telegram" data-i18n="l_scr_tab_tg">Telegram bot</div>
+      </div>
+      <div class="screen-frame">
+        <div class="screen-panels">
+          <div class="active" data-spanel="kds">
+            <div class="kds-board">
+              <div class="kds-card">
+                <div class="t"><span data-i18n="table_label">Stol</span> 4</div>
+                <div class="n">#1042</div>
+                <div class="item">🍚 <span data-i18n="l_mock_dish_osh">Osh</span> — 2 <span data-i18n="l_mock_unit_pcs">ta</span></div>
+                <div class="item">🥤 <span data-i18n="l_mock_dish_cola">Kola</span> — 2 <span data-i18n="l_mock_unit_pcs">ta</span></div><span class="kds-timer ok">6 <span data-i18n="minutes_short">daq</span></span>
+              </div>
+              <div class="kds-card">
+                <div class="t" data-i18n="l_mock_nav_delivery">Yetkazish</div>
+                <div class="n">#1043</div>
+                <div class="item">🍢 <span data-i18n="l_mock_dish_shashlik">Shashlik</span> — 4 <span data-i18n="l_mock_unit_pcs">ta</span></div>
+                <div class="item">🥗 <span data-i18n="l_mock_dish_salad">Salat</span> — 1 <span data-i18n="l_mock_unit_pcs">ta</span></div><span class="kds-timer warn">22 <span data-i18n="minutes_short">daq</span></span>
+              </div>
+              <div class="kds-card">
+                <div class="t"><span data-i18n="table_label">Stol</span> 7</div>
+                <div class="n">#1044</div>
+                <div class="item">🍕 <span data-i18n="l_mock_dish_pizza">Pitsa</span> — 1 <span data-i18n="l_mock_unit_pcs">ta</span></div><span class="kds-timer ok">3 <span data-i18n="minutes_short">daq</span></span>
+              </div>
+              <div class="kds-card">
+                <div class="t" data-i18n="l_mock_takeaway">Olib ketish</div>
+                <div class="n">#1045</div>
+                <div class="item">🍜 <span data-i18n="l_mock_dish_lagman">Lag'mon</span> — 2 <span data-i18n="l_mock_unit_pcs">ta</span></div><span class="kds-timer ok">9 <span data-i18n="minutes_short">daq</span></span>
+              </div>
+            </div>
+          </div>
+          <div data-spanel="telegram">
+            <div class="tg-mock">
+              <div class="tg-msg">
+                📊 <b data-i18n="l_mock_tg_report_title">Nesta ERP — Kunlik hisobot</b><br><br>
+                💰 <span data-i18n="l_mock_tg_revenue">Tushum</span>: <b>18,540,000 <span data-i18n="currency">so'm</span></b><br>
+                🧾 <span data-i18n="l_mock_nav_orders">Buyurtmalar</span>: <b>126</b> · <span data-i18n="l_mock_tg_completed">Bajarildi</span>: <b>118</b><br>
+                🍳 <span data-i18n="l_mock_tg_avg_prep">O'rtacha tayyorlanish</span>: <b>14 <span data-i18n="minutes_short">daq</span></b><br>
+                🛵 <span data-i18n="status_delivered">Yetkazildi</span>: <b>58</b> · <span data-i18n="l_mock_tg_average">O'rtacha</span>: <b>24 <span data-i18n="minutes_short">daq</span></b><br>
+                📦 <span data-i18n="l_mock_tg_low_stock">Kam qolgan</span>: <b>3 <span data-i18n="l_mock_unit_pcs">ta</span></b>
+              </div>
+              <div class="tg-btn-row">
+                <div class="tg-btn">📊 <span data-i18n="l_mock_tg_btn_report">Hisobot</span></div>
+                <div class="tg-btn">📦 <span data-i18n="l_mock_nav_warehouse">Ombor</span></div>
+                <div class="tg-btn">👥 <span data-i18n="l_mock_tg_btn_staff">Xodimlar</span></div>
+              </div>
+              <div class="tg-btn-row">
+                <div class="tg-btn">💰 <span data-i18n="l_mock_nav_finance">Moliya</span></div>
+                <div class="tg-btn">🍽 <span data-i18n="l_mock_kpi_orders">Buyurtma</span></div>
+                <div class="tg-btn">🍳 <span data-i18n="l_mock_nav_kitchen">Oshxona</span></div>
+              </div>
+              <div class="tg-btn-row">
+                <div class="tg-btn">🛵 <span data-i18n="l_mock_nav_delivery">Yetkazish</span></div>
+                <div class="tg-btn">⚙️ <span data-i18n="l_mock_tg_btn_settings">Sozlama</span></div>
+                <div class="tg-btn">🔄 <span data-i18n="l_mock_tg_btn_refresh">Yangilash</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="screen-caption" data-i18n="l_scr_caption">* Ko'rgazma — real modul tuzilishiga asoslangan
+          illyustratsiya</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ INTEGRATIONS ══════════════ -->
+  <section id="integrations">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_int_eyebrow">Integratsiyalar</span>
+      <h2 class="head" data-i18n="l_int_title">Mahalliy xizmatlar bilan tayyor integratsiya</h2>
+      <p class="lede" data-i18n="l_int_lede">O'zbekiston bozori uchun zarur bo'lgan xizmatlar allaqachon ulangan.</p>
+      <div class="int-grid">
+        <div class="int-card">
+          <div class="ico">🔥</div><b>Firebase</b><span data-i18n="l_int1_d">Real vaqt ma'lumotlar bazasi</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">🤖</div><b>Telegram Bot</b><span data-i18n="l_int2_d">Hisobot va ogohlantirishlar</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">💳</div><b>Click</b><span data-i18n="l_int3_d">Onlayn to'lov tizimi</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">💳</div><b>Payme</b><span data-i18n="l_int4_d">Onlayn to'lov tizimi</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">💳</div><b>Uzum Bank</b><span data-i18n="l_int5_d">Onlayn to'lov tizimi</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">🗺️</div><b>Yandex Maps</b><span data-i18n="l_int6_d">Manzil va yo'nalish</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">🚕</div><b>Yandex Go</b><span data-i18n="l_int7_d">Tashqi kuryer xizmati — tez orada</span>
+        </div>
+        <div class="int-card">
+          <div class="ico">🖨️</div><b data-i18n="l_int8_t">Printerlar</b><span data-i18n="l_int8_d">Chek va oshxona
+            printerlari</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ TESTIMONIALS ══════════════ -->
+  <section id="testimonials" class="u-3f67b8ce">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_test_eyebrow">Foydalanuvchilar fikri</span>
+      <h2 class="head" data-i18n="l_test_title">Restoran egalari nima deyishadi</h2>
+      <div class="test-grid">
+        <div class="test-card">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote" data-i18n="l_test1_q">"Oshxona bilan zal o'rtasidagi bog'lanish endi bir zumda —
+            buyurtma tayyor bo'lishi bilan ofitsiant darhol biladi."</p>
+          <div class="test-person">
+            <div class="test-avatar">R</div>
+            <div><b data-i18n="l_test1_n">Restoran egasi</b><span data-i18n="l_test1_r">Toshkent</span></div>
+          </div>
+        </div>
+        <div class="test-card">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote" data-i18n="l_test2_q">"Telegram bot orqali kunlik hisobotni har kuni tushunarli formatda
+            olib turaman — administratsiyaga qo'ng'iroq qilishga hojat qolmadi."</p>
+          <div class="test-person">
+            <div class="test-avatar">M</div>
+            <div><b data-i18n="l_test2_n">Menejer</b><span data-i18n="l_test2_r">Samarqand</span></div>
+          </div>
+        </div>
+        <div class="test-card">
+          <div class="test-stars">★★★★★</div>
+          <p class="test-quote" data-i18n="l_test3_q">"Kuryer avtomatik tayinlanadi, rad etsa — keyingisiga o'tadi.
+            Yetkazib berish bo'limi endi o'z-o'zini boshqaradi."</p>
+          <div class="test-person">
+            <div class="test-avatar">D</div>
+            <div><b data-i18n="l_test3_n">Yetkazib berish menejeri</b><span data-i18n="l_test3_r">Farg'ona</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ FAQ ══════════════ -->
+  <section id="faq">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_faq_eyebrow">Savol-javob</span>
+      <h2 class="head" data-i18n="l_faq_title">Ko'p so'raladigan savollar</h2>
+      <div class="faq-list">
+        <div class="faq-item open">
+          <div class="faq-q" data-i18n="l_faq1_q">Nesta ERP qanday tillarni qo'llab-quvvatlaydi?</div>
+          <div class="faq-a" data-i18n="l_faq1_a">Tizim o'zbek, rus va ingliz tillarida to'liq ishlaydi — har bir
+            foydalanuvchi o'zi uchun qulay tilni tanlashi mumkin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq2_q">Qanday to'lov tizimlari qo'llab-quvvatlanadi?</div>
+          <div class="faq-a" data-i18n="l_faq2_a">Naqd pul, Click, Payme va Uzum orqali to'lovlar qabul qilinadi.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq3_q">Yetkazib berish qanday amalga oshiriladi?</div>
+          <div class="faq-a" data-i18n="l_faq3_a">Buyurtma tayyor bo'lgach, tizim avtomatik ravishda ichki kuryerlardan
+            bo'sh bo'lganini tanlaydi. Kuryer rad etsa, avtomatik ravishda keyingi kuryerga tayinlanadi. Tashqi kuryer
+            xizmatlari (Yandex Go) integratsiyasi tez orada qo'shiladi.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq4_q">Xodimlarning ruxsatlarini qanday cheklash mumkin?</div>
+          <div class="faq-a" data-i18n="l_faq4_a">Har bir rol (kassir, ofitsiant, oshpaz va boshqalar) faqat o'ziga
+            tegishli bo'limlarni ko'radi. Bundan tashqari, moslashtirilgan rollar yaratish va har bir modul uchun aniq
+            ruxsatlar belgilash mumkin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq5_q">Telegram bot nima uchun kerak?</div>
+          <div class="faq-a" data-i18n="l_faq5_a">Telegram bot orqali kunlik, haftalik va oylik hisobotlarni, shuningdek
+            30 dan ortiq voqea turi (kam qolgan mahsulot, katta buyurtma, muvaffaqiyatsiz to'lov va h.k.) bo'yicha
+            ogohlantirishlarni olasiz. Bot ichida tugmalar orqali hisobotlarni jonli holda ham ko'rish mumkin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq6_q">Tizimni o'rnatish uchun maxsus dastur kerakmi?</div>
+          <div class="faq-a" data-i18n="l_faq6_a">Yo'q. Nesta ERP to'liq brauzer orqali ishlaydi — kompyuter, planshet
+            yoki telefondan kirish mumkin.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q" data-i18n="l_faq7_q">Narxlar qanday?</div>
+          <div class="faq-a" data-i18n="l_faq7_a">Narxlar restoran hajmi va kerakli modullarga qarab belgilanadi. Aniq
+            taklif olish uchun quyidagi forma orqali biz bilan bog'laning.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ CONTACT ══════════════ -->
+  <section id="contact">
+    <div class="section-inner">
+      <span class="eyebrow" data-i18n="l_contact_eyebrow">Bog'lanish</span>
+      <h2 class="head" data-i18n="l_contact_title">Restoraningiz uchun demo so'rang</h2>
+      <p class="lede" data-i18n="l_contact_lede">Formani to'ldiring — jamoamiz siz bilan bog'lanadi va tizimni ko'rsatib
+        beradi.</p>
+      <div class="contact-grid">
+        <div class="contact-info">
+          <div class="contact-item">
+            <div class="contact-icon">📞</div><span id="contactPhoneText" data-i18n="l_contact_phone">+998 90 000 00 00</span>
+          </div>
+          <div class="contact-item">
+            <div class="contact-icon">✉️</div><span id="contactEmailText" data-i18n="l_contact_email">info@nestacrm.uz</span>
+          </div>
+          <div class="contact-item">
+            <div class="contact-icon">📍</div><span id="contactAddressText" data-i18n="l_contact_loc">Toshkent, O'zbekiston</span>
+          </div>
+        </div>
+        <div class="contact-form-wrap">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label" data-i18n="l_form_name">Ismingiz</label><input type="text"
+                class="form-input" data-i18n-placeholder="l_form_name_placeholder" placeholder="Ism Familiya"></div>
+            <div class="form-group"><label class="form-label" data-i18n="l_form_phone">Telefon</label><input type="tel"
+                class="form-input" placeholder="+998 90 000 00 00"></div>
+          </div>
+          <div class="form-group"><label class="form-label" data-i18n="l_form_rest">Restoran nomi</label><input
+              type="text" class="form-input" data-i18n-placeholder="l_form_rest_placeholder" placeholder="Restoran nomi"></div>
+          <div class="form-group"><label class="form-label" data-i18n="l_form_msg">Xabar (ixtiyoriy)</label><textarea
+              class="form-textarea" data-i18n-placeholder="l_form_msg_placeholder" placeholder="Qo'shimcha ma'lumot..."></textarea></div>
+          <button class="form-submit" onclick="handleSubmit(this)" data-i18n="l_form_submit">Yuborish</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════════ FOOTER ══════════════ -->
+  <footer>
+    <div class="footer-top">
+      <div>
+        <div class="footer-logo" id="footerLogo"><img id="footerLogoImg" alt="" class="brand-logo-img"><span id="footerLogoText">Nesta<span>ERP</span></span></div>
+        <p class="footer-tagline" data-i18n="l_footer_tagline">Restoranlar uchun to'liq raqamli boshqaruv platformasi.
+        </p>
+      </div>
+      <div class="footer-col">
+        <h5 data-i18n="l_footer_col1">Tizim</h5>
+        <ul>
+          <li><a href="#overview" data-i18n="l_nav_overview">Tizim</a></li>
+          <li><a href="#modules" data-i18n="l_nav_modules">Modullar</a></li>
+          <li><a href="#roles" data-i18n="l_nav_roles">Rollar</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5 data-i18n="l_footer_col2">Yordam</h5>
+        <ul>
+          <li><a href="guid.html" data-i18n="l_footer_docs">Qo'llanma</a></li>
+          <li><a href="help.html" data-i18n="l_footer_help">Yordam markazi</a></li>
+          <li><a href="#faq" data-i18n="l_nav_faq">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5 data-i18n="l_footer_col3">Kirish</h5>
+        <ul>
+          <li><a href="login.html" data-i18n="l_nav_login">Tizimga kirish</a></li>
+          <li><a href="#contact" data-i18n="l_nav_contact">Demo so'rash</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span data-i18n="l_footer_copy">© 2026 Nesta ERP. Barcha huquqlar himoyalangan.</span>
+      <div class="payments">
+        <span class="pay-badge">Click</span>
+        <span class="pay-badge">Payme</span>
+        <span class="pay-badge">Uzum</span>
+        <span class="pay-badge">UzCard</span>
+        <span class="pay-badge">Humo</span>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.faq-q').forEach(q => {
+      q.addEventListener('click', () => {
+        const item = q.parentElement;
+        const wasOpen = item.classList.contains('open');
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+        if (!wasOpen) item.classList.add('open');
+      });
+    });
+
+    document.querySelectorAll('.flow-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.flow-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.flow-panels > div').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector('[data-panel="' + tab.dataset.flow + '"]').classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.screen-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.screen-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.screen-panels > div').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.querySelector('[data-spanel="' + tab.dataset.screen + '"]').classList.add('active');
+      });
+    });
+
+    document.getElementById('hamburger').addEventListener('click', function () {
+      const nav = document.querySelector('.nav-links');
+      if (nav.style.display === 'flex') {
+        nav.style.display = 'none';
+      } else {
+        nav.style.cssText = 'display:flex;flex-direction:column;position:absolute;top:68px;left:0;right:0;background:#fff;padding:1.5rem 1.2rem;gap:1rem;border-bottom:1px solid #e4eaf0;z-index:199';
+      }
+    });
+
+    // Mockup clock — jonli vaqt
+    function tickMockClock() {
+      const el = document.getElementById('mock-clock');
+      if (!el) return;
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      el.textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    }
+    tickMockClock();
+    setInterval(tickMockClock, 1000);
+
+    // Scroll-reveal — content fades/slides up from below as it enters the
+    // viewport. Covers every section's heading (eyebrow/title/lede), every
+    // card grid, the workflow steps, the contact columns, and the hero
+    // itself (which is already in view on load, so it plays as an entrance
+    // animation there instead of a scroll-triggered one).
+    //
+    // Stagger: elements are grouped by their DIRECT parent — siblings in the
+    // same card grid (or the same hero column) get an increasing delay so
+    // they cascade in one after another instead of popping in all at once.
+    // A section's own heading and its card grid have DIFFERENT parents, so
+    // the heading always finishes its own short cascade before the cards
+    // below start theirs, which is what makes it read as "this section
+    // arrived" rather than "everything on the page popped at the same time".
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Note: "h2.head" (not bare ".head") — the hero mockup's table header
+    // row also happens to carry a "head" class (`.mock-row.head`, a table-
+    // header style modifier, unrelated to section titles); scoping to the
+    // <h2> tag is what keeps this selector from also matching that div.
+    const revealEls = document.querySelectorAll(
+      '.eyebrow, h2.head, .lede, .mod-card, .role-card, .why-card, .int-card, .test-card, .faq-item, .stat-box, .pillar, .flow-step, .contact-info, .contact-form-wrap, .hero-eyebrow, .hero-title, .hero-sub, .hero-actions, .hero-meta, .mock-card, .mock-float'
+    );
+
+    if (prefersReducedMotion) {
+      // Respect the OS/browser-level "reduce motion" preference — show
+      // everything in its final state immediately, no animation at all.
+    } else {
+      const staggerCounters = new WeakMap();
+      function nextStaggerDelay(parent) {
+        const n = staggerCounters.get(parent) || 0;
+        staggerCounters.set(parent, n + 1);
+        return Math.min(n, 5) * 90; // ms; capped so a long grid doesn't drag out
+      }
+
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) {
+            e.target.style.opacity = '1';
+            e.target.style.transform = 'translateY(0)';
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+      revealEls.forEach(el => {
+        const delay = nextStaggerDelay(el.parentElement);
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(22px)';
+        el.style.transition = `opacity 0.6s cubic-bezier(.21,.8,.34,1) ${delay}ms, transform 0.6s cubic-bezier(.21,.8,.34,1) ${delay}ms`;
+        io.observe(el);
+      });
+    }
+
+    // ── Contact form — Firebase (landingRequests), unchanged mechanism ──
+    function handleSubmit(btn) {
+      const wrap = btn.closest('.contact-form-wrap');
+      const inputs = wrap.querySelectorAll('.form-input');
+      const textarea = wrap.querySelector('.form-textarea');
+
+      const name = inputs[0]?.value.trim();
+      const phone = inputs[1]?.value.trim();
+      const restName = inputs[2]?.value.trim();
+      const message = textarea?.value.trim();
+
+      if (!name || !phone) {
+        alert(window.t('l_form_validation_alert', "Ism va telefon raqamini kiriting."));
+        return;
+      }
+
+      btn.textContent = window.t('l_form_sending', 'Yuborilmoqda...');
+      btn.disabled = true;
+
+      (async () => {
+        try {
+          const { initializeApp, getApps } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js");
+          const { getDatabase, forceWebSockets, ref, push } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js");
+          const { getAuth, signInAnonymously } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js");
+
+          const firebaseConfig = {
+            apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
+            authDomain: "restoran-30d51.firebaseapp.com",
+            databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
+            projectId: "restoran-30d51",
+            storageBucket: "restoran-30d51.firebasestorage.app",
+            messagingSenderId: "862261129762",
+            appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
+          };
+
+          const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+          // Force WebSocket-only transport (never fall back to `.lp`
+          // long-polling) — must run before any ref()/push() below.
+          forceWebSockets();
+          const db = getDatabase(app);
+          const auth = getAuth(app);
+
+          try { await signInAnonymously(auth); } catch (e) { /* ignore */ }
+
+          await push(ref(db, 'landingRequests'), {
+            name, phone,
+            restName: restName || '',
+            message: message || '',
+            status: 'new',
+            createdAt: Date.now()
+          });
+
+          btn.textContent = window.t('l_form_sent', 'Yuborildi ✓');
+          btn.style.background = 'var(--green-dark)';
+          inputs.forEach(i => i.value = '');
+          if (textarea) textarea.value = '';
+        } catch (err) {
+          console.error("So'rov yuborishda xato:", err);
+          btn.textContent = window.t('l_form_error', "Xato! Qayta urinib ko'ring");
+          btn.style.background = '#ef4444';
+          btn.disabled = false;
+        }
+      })();
+    }
+  </script>
+
+  <!-- ── JONLI STATISTIKA: backend'ning public aggregate endpoint'idan o'qiladi ──
+       Ilgari bu blok Firebase Client SDK orqali to'g'ridan-to'g'ri
+       restaurants/ tugunini o'qirdi — bu P0-2 xavfsizlik arxitekturasi
+       (database.rules.json) tomonidan atayin taqiqlangan (restaurants/$restId
+       ".read" haqiqiy staff-login/QR-scan/superadmin sessiyasini talab
+       qiladi; anonim landing-page tashrifida bunday sessiya yo'q — shu sabab
+       "Permission denied" xatosi chiqardi). Rules'ni bo'shatish o'rniga
+       statistikalar endi backend/routes/publicStats.js orqali SERVER
+       TOMONIDA hisoblanadi (Admin SDK orqali, rules'ni chetlab o'tib) va
+       faqat 4 ta agregat sonni qaytaradi — brauzer Firebase'ga umuman
+       tegmaydi. Design/animatsiya/formatCompact mantiqiy o'zgarishsiz. -->
+  <script type="module">
+    function formatCompact(num) {
+      if (num >= 1_000_000) return (num / 1_000_000).toFixed(num >= 10_000_000 ? 0 : 1).replace(/\.0$/, '') + ' mln';
+      if (num >= 1_000) return Math.round(num / 1000) + ' ming';
+      return String(num);
+    }
+
+    function animateLiveNumber(el, end, formatter) {
+      if (!el) return;
+      let start = 0;
+      const dur = 1600;
+      const startTime = performance.now();
+      function step(now) {
+        const progress = Math.min((now - startTime) / dur, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const current = Math.round(end * eased);
+        el.textContent = formatter ? formatter(current) : current.toLocaleString('ru-RU');
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    async function loadLiveStats() {
+      try {
+        const resp = await fetch('/api/public/stats');
+        if (!resp.ok) throw new Error(`stats endpoint returned ${resp.status}`);
+        const stats = await resp.json();
+
+        animateLiveNumber(document.getElementById('stat-restaurants'), Number(stats.restaurants || 0));
+        animateLiveNumber(document.getElementById('stat-customers'), Number(stats.customers || 0));
+        animateLiveNumber(document.getElementById('stat-orders'), Number(stats.orders || 0));
+        animateLiveNumber(document.getElementById('stat-revenue'), Number(stats.revenue || 0), formatCompact);
+
+      } catch (err) {
+        console.warn("Jonli statistikani yuklab bo'lmadi:", err);
+        ['stat-restaurants', 'stat-customers', 'stat-orders', 'stat-revenue'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el) el.textContent = '—';
+        });
+      }
+    }
+
+    loadLiveStats();
+    setInterval(loadLiveStats, 60000);
+
+    // ── Platform branding/contact — superadmin panel'ning "Platforma"
+    // sozlamalaridan (Sozlamalar → Platforma: nom/logotip/telefon/email/
+    // manzil). Har biri MUSTAQIL ravishda, faqat haqiqatda kiritilgan
+    // bo'lsagina, sahifadagi standart holatni almashtiradi — agar superadmin
+    // hech narsa kiritmagan bo'lsa, sahifa avvalgidek "Nesta CRM" matnli
+    // logotip va standart bog'lanish ma'lumotlari bilan qoladi (xavfsiz
+    // standart holat, tanib bo'lmas o'zgarish yo'q).
+    // ROOT CAUSE FIX (real bug, confirmed live): this used to hide the name
+    // text entirely whenever a logo was set (`!info.logo` guard below) — so
+    // uploading a logo made the custom name disappear instead of the two
+    // showing together, the opposite of what was asked ("nom va logotip
+    // ham... logo va nom o'zgarsin"). Now both apply independently: logo
+    // image shows whenever set, name text shows whenever set, side by side.
+    // `dotId` — nav-logo's small accent square (footer-logo has none, so
+    // callers just omit it there). Hidden once a real logo image is shown so
+    // the header reads as "[logo] Name" like a normal brand lockup, not
+    // "[dot][logo] Name".
+    function _applyBrandLogo(imgId, textId, info, dotId) {
+      const img = document.getElementById(imgId);
+      const textEl = document.getElementById(textId);
+      const dotEl = dotId ? document.getElementById(dotId) : null;
+      if (info.logo && img) {
+        img.src = info.logo;
+        img.style.display = 'inline-block';
+        if (dotEl) dotEl.style.display = 'none';
+      }
+      if (info.name && textEl) {
+        // Standart "Nesta<span>CRM</span>" bilan bir xil uslub: 2 so'zli nom
+        // (masalan "Nesta ERP") bo'lsa, 1-so'z oddiy rangda, 2-so'z yashil
+        // rangda ko'rsatiladi (rangni .nav-logo span / .footer-logo span
+        // qoidalari — styles.css — allaqachon beradi, shu <span> shu yerda
+        // qo'shiladi xolos). Boshqa (1 yoki 3+) so'zli nomlar oddiy, bir xil
+        // rangda matn sifatida qoladi.
+        const words = info.name.trim().split(/\s+/);
+        if (words.length === 2) {
+          textEl.innerHTML = `${_escapeHtml(words[0])} <span>${_escapeHtml(words[1])}</span>`;
+        } else {
+          textEl.textContent = info.name;
+        }
+      }
+    }
+
+    function _escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function loadPlatformInfo() {
+      try {
+        const resp = await fetch('/api/public/platform-info');
+        if (!resp.ok) throw new Error(`platform-info endpoint returned ${resp.status}`);
+        const info = await resp.json();
+
+        _applyBrandLogo('navLogoImg', 'navLogoText', info, 'navLogoDot');
+        _applyBrandLogo('footerLogoImg', 'footerLogoText', info);
+
+        const phoneEl = document.getElementById('contactPhoneText');
+        const emailEl = document.getElementById('contactEmailText');
+        const addrEl = document.getElementById('contactAddressText');
+        if (info.phone && phoneEl) phoneEl.textContent = info.phone;
+        if (info.email && emailEl) emailEl.textContent = info.email;
+        if (info.address && addrEl) addrEl.textContent = info.address;
+      } catch (err) {
+        console.warn("Platforma ma'lumotlarini yuklab bo'lmadi:", err);
+      }
+    }
+    loadPlatformInfo();
+  </script>
+
+  <!-- ── i18n MIGRATION NOTE ──────────────────────────────────────────────
+       Bu sahifa ilgari o'zining ALOHIDA, mustaqil tarjima tizimiga ega edi
+       (o'z L{} lug'ati, o'z LANG_KEY'i, o'z applyLang()'i) — butun tizim
+       ishlatadigan js/langs.js + js/i18n.js'dan MUSTAQIL, parallel mexanizm
+       edi. Barcha shu yerda bo'lgan "l_*" kalitlar endi js/langs.js'ga
+       ko'chirildi (uz/ru/en — uchalasi ham). Pastdagi script boshqa har bir
+       sahifa (admin/superadmin/waiter/chef/client/courier) ishlatadigan
+       xuddi shu umumiy t()/setLang()/applyLang()/onLangChange()
+       funksiyalarini ishlatadi — parallel tizim yo'q. -->
+  <script type="module">
+    import { getLang, setLang, onLangChange } from "./js/i18n.js";
+
+    // .lang-btn tugmalari — mavjud dizayn saqlanadi, faqat mavjud umumiy
+    // setLang()'ga ulanadi (o'zining alohida applyLang()/LANG_KEY'i emas).
+    function syncLangButtons(lang) {
+      document.querySelectorAll('.lang-btn').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.lang === lang);
+      });
+    }
+
+    document.querySelectorAll('.lang-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { setLang(btn.dataset.lang); });
+    });
+
+    // Kontakt formasi skripti (yuqorida) window.t() orqali o'zining
+    // alert()/tugma holati matnlarini shu bir xil lug'atdan oladi — alohida
+    // nusxa yo'q.
+    onLangChange(function (lang) { syncLangButtons(lang); });
+    syncLangButtons(getLang());
+  </script>
+
+
+</body>
+
+</html>

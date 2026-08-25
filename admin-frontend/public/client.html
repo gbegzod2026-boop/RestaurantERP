@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8">
+  <title data-i18n="client_document_title">Nesta ERP — Mijoz</title>
+  <link rel="stylesheet" href="css/design-system.css">
+  <link rel="stylesheet" href="css/staffFooter.css">
+  <link rel="stylesheet" href="css/client.css?v=10">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="icon" id="faviconLink"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'><rect width='1' height='1' fill='none'/></svg>"
+    type="image/svg+xml">
+  <link rel="icon" href="img/logo (2).svg" type="image/png" />
+  <script>
+    (function () {
+      try {
+        var saved = localStorage.getItem("app_theme");
+        if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
+      } catch (e) {  }
+    })();
+  </script>
+</head>
+
+<body>
+  <header class="header nesta-header">
+    <div class="header-top-row">
+      <div class="logo-wrapper">
+        
+        <div id="nestaHeaderBrand" class="nesta-header-brand"></div>
+      </div>
+
+      <div id="headerBadge" class="u-1a52cca8">
+        👑 VIP
+      </div>
+    </div>
+
+    <div class="header-center">
+      <span id="storeName" class="store-name">Nesta ERP</span>
+      <span class="header-center-sub">
+        <span id="clientHeaderDateTime" class="store-datetime"></span>
+        <span id="storeRating" class="store-rating"></span>
+      </span>
+    </div>
+
+    <div class="header-icons-row">
+      <button type="button" class="icon-btn theme-toggle-btn" id="themeToggleBtn" onclick="window.toggleClientTheme && window.toggleClientTheme()"
+        aria-label="Mavzu" data-i18n-aria-label="theme_toggle_title" data-i18n-title="theme_toggle_title" title="Mavzuni almashtirish">
+        <span class="theme-icon-moon">🌙</span><span class="theme-icon-sun">☀️</span>
+      </button>
+      <div class="lang-selector">
+        <select id="langSelect" class="custom-select u-696a3c25">
+          <option value="uz" data-i18n="lang_uz">UZ</option>
+          <option value="ru" data-i18n="lang_ru">RU</option>
+          <option value="en" data-i18n="lang_en">EN</option>
+        </select>
+      </div>
+    </div>
+    <input type="tel" id="clientPhoneInput" class="u-cb458930">
+
+    <div id="header-timer-container" class="glass-timer u-1fbbf5ac">
+      <div class="timer-content u-77ad6c12">
+        <span class="timer-icon u-34eab3ae">⏳</span>
+        <div class="timer-info u-b81b059b">
+          <small id="chef-prep-label" data-i18n="preparing_label" class="u-3ec23a04">Tayyorlanmoqda</small>
+          <span id="header-countdown-text" class="u-991029de">00:00</span>
+        </div>
+        <div id="header-ready-eta" class="u-d785f403">
+          <div data-i18n="header_ready_title" class="u-0fba45b5">Tayyor bo'ladi
+          </div>
+          <div id="header-eta-time" class="u-8cc7d5a0"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="vip-banner" class="u-1ee0d65a">
+      <div data-i18n="vip_client_title" class="u-bcdc7df8">👑 VIP Mijoz</div>
+      <div class="u-dfef11cd">
+        <span data-i18n="vip_client_desc_1">Siz bizning doimiy mijozimizsiz! Barcha xaridlaringiz uchun</span>
+        <b id="vip-percent">0</b><span data-i18n="vip_client_desc_2">% avtomatik chegirma amal qiladi.</span>
+      </div>
+    </div>
+    <div id="homeFeaturedSections"></div>
+
+    <h2 class="section-title" data-i18n="menu">Menyu</h2>
+    <div id="categoryTabs" class="menu-category-tabs-sticky"></div>
+    <div class="menu-layout">
+      <aside id="subcategoryTabs" class="menu-sidebar"></aside>
+      <div class="menu-grid" id="clientMenu"></div>
+    </div>
+  </main>
+
+  <span id="cartCount" class="cart-badge u-93b8ea5b">0</span>
+
+  <div id="cartModal" class="cart-modal">
+    <div class="cart-sheet">
+      <div class="cart-header">
+        <span><b data-i18n="alerts_cart_title">Savat</b></span>
+        <button class="cart-close" onclick="toggleCart()" aria-label="Yopish" data-i18n-aria-label="close_btn">✕</button>
+      </div>
+      <div id="cartItems" class="cart-items"></div>
+
+      <div class="cart-summary">
+        <div class="cart-total">
+          <span data-i18n="cart_total">Jami</span>
+          <b><span id="cartTotal">0</span> <span data-i18n="currency">so‘m</span></b>
+        </div>
+        <button onclick="window.submitOrder()" data-i18n="order_button">Buyurtma berish</button>
+      </div>
+    </div>
+  </div>
+  </div>
+  </div>
+
+  <div id="orderStatusBox" class="u-3b07ef7a">
+    <div id="orderStatus"></div>
+  </div>
+
+  <div id="receiptBox" class="u-0ec501be">
+    <div id="receiptContent" class="u-e60d5eab"></div>
+  </div>
+
+  <div id="deliveryAddressPanel" class="u-4bf230a9">
+    <div id="savedAddressesRow" class="u-3be814ee"></div>
+    <div class="u-c58d5bea">
+      <button type="button" class="btn-check u-cf5a7acc" id="daLocateBtn" onclick="window.useMyLocationForDelivery()" data-i18n="delivery_use_my_location">📍 Joylashuvimni aniqlash</button>
+    </div>
+    <div id="daGeocodeStatus" role="status" aria-live="polite" class="u-804cbe9e"></div>
+    <div class="u-2ba2335d">
+      <input type="text" id="daCity" class="custom-input" data-i18n-placeholder="delivery_address_city" placeholder="Shahar">
+      <input type="text" id="daDistrict" class="custom-input" data-i18n-placeholder="delivery_address_district" placeholder="Tuman">
+      <input type="text" id="daMahalla" class="custom-input" data-i18n-placeholder="delivery_address_mahalla" placeholder="Mahalla">
+    </div>
+    <div class="u-f998f1c6">
+      <input type="text" id="daStreet" class="custom-input" data-i18n-placeholder="delivery_address_street" placeholder="Ko'cha">
+      <input type="text" id="daHouse" class="custom-input" data-i18n-placeholder="delivery_address_house" placeholder="Uy">
+    </div>
+    <div class="u-f998f1c6">
+      <input type="text" id="daApartment" class="custom-input" data-i18n-placeholder="delivery_address_apartment" placeholder="Xonadon (ixtiyoriy)">
+      <input type="text" id="daEntrance" class="custom-input" data-i18n-placeholder="delivery_address_entrance" placeholder="Podez (ixtiyoriy)">
+      <input type="text" id="daFloor" class="custom-input" data-i18n-placeholder="delivery_address_floor" placeholder="Qavat (ixtiyoriy)">
+      <input type="text" id="daDoorCode" class="custom-input" data-i18n-placeholder="delivery_address_doorcode" placeholder="Domofon kodi (ixtiyoriy)">
+    </div>
+    <input type="text" id="daLandmark" class="custom-input u-f8c05ed7" data-i18n-placeholder="delivery_address_landmark" placeholder="Mo'ljal (ixtiyoriy, masalan: Korzinka rastasi qarshisida)">
+    <textarea id="daComment" class="custom-input u-f8c05ed7" rows="2" data-i18n-placeholder="delivery_address_comment" placeholder="Izoh (ixtiyoriy)"></textarea>
+
+    <!-- Address label (SECTION: DELIVERY ADDRESS) — saved alongside the
+         address as `label`. Typing a name that matches an already-saved
+         address (case-insensitive) auto-fills every field above from that
+         saved address, so next time the customer just types "uy"/"ish"/
+         whatever they called it and the full address fills in on its own. -->
+    <div class="u-92d17336">
+      <p data-i18n="delivery_address_label_title" class="u-c68d6a22">Manzil nomi</p>
+      <div id="daLabelChips" class="u-67669670">
+        <button type="button" class="da-label-chip u-a09241f8" data-label="Uy" onclick="window._daPickLabelChip('Uy')">🏠 <span data-i18n="delivery_address_label_home">Uy</span></button>
+        <button type="button" class="da-label-chip u-a09241f8" data-label="Ish" onclick="window._daPickLabelChip('Ish')">💼 <span data-i18n="delivery_address_label_work">Ish</span></button>
+        <button type="button" class="da-label-chip u-a09241f8" data-label="" onclick="window._daPickLabelChip('')">✍️ <span data-i18n="delivery_address_label_custom">O'zi</span></button>
+      </div>
+      <input type="text" id="daLabel" class="custom-input u-8588e44d" maxlength="30" data-i18n-placeholder="delivery_address_label_placeholder" placeholder="Nom bering: uy, ish yoki o'zingiz yozing">
+      <div id="daLabelMatchHint" class="u-a94a1ed9"></div>
+    </div>
+
+    <div class="u-783babc5">
+      <label class="u-fc5e0a0b">
+        <input type="checkbox" id="daSaveAddress" checked> <span data-i18n="delivery_save_address">Manzilni saqlash</span>
+      </label>
+    </div>
+    <div id="deliveryAddressMap" class="u-527ca194"></div>
+    <div id="deliveryFeeInfo" class="u-eaefdbfe"></div>
+  </div>
+
+  <div id="favoritesModal" class="app-sheet-modal u-93b8ea5b">
+    <div class="app-sheet-inner">
+      <div class="app-sheet-header">
+        <b data-i18n="nav_favorites">Sevimlilar</b>
+        <button onclick="document.getElementById('favoritesModal').style.display='none'" aria-label="Yopish" data-i18n-aria-label="close_btn">✕</button>
+      </div>
+      <div id="favoritesList"></div>
+    </div>
+  </div>
+
+  <div id="orderHistoryModal" class="app-sheet-modal u-93b8ea5b">
+    <div class="app-sheet-inner">
+      <div class="app-sheet-header">
+        <b data-i18n="nav_order_history">Buyurtmalar tarixi</b>
+        <button onclick="document.getElementById('orderHistoryModal').style.display='none'" aria-label="Yopish" data-i18n-aria-label="close_btn">✕</button>
+      </div>
+      <div id="orderHistoryList"></div>
+    </div>
+  </div>
+
+  <div id="profileModal" class="app-sheet-modal u-93b8ea5b">
+    <div class="app-sheet-inner">
+      <div class="app-sheet-header">
+        <b data-i18n="nav_profile">Profil</b>
+        <button onclick="document.getElementById('profileModal').style.display='none'" aria-label="Yopish" data-i18n-aria-label="close_btn">✕</button>
+      </div>
+      <div class="profile-card u-45dd21a9">
+        <div class="u-cff73c4d">👤</div>
+        <input type="text" id="profileName" class="custom-input u-0c48f2a7" data-i18n-placeholder="landing_form_name_ph" placeholder="Ismingiz">
+      </div>
+      <div class="profile-info-list u-33d2c6ad">
+        <div class="u-10e84482">
+          <span>📞</span><input type="tel" id="profilePhone" class="custom-input u-d5e8c5f3" placeholder="+998 90 123-45-67">
+        </div>
+        <div class="u-10e84482">
+          <span>⭐</span><span id="profileOrderCount">0</span><span data-i18n="orders_count_suffix"> ta buyurtma</span>
+        </div>
+        <div class="u-c43de725">
+          <span data-i18n="profile_registered_since_label">Ro'yxatdan o'tgan:</span>
+          <span id="profileRegisteredDate">—</span>
+        </div>
+      </div>
+
+      <!-- Faqat telefon kiritilgan mijozda ko'rinadi: visit/order/spend/bonus
+           statistikasi + Virtual Loyalty Card (window.renderProfileView()
+           to'ldiradi). Telefon kiritilmasa bo'sh qoladi (spec talabi). -->
+      <div id="profileLoyaltyBox"></div>
+
+      <button class="btn-check u-f4e33083" onclick="window.saveProfileInfo()" data-i18n="save_btn">Saqlash</button>
+
+      <button class="btn-check u-f4e33083" onclick="window.logoutCustomer()" data-i18n="logout_btn">Chiqish</button>
+    </div>
+  </div>
+
+  <!-- Manzillarim (SECTION: DELIVERY ADDRESS) — own modal, separate from
+       Profile, opened from the bottom-nav "Manzillarim" button. Every saved
+       address (Uy/Ish/custom) listed with edit/delete, plus a button to add
+       a new one. Reuses #deliveryAddressPanel — window.openProfileAddressForm()
+       moves it in here the same way checkout does, so there is one single
+       address form/map/geolocation implementation for the whole app, not two. -->
+  <div id="addressesModal" class="app-sheet-modal u-93b8ea5b">
+    <div class="app-sheet-inner">
+      <div class="app-sheet-header">
+        <b data-i18n="nav_addresses">Manzillarim</b>
+        <button onclick="document.getElementById('addressesModal').style.display='none'" aria-label="Yopish" data-i18n-aria-label="close_btn">✕</button>
+      </div>
+      <div id="profileAddressesList" class="u-a10c5e0d"></div>
+      <button type="button" class="btn-check u-8224f9be" onclick="window.openProfileAddressForm()" data-i18n="add_new_address_btn">+ Yangi manzil qo'shish</button>
+      <div id="profileAddressFormSlot" class="u-92d17336"></div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <button onclick="document.getElementById('profileModal').style.display='flex'; renderProfileView();">
+      <span>👤</span><span data-i18n="nav_profile">Profil</span>
+    </button>
+    <button onclick="document.getElementById('addressesModal').style.display='flex'; renderProfileView();">
+      <span>📍</span><span data-i18n="nav_addresses">Manzillarim</span>
+    </button>
+    <button onclick="document.getElementById('orderHistoryModal').style.display='flex'; renderProfileView(); renderOrderHistoryView();">
+      <span>📜</span><span data-i18n="nav_order_history">Tarix</span>
+    </button>
+    <!-- 🩹 #favoritesModal (menyu kartochkalaridagi ❤️ tugmasi bilan
+         to'ldiriladigan, renderFavoritesView() orqali chiziladigan) allaqachon
+         to'liq tayyor edi — uni ochadigan yagona joy (pastki navigatsiya
+         tugmasi) shunchaki yo'q edi. Boshqa hech narsa (JS) o'zgartirilmadi,
+         faqat shu kirish nuqtasi qo'shildi. -->
+    <button onclick="document.getElementById('favoritesModal').style.display='flex'; renderFavoritesView();">
+      <span>❤️</span><span data-i18n="nav_favorites">Sevimlilar</span>
+    </button>
+    <!-- 🩹 "Bronlarim" pastki navigatsiya tugmasi (alohida tab sifatida)
+         olib tashlandi — endi "Bron qilish" oynasidagi 🗓️ tezkor ikon
+         orqali ochiladi (window.openMyReservationsModal() o'zi
+         o'zgartirilmadi, hali ham to'liq ishlaydi — faqat bu YAGONA joyi
+         olib tashlandi, chunki reservation-modal ichida allaqachon bor).
+         #myReservationsNavBtn elementi endi mavjud emas —
+         window._refreshMyReservationsNavVisibility() buni allaqachon
+         `if (!btn) return;` bilan xavfsiz qayta ishlaydi. -->
+    <button onclick="window.openReservationModal()">
+      <span>📅</span><span data-i18n="nav_reservation">Bron qilish</span>
+    </button>
+    <button onclick="toggleCart()">
+      <span>🛒</span><span data-i18n="alerts_cart_title">Savat</span>
+    </button>
+  </nav>
+
+  <!-- #checkout-modal content is built entirely by window.openDeliveryCheckout()
+       in client.js (cart summary, full name/phone, delivery address, promo
+       code, payment method). CSS for its .co-* classes lives in client.css
+       so it survives modal.innerHTML being replaced on every open. -->
+  <div id="checkout-modal" class="modal-overlay u-66553ab0"></div>
+
+  <!-- #reservation-modal content is built entirely by window.openReservationModal()
+       in client.js (guest name, optional phone, date/time, guests, note) —
+       same bare-container + JS-built-innerHTML pattern as #checkout-modal. -->
+  <div id="reservation-modal" class="modal-overlay u-66553ab0"></div>
+
+  <!-- #my-reservations-modal — window.openMyReservationsModal()/window._renderMyReservationsList()
+       (client.js) render bron kartalari ro'yxatini shu yerga. Realtime
+       onValue listener orqali yangilanadi, refresh shart emas. -->
+  <div id="my-reservations-modal" class="modal-overlay u-66553ab0"></div>
+
+  <!-- #reservation-detail-modal — bron kartasi bosilganda window.openReservationDetail(id)
+       to'ldiradi (restoran ma'lumotlari, bron tafsilotlari, bekor qilish tugmasi). -->
+  <div id="reservation-detail-modal" class="modal-overlay u-e568c02b"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- chat-system.js removed -->
+  <script type="module" src="js/i18n.js"></script>
+  <script type="module" src="js/langs.js"></script>
+  <script type="module" src="js/shared.js"></script>
+  <script type="module" src="js/client.js?v=1"></script>
+  <script type="module">
+    import { renderHeader } from "./js/header.js";
+    renderHeader("nestaHeaderBrand", { product: "client", role: "client" });
+  </script>
+
+  <!-- ====== RESTORAN LOGOTIPI LOADER ====== -->
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const _fbCfg = {
+      apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
+      authDomain: "restoran-30d51.firebaseapp.com",
+      databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
+      projectId: "restoran-30d51",
+      storageBucket: "restoran-30d51.firebasestorage.app",
+      messagingSenderId: "862261129762",
+      appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
+    };
+    const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbCfg);
+    // Force WebSocket-only transport (never fall back to `.lp` long-polling)
+    // — idempotent if client.js already forced it on this same shared app.
+    forceWebSockets();
+    const _db = getDatabase(_fbApp);
+
+    function _applyLogo(url) {
+      if (!url) return;
+      document.querySelectorAll('#headerLogoImg, img.logo-img').forEach(img => {
+        img.src = url;
+        img.style.objectFit = 'contain';
+        img.style.display = 'block';
+      });
+      const favicon = document.getElementById('faviconLink');
+      if (favicon) favicon.href = url;
+    }
+
+    const _restId = new URLSearchParams(location.search).get("rest")
+      || localStorage.getItem("restaurantId");
+
+    if (_restId) {
+      onValue(ref(_db, `restaurants/${_restId}/settings/restaurantLogoUrl`), snap => {
+        if (snap.exists() && snap.val()) _applyLogo(snap.val());
+      });
+    }
+  </script>
+
+
+  <!-- Cart toggle fallback, dark theme enforcer & CSS version bump -->
+  <script>
+    // Ensure toggleCart works even before module scripts fully load
+    window._cartOpen = false;
+    function toggleCart() {
+      var modal = document.getElementById('cartModal');
+      if (!modal) return;
+      window._cartOpen = !window._cartOpen;
+      if (window._cartOpen) {
+        modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+      } else {
+        modal.classList.remove('open');
+        document.body.style.overflow = '';
+      }
+    }
+
+    // No-op: theme is now handled entirely by client.css and the
+    // CSS variables injected by updateCart() in client.js.
+    // Kept as a named stub so any existing call-sites don't throw.
+    function applyCartDarkTheme() {}
+
+    // ══════════════════════════════════════════
+    // 🆕 DARK / LIGHT TEMA — admin.js/waiter.js'dagi window.toggleTheme()/
+    // window.toggleWaiterTheme() bilan AYNAN bir xil naqsh: bir xil
+    // localStorage kaliti ("app_theme") va bir xil <html data-theme="dark">
+    // atributi — shu qurilmada boshqa panelda tanlangan tema shu yerda ham
+    // (va aksincha) darhol qo'llanadi. Erta init <head> ichida (yuqorida,
+    // FOUC'siz) — bu yerda faqat almashtirish funksiyasi.
+    // ══════════════════════════════════════════
+    window.toggleClientTheme = function () {
+      var html = document.documentElement;
+      var isDark = html.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        html.removeAttribute('data-theme');
+        try { localStorage.setItem('app_theme', 'light'); } catch (e) {}
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        try { localStorage.setItem('app_theme', 'dark'); } catch (e) {}
+      }
+    };
+
+    // ══════════════════════════════════════════
+    // 🆕 Header live date/time (#clientHeaderDateTime) — Waiter'ning
+    // .w-center-datetime bilan bir xil vizual rol, sof UI (hech qanday
+    // Firebase/biznes-logikaga tegmaydi, faqat brauzer soatini ko'rsatadi).
+    // Format: "18 avgust 2026 · 16:55:41" / "18 августа 2026 г. · ..."
+    // (to'liq sana — kun, oy nomi, yil — va soniyagacha soat).
+    // 🩹 ROOT-CAUSE FIX — avval brauzerning Intl.toLocaleDateString(locale,
+    // {month:'long'}) ishlatilardi. "uz-UZ" locale'i uchun ko'p brauzer/OS
+    // ICU ma'lumotlarida to'liq o'zbekcha oy nomlari yo'q — natijada
+    // "2026 M08 18" kabi noto'g'ri, tarjima qilinmagan fallback chiqardi
+    // (screenshot orqali tasdiqlangan). Endi oy nomi Intl'dan EMAS,
+    // loyihaning o'z tarjima tizimidan (window.t("month_aug",...) —
+    // langs.js'dagi mavjud kalitlar, boshqa hech qanday joyda o'zgartirilmadi)
+    // olinadi — bu HAR DOIM to'g'ri ishlaydi, brauzer/OS'ning Intl
+    // ma'lumotlariga bog'liq emas. Soat (HH:MM:SS) ham endi oddiy
+    // raqamlar bilan (pad2) — Intl vaqt formatlashiga ham ehtiyoj yo'q.
+    // ══════════════════════════════════════════
+    var _CLOCK_MONTH_KEYS = ["month_jan","month_feb","month_mar","month_apr","month_may","month_jun",
+                              "month_jul","month_aug","month_sep","month_oct","month_nov","month_dec"];
+    var _CLOCK_MONTH_FALLBACK = ["Yanvar","Fevral","Mart","Aprel","May","Iyun","Iyul","Avgust","Sentabr","Oktabr","Noyabr","Dekabr"];
+    function _clockPad2(n) { return (n < 10 ? "0" : "") + n; }
+    function _clientHeaderClockTick() {
+      var el = document.getElementById('clientHeaderDateTime');
+      if (!el) return;
+      var now = new Date();
+      var lang = 'uz';
+      try { lang = localStorage.getItem('app_lang') || 'uz'; } catch (e) {}
+      var monthName = (typeof window.t === 'function')
+        ? window.t(_CLOCK_MONTH_KEYS[now.getMonth()], _CLOCK_MONTH_FALLBACK[now.getMonth()])
+        : _CLOCK_MONTH_FALLBACK[now.getMonth()];
+      var yearSuffix = (lang === 'ru') ? ' г.' : '';
+      var datePart = now.getDate() + ' ' + monthName + ' ' + now.getFullYear() + yearSuffix;
+      var timePart = _clockPad2(now.getHours()) + ':' + _clockPad2(now.getMinutes()) + ':' + _clockPad2(now.getSeconds());
+      el.textContent = datePart + ' · ' + timePart;
+    }
+    _clientHeaderClockTick();
+    setInterval(_clientHeaderClockTick, 1000);
+    // 🩹 ROOT-CAUSE FIX ("2 marta tarjima bo'lish" — til almashtirilganda
+    // eski tildagi matn ~1 soniya ko'rinib turardi, chunki setInterval
+    // faqat har soniyada bir marta qayta hisoblardi). Endi til
+    // almashishi bilan DARHOL qayta chiziladi. window.onLangChange
+    // hali tayyor bo'lmasa (bu skript module'lardan oldin ishga tushishi
+    // mumkin), qisqa fursatdan keyin qayta urinib ko'radi.
+    (function _hookClientClockToLangChange(attemptsLeft) {
+      if (typeof window.onLangChange === 'function') {
+        window.onLangChange(_clientHeaderClockTick);
+      } else if (attemptsLeft > 0) {
+        setTimeout(function () { _hookClientClockToLangChange(attemptsLeft - 1); }, 200);
+      }
+    })(25);
+
+    // Close on overlay click
+    document.addEventListener('DOMContentLoaded', function() {
+      var modal = document.getElementById('cartModal');
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) toggleCart();
+        });
+      }
+    });
+
+
+
+  </script>
+</body>
+
+</html>

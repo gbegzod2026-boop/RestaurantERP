@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="chef_document_title">Nesta ERP — Oshpaz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="css/design-system.css">
+  <!-- 🩹 staffFooter.css chef.css'dan OLDIN yuklanadi (header.css bilan bir
+       xil muammo — chef.css bu ikkalasidan OLDIN kelgani uchun, agar
+       staffFooter.css keyin kelsa uning standart (light) --staff-footer-*
+       qiymatlari chef.css'ning pastda beradigan to'q-navy override'ini
+       bosib yuborardi, chunki teng specificity'da OXIRGI yuklangan fayl
+       g'olib chiqadi). ── -->
+  <link rel="stylesheet" href="css/staffFooter.css">
+  <link rel="stylesheet" href="css/chef.css?v=210">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="icon" href="img/logo (2).svg" type="image/png" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+</head>
+
+<body>
+
+  <div id="system-block-overlay" class="u-8c6a2f4c">
+    <div class="u-bc02e0a9">
+      <div class="u-24072909">
+        <i class="fa-solid fa-lock u-e37fb1e0"></i>
+      </div>
+      <h1 data-i18n="system_blocked_title" class="u-da616407">Tizim vaqtincha bloklangan</h1>
+      <p data-i18n="system_blocked_desc" class="u-909f9542">
+      </p>
+      <div class="u-cc5cbe7b">
+        <i class="fa-brands fa-telegram"></i> @nestacrm_admin
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════
+       HEADER
+  ══════════════════════════════════ -->
+
+  <header class="chef-header nesta-header">
+
+    <!-- ── Logo + mahsulot nomi + rol (umumiy header komponenti) ── -->
+    <div id="nestaHeaderBrand" class="nesta-header-brand"></div>
+
+    <!-- ── Separator ── -->
+    <span class="ch-sep">—</span>
+
+    <!-- 🆕 Xodim nomi (role bilan) — waiter panel bilan bir xil struktura
+         (#waiterHeaderStaffName/.w-staff). chef.js allaqachon shu ID'ga
+         (chefHeaderName) yozar edi (~9828-qator) — element HTML'da mavjud
+         bo'lmagani uchun bu yozuv hech qachon ko'rinmasdi. -->
+    <span id="chefHeaderName" class="ch-staff"></span>
+
+    <!-- ── Restoran nomi + sana/vaqt — headerning markazida, waiter
+         panelidagi .w-header-center bilan bir xil struktura (ikki qator:
+         restoran nomi ustida, sana+vaqt ostida). ── -->
+    <div class="ch-header-center">
+      <!-- NOTE: intentionally NOT data-i18n — chef.js overwrites this with
+           the actual restaurant name on load (js/chef.js ~line 9730) and
+           does not re-run on language switch; wiring it to data-i18n would
+           make applyLang() stomp the real restaurant name back to this
+           generic placeholder every time the user changes language. -->
+      <div class="ch-rest-center" id="chefHeaderRest">Restoran</div>
+      <!-- 🆕 joriy tilga mos formatdagi sana+vaqt (real-time) — waiter
+           panelidagi #waiterHeaderDateTime bilan bir xil formatlovchi
+           (js/chef.js: initChefHeaderDateTime()). -->
+      <div class="ch-center-datetime" id="chefHeaderDateTime"></div>
+    </div>
+
+    <div class="ch-actions">
+      <select id="langSelect" class="ch-lang">
+        <option value="uz" data-i18n="lang_uz">UZ</option>
+        <option value="ru" data-i18n="lang_ru">RU</option>
+        <option value="en" data-i18n="lang_en">EN</option>
+      </select>
+      <!-- 🆕 waiter panel bilan bir xil (waiter.html .btn-logout) — chef
+           panelida logout tugmasi umuman mavjud emas edi. -->
+      <button class="btn-logout" onclick="logout()">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        <span data-i18n="logout">Chiqish</span>
+      </button>
+    </div>
+
+  </header>
+
+  <div id="chefHiddenHeaderControls" class="u-93b8ea5b">
+    <button id="autoPrintHeaderBtn" class="ch-btn ch-btn-print" onclick="window.toggleAutoPrintHeader()"
+      title="Auto Print — yangi buyurtma tushsa avtomatik chop etiladi" data-i18n-title="chef_auto_print_tooltip">
+      <i class="fa-solid fa-print u-9bd93d36"></i>
+      <span data-i18n="auto_print_btn">Auto Print</span>
+    </button>
+
+    <button id="tvModeBtn" class="ch-btn ch-btn-tv" onclick="window.toggleTVMode?.()">
+      <i class="fa-solid fa-tv u-9bd93d36"></i>
+      <span data-i18n="tv_mode">TV Rejimi</span>
+    </button>
+
+    <button id="chefFSBtn" class="ch-btn ch-btn-fs" onclick="window.toggleChefFullscreen?.()">
+      <i class="fa-solid fa-rotate u-9bd93d36"></i>
+      <span data-i18n="fullscreen_btn">To'liq ekran</span>
+    </button>
+
+    <button class="ch-btn ch-btn-logout" onclick="localStorage.clear(); sessionStorage.clear(); window.location.replace('login.html')">
+      <i class="fa-solid fa-right-from-bracket u-9bd93d36"></i>
+      <span data-i18n="logout_btn">Chiqish</span>
+    </button>
+  </div>
+
+  <!-- ══ SUBHEADER: Filtrlar — so'rov bo'yicha butunlay yashirilgan ══ -->
+  <div class="chef-subheader u-0eeecf53">
+    <aside class="prep-sidebar u-93b8ea5b">
+      <h3 data-i18n="prep_menu_title">🍽 Menyu va tayyor vaqt</h3>
+      <div id="prepMenuList"></div>
+    </aside>
+    <div id="subTimerContainer" class="u-93b8ea5b"></div>
+
+    <select id="chefFilter">
+      <option value="all" data-i18n="all_items">Barchasi</option>
+    </select>
+
+    <select id="categoryFilter">
+      <option value="all" data-i18n="all_categories">Barcha kategoriyalar</option>
+    </select>
+
+    <select id="subFilter">
+      <option value="all" data-i18n="all_subcategories">Barcha subkategoriyalar</option>
+    </select>
+
+    <div id="chefSettingsBlock" class="u-e788e332">
+      <b data-i18n="kitchen_management" class="u-a8dc1098">👨‍🍳 Oshxona boshqaruvi:</b>
+      <label class="u-ec8d6bff">
+        <span data-i18n="normal_time_mins">Odatiy vaqt:</span>
+        <input type="number" id="chefSetNormalTime" onchange="updateGlobalChefTime(this.value)" class="u-664ef1bf">
+        <span data-i18n="minute_short">min</span>
+      </label>
+      <label class="u-b6f2c5ad">
+        <input type="checkbox" id="chefToggleFastOrder" onchange="toggleGlobalFastOrder(this.checked)" class="u-ec5fbad2">
+        <span data-i18n="fast_order_active_toggle">⚡ Tezkor xizmatni yoqish</span>
+      </label>
+      <label class="u-b6f2c5ad">
+        <input type="checkbox" id="chefToggleAutoPrint" onchange="window.toggleAutoPrint()" class="u-a82d080a">
+        <span data-i18n="auto_print_toggle">🖨️ Auto Print</span>
+      </label>
+    </div>
+  </div>
+
+  <div id="chefsTodayStats" class="chefs-today-stats u-0eeecf53"></div>
+
+  <div id="chefStatsBox" class="chef-stats-box u-0eeecf53"></div>
+
+  <!-- ══════════════════════════════
+       CHEF TASKS — kunlik vazifalar + status pipeline
+  ══════════════════════════════════ -->
+
+
+
+  <div class="chef-tabs-wrapper">
+  </div>
+
+  <div class="ann-toast" id="kitchenAnnouncementToast" aria-live="polite"></div>
+
+  <div class="ann-wrapper" id="kitchenAnnouncementWrapper">
+    <div class="ann-header" onclick="window.toggleKitchenAnnouncementPanel()">
+      <div class="ann-title">
+        <i class="fa-solid fa-bullhorn"></i>
+        <span data-i18n="chat_announcements">E'lonlar</span>
+        <span class="ann-new-pill" id="annNewPill">🔔 <span id="annNewCount">0</span></span>
+      </div>
+      <i class="fa-solid fa-chevron-down ann-toggle-icon"></i>
+    </div>
+    <div class="ann-body">
+      <div class="ann-list" id="kitchenAnnouncementList"></div>
+      <div class="ann-empty u-93b8ea5b" id="kitchenAnnouncementEmpty" data-i18n="ann_empty">Hozircha e'lonlar yo'q</div>
+    </div>
+  </div>
+
+  <main class="container">
+
+    <div id="chefTVStatsBar" class="u-93b8ea5b"></div>
+
+    <section class="orders-section chef-tab-panel" id="panelActive">
+      <div id="chefOrders" class="orders-grid"></div>
+    </section>
+
+    <section class="orders-section ready-section chef-tab-panel u-93b8ea5b" id="panelReady">
+      <div id="readyOrders" class="orders-grid"></div>
+    </section>
+
+  </main>
+  <div id="notification" class="notification"></div>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <!-- 🆕 waiter.html'dagi bilan aynan bir xil logout() — chef panelida
+       bu funksiya umuman mavjud emas edi. -->
+  <script>
+    function logout() {
+      localStorage.clear();
+      sessionStorage.clear();
+      location.href = "login.html";
+    }
+  </script>
+
+  <script type="module" src="js/langs.js"></script>
+  <script type="module" src="js/shared.js"></script>
+  <script type="module" src="js/i18n.js"></script>
+  <script type="module" src="js/chef.js?v=1"></script>
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { renderHeader, setHeaderLogo } from "./js/header.js";
+
+    // Barcha panellarda yagona brend: "Nesta Kitchen" emas, "Nesta ERP" —
+    // rol yorlig'i o'zgarishsiz qoladi.
+    renderHeader("nestaHeaderBrand", { product: "erp", role: "kitchen" });
+
+    // ====== RESTORAN LOGOTIPI (Admin → Sozlamalar) ======
+    // Ilgari bu yerda img[src*="logo (2)"] kabi BROAD, src-KONTENTIGA
+    // qarab moslashtiruvchi selector ishlatilardi — bu ikki jihatdan
+    // ishonchsiz edi: (1) logo o'chirilsa (bo'sh qiymat) standart Nesta
+    // logosiga hech qachon qaytmasdi ("qotib" qolardi), (2) BIRINCHI
+    // muvaffaqiyatli yangilanishdan keyin <img>ning src'i endi "logo (2)"
+    // qatorini o'z ichiga olmay qolgani uchun keyingi har qanday yangilanish
+    // (masalan admin YANGI logo yuklasa) o'sha elementni QAYTA topa olmasdi.
+    // Endi header.js'ning setHeaderLogo() — barcha panellar bilan bir xil,
+    // klass asosida (har doim ishonchli topiladigan) — ishlatiladi.
+    const _fbCfg = {
+      apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
+      authDomain: "restoran-30d51.firebaseapp.com",
+      databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
+      projectId: "restoran-30d51",
+      storageBucket: "restoran-30d51.firebasestorage.app",
+      messagingSenderId: "862261129762",
+      appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
+    };
+    const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbCfg);
+    // Force WebSocket-only transport — idempotent if chef.js already forced it.
+    forceWebSockets();
+    const _db = getDatabase(_fbApp);
+
+    const _restId = new URLSearchParams(location.search).get("rest")
+      || localStorage.getItem("restaurantId");
+
+    if (_restId) {
+      onValue(ref(_db, `restaurants/${_restId}/settings/restaurantLogoUrl`), snap => {
+        setHeaderLogo("nestaHeaderBrand", snap.val() || "");
+      });
+    }
+  </script>
+
+</body>
+
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="support_title">Nesta ERP - Qo'llab-quvvatlash</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #1f2937;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+        }
+        .icon-circle {
+            width: 80px; height: 80px;
+            background: #ecfdf5; color: #10b981;
+            border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 35px; margin: 0 auto 20px auto;
+        }
+        h1 { margin: 0 0 10px 0; font-size: 24px; color: #111827; }
+        p { color: #6b7280; font-size: 15px; margin-bottom: 30px; }
+        
+        .contact-box {
+            background: #ffffff; border: 1px solid #e5e7eb;
+            border-radius: 12px; padding: 20px; margin-bottom: 15px;
+            display: flex; align-items: center; gap: 15px; text-align: left;
+        }
+        .contact-box i { font-size: 24px; color: #3b82f6; width: 30px; text-align: center; }
+        .contact-box .info h4 { margin: 0 0 4px 0; font-size: 14px; color: #6b7280; font-weight: 500; }
+        .contact-box .info span { font-size: 16px; color: #1f2937; font-weight: 600; }
+        
+        .telegram-btn {
+            display: flex; justify-content: center; align-items: center; gap: 10px;
+            background: #0088cc; color: white; text-decoration: none;
+            padding: 15px; border-radius: 12px; font-weight: 600; font-size: 16px;
+            transition: background 0.3s; margin-top: 20px;
+        }
+        .telegram-btn:hover { background: #0077b3; }
+        
+        .back-btn {
+            display: inline-block; margin-top: 25px; padding: 10px 20px;
+            background: transparent; color: #6b7280; text-decoration: none;
+            font-weight: 500; transition: color 0.2s;
+        }
+        .back-btn:hover { color: #111827; }
+        
+        .lang-select-wrapper {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+        .lang-select-wrapper select {
+            padding: 6px 10px; border-radius: 6px; border: 1px solid #ddd;
+            background: #fff; cursor: pointer; font-family: 'Inter', sans-serif;
+            font-weight: 500; outline: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="lang-select-wrapper">
+        <select id="langSelect">
+            <option value="uz">UZ</option>
+            <option value="ru">RU</option>
+            <option value="en">EN</option>
+        </select>
+    </div>
+
+    <div class="icon-circle">
+        <i class="fas fa-headset"></i>
+    </div>
+    <h1 data-i18n="support_heading">Qo'llab-quvvatlash markazi</h1>
+    <p data-i18n="support_desc">Savollaringiz bormi? Texnik mutaxassislarimiz sizga yordam berishdan doimo xursand!</p>
+
+    <div class="contact-box">
+        <i class="fas fa-phone-alt"></i>
+        <div class="info">
+            <h4 data-i18n="call_center_label">Call-markaz (24/7)</h4>
+            <span id="supportPhoneValue">-</span>
+        </div>
+    </div>
+
+    <div class="contact-box">
+        <i class="fas fa-envelope" style="color: #10b981;"></i>
+        <div class="info">
+            <h4 data-i18n="email_label">Elektron pochta</h4>
+            <span id="supportEmailValue">-</span>
+        </div>
+    </div>
+
+    <a href="https://t.me/bek_3933" target="_blank" class="telegram-btn">
+        <i class="fab fa-telegram-plane"></i> <span data-i18n="write_telegram_btn">Telegram orqali yozish</span>
+    </a>
+
+    <a href="login.html" class="back-btn"><i class="fas fa-arrow-left"></i> <span data-i18n="back_to_login">Tizimga qaytish</span></a>
+</div>
+
+<script type="module">
+    import { applyLang, getLang, setLang } from './js/i18n.js';
+    import './js/langs.js';
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    document.addEventListener("DOMContentLoaded", () => {
+        const langSelect = document.getElementById("langSelect");
+        if(langSelect) {
+            langSelect.value = getLang();
+            applyLang();
+            langSelect.addEventListener("change", (e) => {
+                setLang(e.target.value);
+                applyLang();
+            });
+        }
+    });
+
+    // Force WebSocket-only transport (never fall back to `.lp` long-polling) —
+    // same convention used by every other panel in the project.
+    forceWebSockets();
+
+    // Same Firebase project as login.js/admin.js/etc.
+    const firebaseConfig = {
+        apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
+        authDomain: "restoran-30d51.firebaseapp.com",
+        databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
+        projectId: "restoran-30d51",
+        storageBucket: "restoran-30d51.firebasestorage.app",
+        messagingSenderId: "862261129762",
+        appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
+        measurementId: "G-8NG56H5ZGG"
+    };
+    const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Support Center contact info — single source of truth is
+    // systemData/platform (Superadmin → Settings → 🌐 Platform: Platform
+    // Name / Support Email / Support Phone). No hardcoded values here — a
+    // realtime onValue() listener means every save in Superadmin settings
+    // updates this page instantly, with no code changes and no refresh.
+    onValue(ref(db, "systemData/platform"), (snap) => {
+        const data = snap.val() || {};
+        const phoneEl = document.getElementById("supportPhoneValue");
+        const emailEl = document.getElementById("supportEmailValue");
+        if (phoneEl) phoneEl.textContent = data.supportPhone || "-";
+        if (emailEl) emailEl.textContent = data.supportEmail || "-";
+    });
+</script>
+
+</body>
+</html>

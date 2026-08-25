@@ -1,0 +1,520 @@
+{
+  "rules": {
+    // ═══════════════════════════════════════════════════════════════════
+    // ⚠️  DEPLOYMENT ORDER — READ BEFORE RUNNING `firebase deploy --only
+    // database:rules` — DEPLOYING THIS FILE OUT OF ORDER TAKES DOWN EVERY
+    // RESTAURANT'S CUSTOMER ORDERING AND STAFF LOGIN AT ONCE:
+    //
+    //   1. backend/serviceAccountKey.json must exist (Firebase Console →
+    //      Project Settings → Service Accounts → Generate new private key).
+    //      Without it, NO session (staff or customer) ever gets Firebase
+    //      Auth claims, and every ".read"/".write" below that requires
+    //      `auth != null` denies EVERYONE — see firebaseAdmin.js.
+    //   2. Restart the backend so it picks up the key.
+    //   3. Confirm a real login (login.js) and a real QR scan (client.js)
+    //      each produce a Firebase Auth session — e.g. check the browser's
+    //      Application/IndexedDB tab for a firebaseLocalStorage entry, or
+    //      confirm `auth.currentUser` is non-null in the console — BEFORE
+    //      deploying these rules.
+    //   4. Only then deploy. If you deploy before steps 1–3, every page
+    //      (admin/waiter/chef/kassa/courier/client) loses read/write access
+    //      to restaurants/$restId until the key is installed and a fresh
+    //      session is established.
+    //
+    // ─────────────────────────────────────────────────────────────────────
+    // Architecture note — how restaurants/$restId went from open to gated:
+    //
+    // Employee ("staff") login creates a real Firebase Auth session
+    // (backend/routes/auth.js + admin-frontend/public/js/login.js: the
+    // browser calls POST /api/auth/staff-login or /api/auth/manager-login,
+    // which verifies the PIN/password server-side against a bcrypt hash
+    // and returns a custom token carrying { restId, role } claims).
+    //
+    // The client-facing QR ordering flow (client.html / client.js) used to
+    // be the one gap this couldn't cover — a diner scans a QR code with no
+    // login step at all, so there was no session to check. It now gets one
+    // too: QR scan → client.js calls POST /api/qr/session (routes/qr.js) →
+    // backend mints a Firebase Auth custom token carrying { restId, table }
+    // claims (same mechanism as staff login, just an anonymous/shared
+    // session per table rather than a personal account) → client.js signs
+    // in BEFORE touching Firebase (see the top-level `await
+    // establishClientSession(...)` near the top of client.js) → RTDB rules
+    // below can finally check `auth != null` on restaurants/$restId instead
+    // of leaving it open to any unauthenticated browser. Nothing about the
+    // diner's experience changes — no login UI, no personal data, same QR
+    // code — this is purely a backend-issued session replacing "no session
+    // at all".
+    //
+    // restaurants/$restId's ".read"/".write" below now require a session
+    // whose restId claim matches $restId, OR no restId claim at all (that's
+    // how a superadmin session is told apart from an employee/client one —
+    // see "superadmin" further down). Three session types satisfy this:
+    // staff (restId + role claim), QR customers (restId + table claim), and
+    // superadmin (no restId claim, real email/password Firebase Auth). A
+    // request with no Firebase Auth session at all — someone hitting the
+    // Firebase REST API directly with the public API key, never having
+    // gone through login.js or scanned a QR code — is now denied outright.
+    //
+    // What else this file locks down, now that verified sessions exist:
+    //   1. `users/$uid/password` is NEVER client-readable, authenticated or
+    //      not — closes the plaintext/hash credential-exfiltration hole
+    //      (previously any client could download every employee's password).
+    //   2. `role`, `customRoles`, `roleOverrides` writes require a verified
+    //      session for THIS restaurant with role owner/admin (or a
+    //      superadmin session) — closes "any client can grant itself owner"
+    //      role escalation.
+    //   3. `systemData` (security log, payment tx index) is fully closed to
+    //      every client — only reachable via the backend's Admin SDK
+    //      connection, which bypasses rules entirely by design.
+    //   4. Only real Firebase Auth sessions may read/write the
+    //      platform-level `restaurantsIndex`/`superadmin` trees.
+    //   5. No public root listing (`"/": { ".read": false, ".write": false }`),
+    //      so a client cannot dump the entire database in one request.
+    //
+    // Per-employee module/action enforcement for direct RTDB writes (beyond
+    // role/customRoles/roleOverrides above) remains a UI-level + Express-level
+    // control (backend/rbac.js), same as before this fix pass.
+    // ═══════════════════════════════════════════════════════════════════
+
+    ".read": false,
+    ".write": false,
+
+    "restaurants": {
+      "$restId": {
+        // See the file-header deployment-order warning above before ever
+        // deploying this — requires every session (staff login, QR scan,
+        // superadmin) to actually be minting Firebase Auth claims first.
+        //
+        // ═══════════════════════════════════════════════════════════════
+        // P0 FIX — CLIENT ORDER ACCESS SECURITY (Wave 2 audit, live-proven):
+        // a QR customer session's `table`/`tableId` claims (routes/qr.js)
+        // were minted but never checked by any rule — this broad grant
+        // alone let ANY customer session for a restaurant read/enumerate
+        // EVERY order (and courierAssignment) at that restaurant, not just
+        // its own table's. Firebase RTDB rules cascade DOWNWARD for
+        // GRANTING ONLY — a narrower rule on a descendant path (e.g. on
+        // "orders" below) can NEVER revoke what this top-level rule already
+        // grants (the exact same structural fact that already forced
+        // credentials/ out of this tree entirely — see that comment). The
+        // only place this can actually be fixed is here, at the source of
+        // the grant itself.
+        //
+        // Fix: customer-type sessions (auth.token.type == 'customer' —
+        // set ONLY by routes/qr.js, never by staff/superadmin token
+        // minting) no longer inherit this restaurant-wide grant. Every
+        // subtree a real customer session legitimately needs is re-granted
+        // explicitly, below, at its own path — audited against every
+        // `restaurants/$restId/...` read/write client.js actually performs
+        // (see the Wave 2 + P0 fix reports for the full trace). `orders`
+        // and `courierAssignments` are deliberately NOT in that re-grant
+        // list at the collection level — customer order reads now go
+        // through the server-authorized GET /api/client/orders/:orderId
+        // endpoint (routes/clientOrders.js) instead, which enforces the
+        // per-order table check no rule here could express correctly (see
+        // that file's header for why a naive `.read` here would be wrong:
+        // takeaway/delivery orders have no table field, and every
+        // no-table QR session at a restaurant shares ONE anonymous auth
+        // identity, so no purely rules-based per-order check can
+        // distinguish them).
+        //
+        // Staff sessions (routes/auth.js — role is a real staff role, never
+        // 'client', and type is never 'customer') and superadmin sessions
+        // (no restId claim) are completely unaffected — identical grant to
+        // before this fix, zero change to admin/waiter/chef/kassa/courier
+        // access, P0-1 RBAC, or P0-2 credential handling.
+        //
+        // courierAssignments is knowingly NOT hardened by this pass —
+        // client.js's own auto-assign-nearest-courier feature
+        // (autoAssignCourier()) legitimately reads the WHOLE
+        // courierAssignments collection client-side to load-balance across
+        // online couriers, and those records contain customerName/
+        // customerPhone/address, the same PII class as orders. Fully
+        // closing that is a separate, larger change (moving that
+        // assignment decision server-side) — flagged in the fix report as
+        // a known residual gap, not silently left undocumented.
+        // ═══════════════════════════════════════════════════════════════
+        ".read": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && auth.token.type != 'customer'))",
+        ".write": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && auth.token.type != 'customer'))",
+
+        // ── Customer-session re-grants (explicit, narrow, one per legitimate
+        // client.js subtree — audited against every restaurants/$restId/...
+        // access that file makes; see the P0 fix report for the trace) ──
+        "menu":            { ".read": "auth != null && auth.token.restId == $restId" },
+        "categories":      { ".read": "auth != null && auth.token.restId == $restId" },
+        "kitchenStations": { ".read": "auth != null && auth.token.restId == $restId" },
+        "modifiers":       { ".read": "auth != null && auth.token.restId == $restId" },
+        "inventory":       { ".read": "auth != null && auth.token.restId == $restId" },
+        "stopList":        { ".read": "auth != null && auth.token.restId == $restId" },
+        "settings":        { ".read": "auth != null && auth.token.restId == $restId" },
+        "discounts":       { ".read": "auth != null && auth.token.restId == $restId" },
+        "promocodes":      { ".read": "auth != null && auth.token.restId == $restId" },
+        "reservations": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "tables": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          // Client writes are limited to the reservation/QR flow's own
+          // narrow table-state fields already used today — unchanged in
+          // scope from what the (broader) grant already allowed a customer
+          // session to do, just no longer inherited from the top.
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "meta": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "customers": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "clients": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "orderChats": {
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "orderTimeline":   { ".read": "auth != null && auth.token.restId == $restId" },
+        "paymentRequests": { ".write": "auth != null && auth.token.restId == $restId" },
+        // Chat needs a chef's display name only — NOT the whole users/$uid
+        // node (which still carries the password/passwordEnc legacy stubs;
+        // their own ".read":false is real protection only against OTHER
+        // descendant paths, never against an ancestor grant — see the
+        // credentials/ comment — so this must stay this narrow on purpose).
+        // Rules-integrity fix: this used to be its OWN separate "users" key
+        // here, sitting alongside a SECOND, unrelated "users" key further
+        // down (the real staff schema — password/passwordEnc/role/modules/
+        // actions) at the exact same nesting level under restaurants/$restId.
+        // Two same-named keys in one JSON object is invalid — Firebase's own
+        // rules deployment validator correctly rejects it ("'users' occurs
+        // multiple times"), which is how this was caught: the file on disk
+        // had silently drifted out of deployability (a lenient JSON.parse
+        // just keeps the last key and says nothing). Moved into the real
+        // "users" block below as a sibling field next to password/role/etc.
+        // — identical grant, just no longer a duplicate top-level key.
+        // Order READ is deliberately absent here — see the P0 fix comment
+        // above. WRITE (P0 fix, Phase 2 — found during the client.js
+        // rewire trace, not part of the original disclosed finding):
+        // customer sessions have several legitimate writes to an EXISTING
+        // order, not just creating a new one — chat-message timestamps
+        // (lastClientMessage/At), pickupRequests, payment/splitBillRequest,
+        // kassaCode generation for the "request bill" flow. An
+        // update-only-if-!data.exists() rule (this path's first draft)
+        // would have silently broken all of those the moment rules
+        // deploy. Same reasoning as the READ side, applied symmetrically:
+        // staff writes are unaffected; a brand-new order (create) is
+        // unaffected; an existing DINE-IN order's table must match the
+        // session's verified table claim; an existing order with no table
+        // (takeaway/delivery) is capability-based — same structural limit
+        // as reads (every no-table QR session at a restaurant shares one
+        // anonymous identity, see the P0 fix report), and since orders
+        // still has no collection-level read/list grant for customers
+        // anywhere in this file, an attacker cannot discover an orderId to
+        // target this way without already having legitimate access to it.
+        "orders": {
+          ".indexOn": ["createdAt"],
+          "$orderId": {
+            ".write": "auth != null && auth.token.restId == $restId && (auth.token.type != 'customer' || !data.exists() || !data.child('table').exists() || auth.token.table == data.child('table').val())"
+          }
+        },
+        // Order Change Requests — waiter-initiated "cancel item" / "replace
+        // item" requests that only take effect once Admin OR Cashier
+        // approves them (see admin-frontend/public/js/shared.js
+        // approveOrderChangeRequest()/rejectOrderChangeRequest()). This
+        // restaurant's own ".write" grant above already lets any
+        // authenticated staff member of this restId write ANYWHERE in this
+        // subtree (creation of a brand-new pending request is INTENDED to
+        // be that open — any staff role can propose a change), so the only
+        // thing that actually needs protecting is the STATE TRANSITION on
+        // "status" — exactly the same situation as "role" above, and the
+        // same fix applies: a ".write" rule here could NOT revoke that
+        // parent grant (rules cascade downward for granting only), so this
+        // uses ".validate" (which never cascades) instead.
+        "orderChangeRequests": {
+          ".indexOn": ["orderId", "createdAt", "status"],
+          "$requestId": {
+            "requestType": {
+              ".validate": "newData.val() == 'cancel_item' || newData.val() == 'replace_item'"
+            },
+            "status": {
+              ".validate": "newData.isString() && ((newData.val() == 'pending' && !data.exists()) || (data.exists() && data.val() == 'pending' && ((newData.val() == 'cancelled' && auth != null && auth.token.restId == $restId && newData.parent().child('createdByUid').val() == auth.token.rtdbUserId) || ((newData.val() == 'approved' || newData.val() == 'rejected') && auth != null && auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin' || auth.token.role == 'cashier')))) || (data.exists() && newData.val() == data.val()))"
+            }
+          }
+        },
+        // Load-balancing read + assignment-create — see the residual-gap
+        // comment above; unchanged from today's actual behavior on purpose.
+        "courierAssignments": {
+          ".indexOn": ["orderId"],
+          ".read":  "auth != null && auth.token.restId == $restId",
+          ".write": "auth != null && auth.token.restId == $restId"
+        },
+        "couriers": { ".read": "auth != null && auth.token.restId == $restId" },
+        "users": {
+          "$userId": {
+            ".validate": "newData.hasChildren(['name', 'role'])",
+            // Customer-session re-grant (see the comment above, near where
+            // this used to be its own duplicate "users" key) — chat needs a
+            // chef's display name only, not the whole users/$uid node.
+            "name": { ".read": "auth != null && auth.token.restId == $restId" },
+            // Production Security Fix Pass: password is now always a bcrypt
+            // hash (or, for accounts not yet logged in since the fix
+            // shipped, legacy plaintext pending self-migration on next
+            // login — see backend/security/password.js) — either way, no
+            // client has any legitimate reason to read it.
+            // P0-2 fix (write side): a plain nested ".write" rule here would
+            // NOT actually restrict anything — Firebase Realtime Database
+            // ".write"/".read" rules cascade DOWNWARD only for GRANTING;
+            // once restaurants/$restId's own ".write" rule above already
+            // grants access to a same-restaurant (or superadmin) session for
+            // this whole subtree, a MORE restrictive ".write" rule on a
+            // child path can never revoke that grant — confirmed empirically
+            // live during this fix (a chef session successfully wrote its
+            // own role to "owner" despite the `role` field below having an
+            // owner/admin-only ".write" rule of its own; the write was only
+            // stopped by manually reverting it afterward — see
+            // PRODUCTION-AUDIT.md P0-2 follow-up notes). ".validate" rules
+            // do NOT cascade — every applicable ".validate" is mandatory
+            // regardless of which ancestor granted the write — so that is
+            // what actually enforces "only owner/admin (or superadmin, or a
+            // first-ever write, mirroring `role` below) may set this field"
+            // here. Matches the existing addWaiter/addCashier/addCourier
+            // (admin-frontend/public/js/admin.js) and saveNewRestaurant
+            // (superadmin.js) flows exactly — all write password from an
+            // authenticated owner/admin/superadmin session already.
+            // No !data.exists() escape hatch here (unlike `role` below) —
+            // deliberately checked live during this fix: every current
+            // writer of this field (admin.js's addWaiter/addCashier/
+            // addCourier/addChef, superadmin.js's saveNewRestaurant/rotate)
+            // already runs from an authenticated admin/owner/superadmin
+            // session, so it never needed a first-write-is-free allowance.
+            // Adding one anyway would have reopened exactly the hole this
+            // fix closes for any restaurant where this field doesn't exist
+            // yet.
+            // P0-2 residual-gap fix: password/passwordEnc DATA has moved to
+            // the top-level "credentials" tree below (see its own comment
+            // for why — in short, ".read": false here can never actually
+            // block a read, because restaurants/$restId's own broad read
+            // grant above cascades past it; only a structurally separate
+            // path can be genuinely enforced). Every reader/writer in the
+            // app has been repointed at credentials/$restId/$userId. These
+            // two stubs are kept, not deleted: (a) defense-in-depth against
+            // any future code accidentally writing here again (the
+            // ".validate" below still requires owner/admin/superadmin), and
+            // (b) so a not-yet-migrated record (pre-fix legacy data, until
+            // the migration script runs) still has SOME write-side guard
+            // during the transition. They no longer carry live data once
+            // the migration script (backend/scripts/migrate-credentials.mjs)
+            // has run.
+            "password": {
+              ".read": false,
+              ".validate": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))"
+            },
+            // Reversible (AES-256-GCM) copy of the same password, used
+            // exclusively by the superadmin "Restoran login ma'lumotlari"
+            // reveal feature (backend/routes/superadminCredentials.js) —
+            // decrypted server-side only, with the server-only
+            // ENCRYPTION_KEY (backend/security/crypto.js), for a verified
+            // superadmin session. No client — including that restaurant's
+            // own owner/admin — has any legitimate reason to read the raw
+            // ciphertext either, mirroring `password` above exactly. Same
+            // ".validate", not ".write", reasoning as `password` above.
+            // No !data.exists() escape hatch — same reasoning as `password`
+            // above, and this field is EMPTY far more often in practice
+            // (only populated by superadmin's reveal/set feature), which
+            // was confirmed live to make the escape hatch immediately
+            // exploitable: any same-restaurant employee could be the "first
+            // writer" of this field for any account whose passwordEnc was
+            // still unset.
+            // Same move as "password" above — data now lives at
+            // credentials/$restId/$userId/passwordEnc. Stub kept for the
+            // same reason.
+            "passwordEnc": {
+              ".read": false,
+              ".validate": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))"
+            },
+            "role": {
+              ".validate": "newData.isString() && newData.val().length > 0",
+              // !data.exists() covers the FIRST write (creating a new
+              // employee, e.g. via backend POST /api/staff, which is
+              // usually unauthenticated when no Admin SDK service account
+              // is configured yet) — that path is unaffected. Once a role
+              // has been set once, CHANGING it requires a verified session
+              // for this restaurant with role owner/admin (or a superadmin
+              // session) — intended to close "any client can promote itself
+              // to owner" without breaking staff creation.
+              // ⚠️ CORRECTION (found during the P0-2 fix pass, NOT fixed
+              // here — out of that fix's scope, left exactly as-is per
+              // instruction): this ".write" rule does NOT actually achieve
+              // that — confirmed live, a same-restaurant chef session
+              // successfully overwrote its own role to "owner" despite this
+              // rule, because restaurants/$restId's own ".write" rule above
+              // already grants that session write access to this whole
+              // subtree, and Firebase's ".write" rules cascade DOWNWARD for
+              // GRANTING only — a more restrictive child ".write" can never
+              // revoke a parent's grant. See PRODUCTION-AUDIT.md / the P0-2
+              // fix report for the live reproduction. The `password`/
+              // `passwordEnc` siblings just above use ".validate" instead
+              // (which does NOT cascade) for exactly this reason — the same
+              // fix would need to be applied here to actually work, but
+              // that is a separate, not-yet-authorized change.
+              ".write": "!data.exists() || (auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin'))))"
+            },
+            "modules": {
+              ".validate": "newData.val() == null || newData.hasChildren() || newData.val() === true"
+            },
+            "actions": {
+              // Yangi model: { moduleId: [action,...] } — obyekt. Eski (flat) massiv ham
+              // orqaga moslik uchun ruxsat etiladi (broadcastFlatActionsToModules orqali o'qiladi).
+              ".validate": "newData.val() == null || newData.hasChildren()"
+            }
+          }
+        },
+        "customRoles": {
+          ".write": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))",
+          "$roleId": {
+            ".validate": "newData.hasChild('name')",
+            "modules": {
+              ".validate": "newData.val() == null || newData.hasChildren()"
+            },
+            "actions": {
+              ".validate": "newData.val() == null || newData.hasChildren()"
+            }
+          }
+        },
+        "roleOverrides": {
+          ".write": "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))"
+        },
+        // login.js's resolveRestaurantScope() reads exactly this path to
+        // validate a QR/login link ("does this restaurant exist / is it
+        // blocked?") BEFORE any login happens — there is no session yet at
+        // that point, by definition, so the auth-required rule above would
+        // otherwise reject it and break the "invalid restaurant link" check
+        // for every visitor. Narrow, read-only carve-out: info is basic
+        // restaurant metadata (name/status/logo), not sensitive like
+        // orders/users/finance, which all stay behind the auth check above.
+        "info": { ".read": true },
+        // Production Security Fix Pass, Phase 3 (performance — missing
+        // indexes). Every orderByChild() query this app actually runs
+        // against these paths (admin.js, chef.js, client.js, backend/
+        // server.js, backend/security/auditLog.js) — without these, each
+        // query falls back to a full unindexed scan of the whole node
+        // (Firebase logs an "Using an unspecified index" warning for
+        // exactly this). .indexOn doesn't change who can read/write — that
+        // stays governed by the ".read"/".write": true a few lines up.
+        // orders/courierAssignments' own .indexOn now lives merged into
+        // their P0-fix blocks above (search this file for "P0 FIX") —
+        // duplicate top-level keys here previously (pre-fix) were harmless
+        // because both said the same thing; merged during the fix so
+        // there is exactly one "orders" and one "courierAssignments" key
+        // in this object, not two silently-shadowing ones.
+        "auditLog":            { ".indexOn": ["createdAt"] },
+        "activityLogs":        { ".indexOn": ["createdAt"] }
+        // Qolgan barcha yo'llar (menu, warehouse, finance, ...) yuqoridagi
+        // restaurants/$restId ".read"/".write": true orqali ochiq qoladi — anonim
+        // mijoz buyurtma oqimi (client.js) shu yerga tayanadi, yuqoridagi izohga qarang.
+      }
+    },
+
+    // P0-2 residual-gap fix (credential READ): `password`/`passwordEnc` used
+    // to live at restaurants/$restId/users/$userId/{password,passwordEnc}
+    // with their own ".read": false — but Firebase RTDB rules cascade
+    // DOWNWARD for GRANTING only: restaurants/$restId's own broad
+    // ".read": "auth != null && auth.token.restId == $restId" grant could
+    // never be revoked by a deeper ".read": false on a child path (this is
+    // exactly the mechanism that made restaurants/$restId/users/$uid/role's
+    // ".write" rule above ineffective too, and is standard, documented
+    // Firebase behavior — see P0-2-CREDENTIAL-READ-DESIGN.md for the full
+    // analysis). The ONLY structural fix is a path that is NOT a descendant
+    // of restaurants/$restId at all, so that grant never applies to it in
+    // the first place — this "credentials" tree is that path.
+    //
+    // Same authorization expression as the (ineffective) ".validate" rules
+    // that used to gate writes to the old location — kept identical on
+    // purpose (already-audited condition, no new authorization logic
+    // introduced): a session is allowed only if it's a real superadmin
+    // (auth.token.restId == null) or this exact restaurant's owner/admin.
+    // Every current caller already satisfies this:
+    //   - admin.js's addChef/addWaiter/addCashier/addCourier/saveNewStaff/
+    //     saveStaffEdit and its _isPinCodeTaken()/editStaff() reads — always
+    //     run from an authenticated owner/admin session (this is the
+    //     existing, intended UI: an admin can see/set an employee's 4-digit
+    //     PIN, exactly as before, just via a path that's actually enforced).
+    //   - superadmin.js's restaurant-creation/reset flows and the
+    //     superadmin "Login ma'lumotlari" reveal/set modal — superadmin
+    //     session (no restId claim).
+    //   - backend/routes/auth.js (login verification + bcrypt self-
+    //     migration) and backend/routes/superadminCredentials.js (reveal/
+    //     set) — both go through the Admin SDK (systemGet/systemUpdate),
+    //     which bypasses rules entirely, same as every other backend write.
+    //
+    // A same-restaurant chef/waiter/cashier/courier — or any client/QR
+    // session, or a different restaurant's session, or no session at all —
+    // matches none of the above and is denied, closing the residual gap.
+    // `passwordEnc` additionally keeps ".read": false UNCONDITIONALLY (even
+    // for this restaurant's own owner/admin) — unchanged from its original
+    // design intent: it is only ever decrypted server-side by the
+    // superadmin reveal endpoint, no client (including the restaurant's own
+    // admin) has ever had a legitimate reason to read the raw ciphertext.
+    "credentials": {
+      "$restId": {
+        "$userId": {
+          "password": {
+            ".read":     "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))",
+            ".write":    "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))",
+            ".validate": "newData.isString()"
+          },
+          "passwordEnc": {
+            ".read":     false,
+            ".write":    "auth != null && ((auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null) || (auth.token.restId == $restId && (auth.token.role == 'owner' || auth.token.role == 'admin')))",
+            ".validate": "newData.isString()"
+          }
+        }
+      }
+    },
+
+    "restaurantsIndex": {
+      ".read": "auth != null && auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null",
+      ".write": "auth != null && auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null"
+    },
+
+    "superadmin": {
+      ".read": "auth != null && auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null",
+      ".write": "auth != null && auth.token.platformSuperAdmin == true && auth.token.restId == null && auth.token.restaurantId == null"
+    },
+
+    // Backend-only (security event log, Payme transaction index) — written
+    // exclusively via backend/security/auditLog.js and backend/routes/payme.js
+    // using the Admin SDK when configured (bypasses rules) or the plain
+    // client SDK as a legacy fallback; either way no browser has a
+    // legitimate reason to read or write this directly.
+    "systemData": {
+      ".read": false,
+      ".write": false
+    },
+
+    // QR one-time discount claims (backend/discountClaims/*) — the
+    // AUTHORITATIVE record for a claim's available->used transition. Kept at
+    // the TOP LEVEL, same reasoning as credentials/ above: RTDB rules cascade
+    // downward for GRANTING only, so nesting this restrictively under
+    // restaurants/$restId/customers (which already grants broad
+    // auth-scoped-to-restaurant read/write for the whole customers subtree)
+    // could never actually be enforced there — any authenticated
+    // same-restaurant session (including a waiter/client) could otherwise
+    // write "used" directly and defeat the single-use guarantee. Every read
+    // and write here goes exclusively through backend/discountClaims/
+    // claimsService.js via systemDb.js's Admin SDK path (bypasses rules by
+    // design, same as systemData above) — no browser ever touches this
+    // directly. A convenience MIRROR of a claim's current state is written
+    // by the same backend service into
+    // restaurants/$restId/customers/$phone/oneTimeDiscounts/$token (covered
+    // by the existing customers rule, for the Admin Mijozlar card's
+    // real-time display only) — that mirror is never the source of truth for
+    // whether a claim can still be consumed.
+    "discountClaims": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

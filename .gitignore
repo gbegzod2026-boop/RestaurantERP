@@ -1,0 +1,71 @@
+backend/node_modules
+backend/.env
+backend/serviceAccountKey.json
+
+# P1-3 fix (PRODUCTION-AUDIT.md): old editing-session backup files —
+# confirmed live-servable via HTTP before backend/server.js's .bak-blocking
+# middleware was added (see there for the full finding). Not deleted from
+# disk; just kept out of git going forward.
+*.bak
+
+# P1-4 (PRODUCTION-AUDIT.md): _key.tmp — a key-shaped value at the repo
+# root, confirmed NOT referenced by any code (grepped the whole repo) and
+# NOT publicly HTTP-servable (outside admin-frontend/public, the only
+# directory express.static() serves) — but never committed to git either
+# way. Left on disk, not deleted — see PRODUCTION-AUDIT.md / the P1 fix
+# report for why (its origin/purpose could not be confirmed with certainty,
+# so it was not removed unilaterally).
+_key.tmp
+
+# P3 fix (PRODUCTION-AUDIT.md #19): stray console-output/pid files left over
+# from ad-hoc `node server.js > file 2>&1`-style local runs during this
+# engagement — content checked, harmless (no secrets), but they're generated
+# artifacts, not source, and shouldn't be committed. Not deleted from disk.
+backend/server_out.txt
+backend/server_out2.log
+backend/server_err.txt
+backend/server_err2.log
+backend/server_pid.txt
+backend/_boot_out.log
+backend/_boot_err.log
+
+# P1 re-audit follow-up: same class of stray ad-hoc-run log file, found at
+# the repo root this pass (backend/'s copies were already covered above but
+# these root-level ones were missed) — content checked (startup warnings
+# only, no secrets). Not deleted from disk, only kept out of git.
+/_boot_out.log
+/_boot_err.log
+
+# P0-2 residual-gap fix — backend/scripts/migrate-credentials.mjs writes a
+# local pre-migration backup here (real bcrypt hashes / AES ciphertext, for
+# recovery only) before moving password/passwordEnc off restaurants/$restId/
+# users/$userId. Never committed. Same precedent as the existing
+# _PRE_DEPLOY_BACKUP_live_rules_*.json kept for the earlier rules deploy.
+backend/_PRE_MIGRATION_BACKUP_credentials_*.json
+backend/_PRE_DEPLOY_BACKUP_live_rules_*.json
+
+# Defense in depth: local secrets, private keys, generated logs, and backups.
+**/.env
+**/.env.*
+!**/.env.example
+**/serviceAccountKey.json
+**/*service-account*.json
+**/*credential*backup*.json
+**/*migration*backup*.json
+**/*PRE_MIGRATION_BACKUP*.json
+**/*PRE_DEPLOY_BACKUP*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+node_modules/
+
+# Machine-local agent settings and generated migration evidence may contain
+# environment-specific identifiers or source-data excerpts.
+.claude/settings.local.json
+backend/db/migration-audit/*.json
+docs/migration-reports/*.json

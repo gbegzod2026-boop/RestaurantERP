@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title data-i18n="ho_document_title">Nesta ERP — Head Office</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/headoffice.css" />
+  <link rel="stylesheet" href="css/header.css" />
+  <link rel="icon" href="img/logo (2).svg" type="image/png" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+
+<body>
+
+  <div class="layout">
+    <button class="menu-toggle" id="menuToggleBtn">
+      <i class="fa-solid fa-list-ul"></i>
+    </button>
+
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <h2><span class="nesta-text">Nesta</span><span class="crm-text">ERP</span></h2>
+        <div class="ho-org-badge" id="hoOrgBadge">
+          <i class="fa-solid fa-building"></i>
+          <span class="ho-org-name" id="hoOrgBadgeName" data-i18n="ho_no_org_selected">Tashkilot tanlanmagan</span>
+          <i class="fa-solid fa-chevron-down ho-icon-sm"></i>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <a href="#dashboard" onclick="hoShowSection('dashboard')" class="active">
+          <i class="fa-solid fa-chart-line"></i> <span data-i18n="dashboard">Boshqaruv paneli</span>
+        </a>
+        <a href="#branches" onclick="hoShowSection('branches')">
+          <i class="fa-solid fa-code-branch"></i> <span data-i18n="nav_branches">Filiallar</span>
+        </a>
+        <a href="#settings" onclick="hoShowSection('settings')">
+          <i class="fa-solid fa-gear"></i> <span data-i18n="settings_nav">Sozlamalar</span>
+        </a>
+      </nav>
+    </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <main class="content">
+      <header class="header nesta-header">
+        <div id="nestaHeaderBrand" class="nesta-header-brand"></div>
+
+        <select id="langSelect">
+          <option value="uz" data-i18n="lang_uz">UZ</option>
+          <option value="ru" data-i18n="lang_ru">RU</option>
+          <option value="en" data-i18n="lang_en">EN</option>
+        </select>
+
+        <button type="button" class="theme-toggle-btn" id="themeToggleBtn" onclick="hoToggleTheme()"
+          data-i18n-title="theme_toggle_title" title="Mavzuni almashtirish">
+          <i class="fa-solid fa-moon"></i>
+          <i class="fa-solid fa-sun"></i>
+        </button>
+      </header>
+
+      <div class="ho-page">
+
+        <!-- ============================================================
+             1-BOSQICH: FOUNDATION
+             Faqat asosiy skelet — layout, sidebar, auth va org tanlash.
+             Keyingi bosqichlarda har bir bo'lim (dashboard, filiallar,
+             sozlamalar) o'z ichki markupi bilan to'ldiriladi.
+             ============================================================ -->
+
+        <section id="ho-dashboard" class="ho-section active">
+          <div class="ho-section-head">
+            <h2 data-i18n="dashboard">Boshqaruv paneli</h2>
+          </div>
+
+          <div class="ho-empty-banner d-none" id="ho-dashboard-empty-banner">
+            <i class="fa-solid fa-circle-info"></i>
+            <span data-i18n="ho_no_active_locations_banner">
+              Hozircha faol filial ulanmagan. Ko'rsatkichlar filial qo'shilgandan so'ng to'ldiriladi —
+            </span>
+            <a href="#branches" onclick="hoShowSection('branches')" data-i18n="ho_go_to_branches">Filiallarga o'tish</a>
+          </div>
+
+          <div class="ho-kpi-grid" id="ho-kpi-grid"></div>
+
+          <h3 class="ho-subheading" data-i18n="ho_charts_heading">Grafiklar</h3>
+          <div class="ho-charts-grid" id="ho-charts-grid"></div>
+
+          <h3 class="ho-subheading" data-i18n="ho_branch_overview_heading">Filiallar bo'yicha umumiy ko'rinish</h3>
+          <div class="ho-table-wrap">
+            <table class="ho-table">
+              <thead>
+                <tr>
+                  <th data-i18n="ho_col_branch">Filial</th>
+                  <th data-i18n="ho_col_status">Holat</th>
+                  <th data-i18n="ho_col_revenue_today">Bugungi tushum</th>
+                  <th data-i18n="ho_col_orders_today">Bugungi buyurtmalar</th>
+                  <th data-i18n="ho_col_health">Sog'lomlik</th>
+                  <th data-i18n="ho_col_actions">Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="ho-branch-overview-tbody">
+                <tr><td colspan="6" class="ho-table-empty" data-i18n="ho_loading">Yuklanmoqda…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="ho-branches" class="ho-section">
+          <div class="ho-section-head">
+            <h2 data-i18n="nav_branches">Filiallar</h2>
+          </div>
+
+          <div class="ho-link-form-card">
+            <h3 data-i18n="ho_link_location_title">Mavjud restoranni ulash</h3>
+            <p class="ho-link-form-sub" data-i18n="ho_link_location_sub">
+              Mavjud restaurants/{restId} yozuvini ushbu tashkilotga filial sifatida bog'laydi.
+              Restoran ma'lumotlari ko'chirilmaydi yoki o'zgartirilmaydi — faqat havola yaratiladi.
+            </p>
+            <form id="ho-link-location-form" class="ho-link-form">
+              <div class="ho-field">
+                <label data-i18n="ho_field_restid">Restoran ID (restId)</label>
+                <input type="text" id="ho-link-restid" required data-i18n-placeholder="ho_field_restid_placeholder" placeholder="masalan: rest_abc123" />
+              </div>
+              <div class="ho-field">
+                <label data-i18n="ho_field_display_name">Ko'rsatiladigan nom (ixtiyoriy)</label>
+                <input type="text" id="ho-link-displayname" data-i18n-placeholder="ho_field_display_name_placeholder" placeholder="masalan: Chilonzor filiali" />
+              </div>
+              <button type="submit" class="ho-btn-primary">
+                <i class="fa-solid fa-link"></i> <span data-i18n="ho_link_btn">Ulash</span>
+              </button>
+            </form>
+            <div class="ho-form-error" id="ho-link-error"></div>
+          </div>
+
+          <div class="ho-branches-empty d-none" id="ho-branches-empty">
+            <i class="fa-solid fa-code-branch"></i>
+            <div class="title" data-i18n="ho_no_locations_title">Hali filial ulanmagan</div>
+            <p data-i18n="ho_no_locations_sub">Yuqoridagi forma orqali birinchi restoraningizni ulang.</p>
+          </div>
+
+          <div class="ho-loc-grid" id="ho-branches-list"></div>
+        </section>
+
+        <section id="ho-settings" class="ho-section">
+          <h2 data-i18n="settings_nav">Sozlamalar</h2>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Auth gate va org-tanlash modali headoffice.js tomonidan
+       dinamik ravishda body'ga qo'shiladi (#hoAuthGate,
+       #hoOrgModalOverlay) — shu yerda faqat CSS orqali stillanadi. -->
+
+  <!-- NOTE: js/headoffice.js sahifada mavjud bo'lmagani sababli (avvaldan
+       mavjud, ushbu vazifaga aloqasi yo'q kamchilik) shu yerda i18n
+       zanjiri ham qo'lda ulanadi — aks holda header tarjimasi ishlamaydi. -->
+  <script type="module" src="js/langs.js"></script>
+  <script type="module" src="js/i18n.js"></script>
+  <script type="module" src="js/headoffice.js"></script>
+  <script type="module">
+    import { renderHeader } from "./js/header.js";
+    // Barcha panellarda yagona brend: "Nesta Head Office" emas, "Nesta ERP".
+    renderHeader("nestaHeaderBrand", { product: "erp", role: "head_office" });
+  </script>
+</body>
+
+</html>

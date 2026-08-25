@@ -1,0 +1,192 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   header.css — Nesta platformasidagi BARCHA panellar (SuperAdmin, Admin,
+   Waiter, Kitchen, Courier, Client, Head Office, POS) uchun yagona header
+   dizayn standarti.
+
+   Bu fayl har bir panelning o'ziga xos CSS faylidan KEYIN ulanadi va faqat
+   header'ning: balandlik, padding, logo o'lchami, shrift, gap, tekislanish,
+   avatar/notification/til/tema elementlari stilini birlashtiradi. Panelga
+   xos boshqa hech narsaga (ranglar sxemasi, sidebar, kontent) tegmaydi.
+
+   Qo'llash: header elementiga mavjud klassdan tashqari `nesta-header`
+   klassi ham qo'shiladi (masalan <header class="header nesta-header">),
+   brend blokiga esa `nesta-header-brand` (js/header.js orqali avtomatik
+   qo'shiladi).
+   ═══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --nesta-header-height: 68px;
+  --nesta-header-padding-x: 24px;
+  --nesta-header-gap: 16px;
+  --nesta-header-logo-size: 38px;
+  --nesta-header-product-size: 18px;
+  --nesta-header-product-weight: 700;
+  --nesta-header-role-size: 12px;
+  --nesta-header-role-weight: 600;
+  --nesta-header-title-color: #0f172a;
+  --nesta-header-role-color: #64748b;
+  --nesta-header-border: rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="dark"] {
+  --nesta-header-title-color: #f1f5f9;
+  --nesta-header-role-color: #94a3b8;
+  --nesta-header-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Header shell: barcha panellarda bir xil balandlik/padding/gap ── */
+.nesta-header {
+  min-height: var(--nesta-header-height);
+  padding-left: var(--nesta-header-padding-x);
+  padding-right: var(--nesta-header-padding-x);
+  display: flex;
+  align-items: center;
+  gap: var(--nesta-header-gap);
+  box-sizing: border-box;
+}
+
+/* ── Brend bloki: logo + mahsulot nomi + rol (js/header.js render qiladi) ── */
+.nesta-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.nesta-header-logo {
+  width: var(--nesta-header-logo-size);
+  height: var(--nesta-header-logo-size);
+  object-fit: contain;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: block;
+}
+
+.nesta-header-titles {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.18;
+  min-width: 0;
+}
+
+.nesta-header-product {
+  font-size: var(--nesta-header-product-size);
+  font-weight: var(--nesta-header-product-weight);
+  color: var(--nesta-header-title-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.nesta-header-role {
+  font-size: var(--nesta-header-role-size);
+  font-weight: var(--nesta-header-role-weight);
+  color: var(--nesta-header-role-color);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── Amallar bloki (avatar / notification / til / tema) — har doim o'ngda,
+   bir xil gap bilan joylashadi. Panelga xos ID'lar o'zgarmaydi, faqat
+   joylashuv/gap standartlashtiriladi. ── */
+.nesta-header-actions,
+.nesta-header .header-right,
+.nesta-header .w-header-actions,
+.nesta-header .ch-actions,
+.nesta-header .courier-header-right,
+.nesta-header .h-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ── Til tanlash (select#langSelect) — barcha panellarda bir xil ko'rinish ── */
+.nesta-header select#langSelect,
+.nesta-header .lang-select,
+.nesta-header .lang-select-btn,
+.nesta-header .ch-lang,
+.nesta-header .courier-lang-select {
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--nesta-header-border);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* ── Notification / theme-toggle / avatar tugmalari — bir xil o'lcham ── */
+.nesta-header .theme-toggle-btn,
+.nesta-header #notifBellBtn,
+.nesta-header #ncBellBtn,
+.nesta-header .hbadge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+/* ── Avatar (foydalanuvchi doira-ikonasi, mavjud bo'lgan joyda) ── */
+.nesta-header-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+/* ── Responsive: barcha panellarda bir xil breakpoint va qisqarish ── */
+@media (max-width: 780px) {
+  :root {
+    --nesta-header-height: 60px;
+    --nesta-header-padding-x: 16px;
+    --nesta-header-gap: 10px;
+    --nesta-header-logo-size: 32px;
+    --nesta-header-product-size: 15px;
+    --nesta-header-role-size: 10.5px;
+  }
+}
+
+@media (max-width: 480px) {
+  .nesta-header-role {
+    display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   Shared cross-module utility classes (CSS Architecture Migration).
+   header.css is already linked on every panel page, so small universal
+   utilities live here instead of being redefined per-module.css. ── */
+.d-none {
+  display: none;
+}
+
+/* ── Kirish/animatsiya: header birinchi marta chizilganda yumshoq paydo bo'ladi ── */
+.nesta-header-brand {
+  animation: nestaHeaderFadeIn 0.25s ease;
+}
+
+@keyframes nestaHeaderFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

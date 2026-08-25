@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="uz">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title data-i18n="waiter_page_title">Nesta ERP — Ofitsiant paneli</title>
+  <link rel="icon" href="img/logo (2).svg" type="image/png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="css/design-system.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/staffFooter.css">
+  <link rel="stylesheet" href="css/waiter.css">
+</head>
+
+<body>
+
+  <!-- Obuna bloklangan holati -->
+  <div id="system-block-overlay" class="u-034b1c2c">
+    <div class="u-e2f273e7">
+      <i class="fa-solid fa-lock u-e6608191"></i>
+      <h1 data-i18n="system_blocked_title" class="u-dc6c12b9">Tizim vaqtincha bloklangan</h1>
+      <p data-i18n="system_blocked_desc" class="u-1d92a040"></p>
+      <div class="u-820ac905">
+        <i class="fa-brands fa-telegram"></i> @nestacrm_admin
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ HEADER ══════════ -->
+  <header class="w-header nesta-header">
+    <div class="w-header-left">
+      <!-- Bitta yagona logo — header.js renderHeader() ichidagi
+           .nesta-header-logo (barcha panellar bilan bir xil). Avval bu
+           yerda alohida #waiterRestaurantLogoImg ham bor edi — ikkalasi
+           yonma-yon ikkita logo ko'rsatib qo'yardi; pastdagi "Restoran
+           logotipi" skripti endi shu bitta elementni yangilaydi. -->
+      <div id="nestaHeaderBrand" class="nesta-header-brand"></div>
+      <span class="w-sep">—</span>
+      <span id="waiterHeaderStaffName" class="w-staff"></span>
+    </div>
+
+    <div class="w-header-center">
+      <span id="waiterHeaderRestName" class="w-center-rest"></span>
+      <span id="waiterHeaderDateTime" class="w-center-datetime"></span>
+    </div>
+
+    <div class="w-header-actions">
+      <button type="button" class="theme-toggle-btn" id="themeToggleBtn" onclick="window.toggleWaiterTheme && window.toggleWaiterTheme()"
+        data-i18n-title="theme_toggle_title" title="Mavzuni almashtirish">
+        <i class="fa-solid fa-moon"></i>
+        <i class="fa-solid fa-sun"></i>
+      </button>
+      <select id="langSelect" class="lang-select">
+        <option value="uz" data-i18n="lang_uz">UZ</option>
+        <option value="ru" data-i18n="lang_ru">RU</option>
+        <option value="en" data-i18n="lang_en">EN</option>
+      </select>
+      <button class="btn-logout" onclick="logout()">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        <span data-i18n="logout">Chiqish</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════
+       VIEW 1 — STOL TANLASH
+  ══════════════════════════════════════════ -->
+  <section id="viewTables" class="w-view active">
+    <div class="tables-wrap">
+
+      <div id="hallFilter" class="hall-filter"></div>
+
+      <div class="status-legend">
+        <span class="legend-item"><i class="legend-dot u-d1e28a34"></i>     <span data-i18n="tstat_free">Bo'sh</span></span>
+        <span class="legend-item"><i class="legend-dot u-372019a3"></i>     <span data-i18n="tstat_busy">Band</span></span>
+        <span class="legend-item"><i class="legend-dot u-1997e962"></i><span data-i18n="tstat_preparing">Tayyorlanmoqda</span></span>
+        <span class="legend-item"><i class="legend-dot u-833a00f2"></i>    <span data-i18n="tstat_ready">Tayyor</span></span>
+        <span class="legend-item"><i class="legend-dot u-d49b3201"></i>     <span data-i18n="tstat_paid">To'landi</span></span>
+        <span class="legend-item"><i class="legend-dot u-670c2592"></i>   <span data-i18n="tstat_closed">Yopildi</span></span>
+        <span class="legend-item"><i class="legend-dot u-8bd00123"></i> <span data-i18n="tstat_reserved">Bron</span></span>
+      </div>
+
+      <!-- Stol kartalari -->
+      <div id="tablesGrid" class="tables-grid">
+        <p class="empty-state u-112b16cb" data-i18n="loading_tables">Stollar yuklanmoqda...</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════
+       VIEW 2 — BUYURTMA OYNASI
+  ══════════════════════════════════════════ -->
+  <section id="viewOrder" class="w-view">
+    <div class="order-screen">
+
+      <!-- CHAP: SAVAT -->
+      <div class="os-right">
+
+        <div class="cart-head">
+          <h3>🧾 <span data-i18n="order_list_title">Buyurtma ro'yxati</span></h3>
+          <button class="cart-clear" onclick="window.clearWaiterCart()" data-i18n="clear_btn">Tozalash</button>
+        </div>
+
+        <div id="cartList" class="cart-list">
+          <p class="empty-state" data-i18n="cart_empty_hint">Savat bo'sh. Menyudan taom tanlang.</p>
+        </div>
+
+        <div class="cart-foot">
+          <div id="cartSummary" class="cart-summary"></div>
+
+          <div class="cart-total-row">
+            <span class="ctr-label" data-i18n="grand_total_label">Itogo</span>
+            <span class="ctr-value"><span id="cartTotal">0</span> <span data-i18n="currency">so'm</span></span>
+          </div>
+
+          <div class="cart-actions">
+            <div class="cart-actions-row">
+              <button id="btnSendKitchen" class="btn-send" onclick="window.sendOrderToKitchen()">
+                🍳 <span data-i18n="send_to_kitchen_btn">Tasdiqlash</span>
+              </button>
+              <button id="btnPay" class="btn-pay-waiter u-93b8ea5b" onclick="window.openPaymentModal()">
+                💳 <span data-i18n="pay_btn">To'lov</span>
+              </button>
+              <button id="btnReceiptMenu" class="btn-receipt-menu u-93b8ea5b" onclick="window.toggleReceiptMenu()" data-i18n-title="receipt_title" title="Chek">
+                <i class="fa-solid fa-ellipsis"></i>
+              </button>
+            </div>
+            <div id="receiptMenuDropdown" class="receipt-menu-dropdown u-93b8ea5b">
+              <button onclick="window.reprintLastReceipt()">
+                <i class="fa-solid fa-print"></i> <span data-i18n="reprint_receipt_btn">Chekni qayta chop etish</span>
+              </button>
+              <button onclick="window.downloadLastReceipt()">
+                <i class="fa-solid fa-download"></i> <span data-i18n="download_receipt_btn">Chekni yuklab olish</span>
+              </button>
+              <button onclick="window.viewLastReceipt()">
+                <i class="fa-solid fa-eye"></i> <span data-i18n="view_receipt_btn">Chekni ko'rish</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- O'NG: MENYU -->
+      <div class="os-left">
+        <div class="os-topbar">
+          <div class="os-topbar-info">
+          <button class="btn-back" onclick="window.backToTables()">
+            <i class="fa-solid fa-arrow-left"></i>
+            <span data-i18n="back_btn">Stollar</span>
+          </button>
+          <div class="os-info-lines">
+            <div class="os-served-row">
+              <span data-i18n="served_by_label">Xizmat ko'rsatadi</span>: <span id="osServedBy" class="os-link">—</span>
+            </div>
+            <h2 class="os-table-title">
+              <span data-i18n="table_label">Stol</span>:
+              <b><span id="osTableNum">—</span></b>
+              <span id="osTableBadge" class="os-table-badge"></span>
+            </h2>
+            <div class="os-table-client-row">
+              <div id="osTableClient" class="os-table-client"></div>
+              <button class="os-client-edit-btn" onclick="window.editClientPhone()" data-i18n-title="edit_client_phone_title" title="Mijoz raqamini kiritish">
+                <i class="fa-solid fa-pen"></i>
+              </button>
+            </div>
+          </div>
+          </div>
+
+          <div class="os-topbar-center">
+            <div id="osReceiptChip" class="os-receipt-chip u-93b8ea5b">
+              <span data-i18n="receipt_title">Chek</span>: №<span id="osReceiptNum">—</span>
+            </div>
+          </div>
+
+          <div class="os-search-row">
+            <input type="text" id="menuSearch" class="os-search"
+                   oninput="window.onMenuSearch(this.value)"
+                   data-i18n-placeholder="search_dish_placeholder"
+                   placeholder="🔍 Taom qidirish...">
+          </div>
+        </div>
+
+        <div id="osCats" class="os-cats"></div>
+
+        <div class="os-body">
+          <div id="osSubCats" class="os-subcats"></div>
+          <div id="osItems" class="os-items">
+            <p class="empty-state u-112b16cb" data-i18n="menu_loading">Menyu yuklanmoqda...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════════ TO'LOV MODALI ══════════ -->
+  <div id="paymentModalBackdrop" class="variant-modal-backdrop u-93b8ea5b">
+    <div class="variant-modal u-40b89493">
+      <h4 data-i18n="pay_modal_title">To'lov turini tanlang</h4>
+      <p class="vm-sub">
+        <span data-i18n="pay_modal_table">Stol</span> <span id="pmTableNum">—</span> ·
+        <span data-i18n="pay_modal_total_label">Jami</span>: <b id="pmTotal">0</b> <span data-i18n="currency">so'm</span>
+      </p>
+      <div id="pmMethods" class="pm-methods"></div>
+
+      <!-- Karta raqami kiritish bosqichi (Naqddan tashqari barcha usullar) -->
+      <div id="pmCardStep" class="pm-card-step u-93b8ea5b">
+        <button type="button" class="pm-card-back" onclick="window.pmBackToMethods()">
+          <span>←</span> <span data-i18n="pay_modal_back">Orqaga</span>
+        </button>
+        <div id="pmCardMethodLabel" class="pm-card-method-label"></div>
+
+        <div class="pm-field">
+          <label class="pm-field-label" data-i18n="pay_modal_card_number">Karta raqami</label>
+          <input id="pmCardNumber" class="pm-card-input" type="text" inputmode="numeric"
+                 placeholder="8600 0000 0000 0000" maxlength="19" autocomplete="off"
+                 oninput="window.pmFormatCardNumber(this)" />
+          <div id="pmCardNumberErr" class="pm-card-err"></div>
+        </div>
+
+        <div class="pm-card-row">
+          <div class="pm-field">
+            <label class="pm-field-label" data-i18n="pay_modal_card_expiry">Amal muddati</label>
+            <input id="pmCardExpiry" class="pm-card-input" type="text" inputmode="numeric"
+                   data-i18n-placeholder="sa_placeholder_card_exp" placeholder="OO/YY" maxlength="5" autocomplete="off"
+                   oninput="window.pmFormatCardExpiry(this)" />
+            <div id="pmCardExpiryErr" class="pm-card-err"></div>
+          </div>
+          <div class="pm-field">
+            <label class="pm-field-label" data-i18n="pay_modal_card_code">Kod (SMS)</label>
+            <input id="pmCardCode" class="pm-card-input" type="text" inputmode="numeric"
+                   placeholder="••••" maxlength="6" autocomplete="off"
+                   oninput="window.pmFormatCardCode(this)" />
+            <div id="pmCardCodeErr" class="pm-card-err"></div>
+          </div>
+        </div>
+
+        <button id="pmConfirmBtn" type="button" class="pm-confirm-btn" onclick="window.pmConfirmCardPayment()">
+          <span data-i18n="pay_modal_confirm">To'lovni tasdiqlash</span>
+        </button>
+      </div>
+
+      <!-- To'lov jarayoni imitatsiyasi -->
+      <div id="pmProcessing" class="pm-processing u-93b8ea5b">
+        <div class="pm-spinner"></div>
+        <div id="pmProcessingText" class="pm-processing-text" data-i18n="pay_modal_processing">To'lov amalga oshirilmoqda...</div>
+      </div>
+
+      <!-- Muvaffaqiyatli to'lov -->
+      <div id="pmSuccessStep" class="pm-success u-93b8ea5b">
+        <div class="pm-success-icon">✓</div>
+        <div class="pm-success-text" data-i18n="pay_modal_done">To'lov muvaffaqiyatli amalga oshirildi</div>
+      </div>
+
+      <button id="pmCancelBtn" class="vm-close" onclick="window.closePaymentModal()" data-i18n="pay_modal_cancel">Bekor qilish</button>
+    </div>
+  </div>
+
+  <!-- ══════════ TAOMNI BEKOR QILISH SO'ROVI ══════════
+       Ofitsiant bu yerdan FAQAT so'rov yaratadi — Admin/Kassir tasdiqlamaguncha
+       order o'zgarmaydi (window.submitCancelItemRequest, waiter.js). -->
+  <div id="ocCancelModalBackdrop" class="variant-modal-backdrop u-93b8ea5b">
+    <div class="variant-modal u-40b89493">
+      <h4 data-i18n="oc_cancel_item_title">Taomni bekor qilish</h4>
+      <p class="vm-sub">
+        <span data-i18n="oc_dish_label">Taom</span>: <b id="ocCancelDishName">—</b>
+      </p>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="oc_qty_to_cancel_label">Bekor qilinadigan miqdor</label>
+        <div class="cr-qty" style="justify-content:center; margin-top:6px;">
+          <button type="button" class="qty-btn qty-minus" onclick="window.ocCancelChangeQty(-1)">−</button>
+          <span class="qty-val" id="ocCancelQtyVal">1</span>
+          <button type="button" class="qty-btn qty-plus" onclick="window.ocCancelChangeQty(1)">+</button>
+        </div>
+        <div class="oc-remaining-hint" id="ocCancelRemainingHint"></div>
+      </div>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="reason_label">Sabab</label>
+        <select id="ocCancelReason" class="pm-card-input">
+          <option value="customer_request" data-i18n="oc_reason_customer_request">Mijoz so'rovi</option>
+          <option value="wrong_order" data-i18n="oc_reason_wrong_order">Xato buyurtma qilindi</option>
+          <option value="out_of_stock" data-i18n="oc_reason_out_of_stock">Taom tugagan</option>
+          <option value="other" data-i18n="oc_reason_other">Boshqa</option>
+        </select>
+      </div>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="note_label">Izoh</label>
+        <textarea id="ocCancelNote" class="pm-card-input" rows="2"></textarea>
+      </div>
+      <button type="button" class="pm-confirm-btn" onclick="window.submitCancelItemRequest()">
+        <span data-i18n="oc_send_request_btn">So'rov yuborish</span>
+      </button>
+      <button type="button" class="vm-close" onclick="window.closeOcCancelModal()" data-i18n="cancel_btn">Bekor qilish</button>
+    </div>
+  </div>
+
+  <!-- ══════════ TAOMNI ALMASHTIRISH SO'ROVI ══════════ -->
+  <div id="ocReplaceModalBackdrop" class="variant-modal-backdrop u-93b8ea5b">
+    <div class="variant-modal u-40b89493">
+      <h4 data-i18n="oc_replace_item_title">Taomni almashtirish</h4>
+      <p class="vm-sub">
+        <span data-i18n="oc_current_dish_label">Hozirgi taom</span>: <b id="ocReplaceOldDishName">—</b>
+        (<span id="ocReplaceOldQty">1</span>)
+      </p>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="oc_new_dish_label">Yangi taom</label>
+        <select id="ocReplaceNewDish" class="pm-card-input"></select>
+      </div>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="reason_label">Sabab</label>
+        <select id="ocReplaceReason" class="pm-card-input">
+          <option value="customer_wish" data-i18n="oc_reason_customer_wish">Mijoz xohishi</option>
+          <option value="wrong_order" data-i18n="oc_reason_wrong_order">Xato buyurtma qilindi</option>
+          <option value="out_of_stock" data-i18n="oc_reason_out_of_stock">Taom tugagan</option>
+          <option value="other" data-i18n="oc_reason_other">Boshqa</option>
+        </select>
+      </div>
+      <div class="pm-field">
+        <label class="pm-field-label" data-i18n="note_label">Izoh</label>
+        <textarea id="ocReplaceNote" class="pm-card-input" rows="2"></textarea>
+      </div>
+      <button type="button" class="pm-confirm-btn" onclick="window.submitReplaceItemRequest()">
+        <span data-i18n="oc_send_request_btn">So'rov yuborish</span>
+      </button>
+      <button type="button" class="vm-close" onclick="window.closeOcReplaceModal()" data-i18n="cancel_btn">Bekor qilish</button>
+    </div>
+  </div>
+
+  <!-- ══════════ CHEK (chop etish uchun, ekranda ko'rinmaydi) ══════════ -->
+  <div id="printReceiptRoot" class="print-receipt-root">
+    <div id="printReceiptBody" class="receipt-paper"></div>
+  </div>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    function logout() {
+      localStorage.clear();
+      sessionStorage.clear();
+      location.href = "login.html";
+    }
+    (function fillHeader() {
+      // ⚠️ viewAs orqali (admin panelidan "xodim nomidan kirish") ochilganda
+      // sessionStorage'dagi "name" avvalgi sessiyadan qolgan bo'lishi mumkin —
+      // bu holatda header'ni faqat waiter.js'dagi loadStaffName() (Firebase'dan
+      // haqiqiy ismni o'qiydigan) to'ldirishi kerak, aks holda noto'g'ri xodim
+      // ismi bir lahza yoki butunlay ko'rinib qolishi mumkin.
+      const isViewingAsAdmin = sessionStorage.getItem("isViewingAsAdmin") === "true";
+      if (isViewingAsAdmin) return;
+      const staffName = sessionStorage.getItem("name") || "";
+      const el = document.getElementById("waiterHeaderStaffName");
+      // 🩹 Rol qavs ichida ("Ism (Ofitsiant)") olib tashlandi — waiter.js'ning
+      // loadStaffName() bilan bir xil (headerda faqat ism).
+      if (el && staffName) el.textContent = staffName;
+    })();
+
+    // 🩹 ROOT-CAUSE FIX ("waiter sahifasida sana hali ham tarjima
+    // qilinmayapti/ikki marta tarjima bo'lyapti") — bu yerda ATAYLAB
+    // topilmagan, ESKI, mustaqil liveDateTime() IIFE bor edi: u
+    // js/waiter.js'dagi (initWaiterHeaderDateTime(), t()-asosli, to'g'ri)
+    // funksiyadan BUTUNLAY ALOHIDA, o'zining setInterval(tick,1000)'i
+    // bilan, xuddi shu #waiterHeaderDateTime elementini Intl bilan
+    // (eski, "M08" xatosiga sabab bo'lgan usul) yozib turardi. Ikkalasi
+    // ham har soniyada bir marta ishga tushgani uchun, doim BIR-BIRINI
+    // bosib yozib, "goh to'g'ri, goh noto'g'ri til" holatini keltirib
+    // chiqargan edi — bu shunchaki race condition edi, tarjima xatosi
+    // emas. Endi yagona manba — js/waiter.js. Bu IIFE butunlay olib
+    // tashlandi (waiterHeaderStaffName'ni to'ldiruvchi fillHeader() esa
+    // o'zgarishsiz qoldi, u alohida element bilan ishlaydi).
+  </script>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="js/langs.js"></script>
+  <script type="module" src="js/shared.js"></script>
+  <script type="module" src="js/chat-system.js"></script>
+  <script type="module" src="js/waiter.js?v=1"></script>
+  <script type="module">
+    import { renderHeader } from "./js/header.js";
+    // Barcha panellarda yagona brend: "Nesta Waiter" emas, "Nesta ERP" —
+    // rol yorlig'i ("OFTSIANT") alohida qatorda o'zgarishsiz qoladi.
+    renderHeader("nestaHeaderBrand", { product: "erp", role: "waiter" });
+  </script>
+
+  <!-- Restoran logotipi -->
+  <script type="module">
+    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, forceWebSockets, ref, onValue } from "./js/pgRtdb.js";
+    import { setHeaderLogo } from "./js/header.js";
+
+    const _fbCfg = {
+      apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
+      authDomain: "restoran-30d51.firebaseapp.com",
+      databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
+      projectId: "restoran-30d51",
+      storageBucket: "restoran-30d51.firebasestorage.app",
+      messagingSenderId: "862261129762",
+      appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
+    };
+    const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbCfg);
+    // Force WebSocket-only transport (never fall back to `.lp` long-polling)
+    // — idempotent if waiter.js already forced it on this same shared app.
+    forceWebSockets();
+    const _db = getDatabase(_fbApp);
+
+    const _restId = new URLSearchParams(location.search).get("rest")
+      || localStorage.getItem("restaurantId");
+
+    if (_restId) {
+      // Custom logo — header.js'ning yagona .nesta-header-logo elementini
+      // yangilaydi (setHeaderLogo, header.js eksporti). MUHIM: shartsiz
+      // chaqiriladi — agar admin custom logoni o'chirib tashlasa
+      // (snap.val() bo'sh bo'lib qolsa), header standart Nesta logosiga
+      // avtomatik qaytishi kerak, eski logoda "qotib" qolmasin.
+      onValue(ref(_db, `restaurants/${_restId}/settings/restaurantLogoUrl`), snap => {
+        setHeaderLogo("nestaHeaderBrand", snap.val() || "");
+      });
+      onValue(ref(_db, `restaurants/${_restId}/settings/restaurantName`), snap => {
+        const el = document.getElementById("waiterHeaderRestName");
+        if (el && snap.exists() && snap.val()) el.textContent = snap.val();
+      });
+    }
+  </script>
+
+</body>
+</html>

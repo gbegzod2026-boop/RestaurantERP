@@ -1,0 +1,37 @@
+{
+  "name": "tegma",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "db:migrate:status": "node db/migrate.js status",
+    "db:migrate:up": "node db/migrate.js up",
+    "db:migrate:down": "node db/migrate.js down",
+    "db:set-app-password": "node db/set-app-role-password.js",
+    "db:discover": "node db/scripts/firebase-discover.mjs",
+    "db:discover:roots": "node db/scripts/firebase-discover-legacy-roots.mjs",
+    "db:discover:enums": "node db/scripts/firebase-discover-enums.mjs",
+    "db:migrate:firebase:dry-run": "node db/scripts/migrate-firebase.mjs --dry-run --reset-checkpoint",
+    "db:migrate:firebase:resume": "node db/scripts/migrate-firebase.mjs --dry-run --resume",
+    "db:migrate:firebase": "node db/scripts/migrate-firebase.mjs --apply",
+    "db:migrate:firebase:verify": "node db/scripts/migrate-firebase.mjs --verify",
+    "db:test": "node --test \"db/tests/*.test.mjs\"",
+    "db:test:unit": "node --test db/tests/normalize.test.mjs db/tests/migration.test.mjs",
+    "db:test:rls": "node db/tests/rls.test.mjs && node db/tests/rls-wave1.test.mjs && node db/tests/rls-wave2.test.mjs",
+    "test:security": "node --test db/tests/security-authority.test.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^7.5.1",
+    "firebase": "^11.9.0",
+    "firebase-admin": "^12.7.0",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.0",
+    "socket.io": "^4.8.1"
+  }
+}
