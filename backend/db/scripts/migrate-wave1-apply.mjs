@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // db/scripts/migrate-wave1-apply.mjs — REAL Wave 1 Firebase → PostgreSQL
-// master-data migration. Reads Firebase (read-only, via systemGet — the
-// same trusted Admin SDK path migrate-wave1-dry-run.mjs already used), and
-// writes ONLY to PostgreSQL. Never writes, updates, or deletes anything in
-// Firebase, never touches Firebase Rules or Auth, never touches the
-// nesta_app role's password, never logs a password/hash/secret/token.
+// master-data migration. Reads Firebase READ-ONLY via lib/fbRead.mjs (REST
+// GET). Writes ONLY to the dedicated local migration PostgreSQL target.
+// Never writes Firebase. The target is refused unless it is loopback
+// database nesta_migration_dryrun.
 //
 // Scope: restaurants, employees, tables, menu_categories (real + seeded
 // static), kitchen_stations, menu_items, combo_items — exactly Wave 1's
@@ -55,7 +54,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { systemGet } from "../../systemDb.js";
+import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
+import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
 import { getPool, isPgAvailable, maskedConfig, closePool } from "../postgres.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -138,46 +138,80 @@ async function runRestaurantTx(pool, fn, { commit }) {
 }
 
 // ── VALIDATE + TRANSFORM (pure — no DB access) ────────────────────────────
+const ROLE_MIGRATION_PENDING = "migration_pending";
+
 function validateAndTransformRestaurant(rid, r, exceptions) {
-  const info = r?.info || {};
-  if (!info.domain && !info.name) {
-    exceptions.push({ scope: "restaurant", legacyId: rid, reason: "no info.domain or info.name", action: "skipped_restaurant_and_all_children" });
-    return null;
+  const info = r?.info && typeof r.info === "object" ? { ...r.info } : {};
+  const missingName = !info.name;
+  const missingDomain = !info.domain;
+  if (missingName || missingDomain) {
+    info.migration = {
+      ...(info.migration && typeof info.migration === "object" ? info.migration : {}),
+      unnamed: missingName || undefined,
+      placeholder_name: missingName || undefined,
+      placeholder_domain: missingDomain || undefined,
+      business_review_required: true,
+      source_identity: rid,
+      placeholder_not_customer_facing: true,
+    };
+    exceptions.push({
+      scope: "restaurant",
+      legacyId: rid,
+      reason: "no info.domain or info.name",
+      action: "migrated_with_placeholder_identity",
+      businessDecisionRequired: true,
+      placeholderName: missingName ? `[MIGRATED UNNAMED] ${rid}` : null,
+      placeholderDomain: missingDomain ? `migrated-unnamed.${rid}.invalid` : null,
+    });
   }
   return {
     legacy_rtdb_id: rid,
-    domain: info.domain,
-    name: info.name,
-    status: info.status || undefined, // undefined → column omitted, DB default 'active' applies
+    domain: info.domain || `migrated-unnamed.${rid}.invalid`,
+    name: info.name || `[MIGRATED UNNAMED] ${rid}`,
+    status: missingName ? "migration_review" : (info.status || undefined),
     business_type: info.businessType || null,
     info,
+    subscription: r?.subscription && typeof r.subscription === "object" ? r.subscription : {},
     created_at: ts(info.createdAt),
     updated_at: ts(info.updatedAt),
   };
+}
+
+const CANONICAL_ROLES = new Set(["admin", "owner", "manager", "waiter", "chef", "cashier", "courier", "kassa"]);
+function isPushIdRole(role) {
+  return typeof role === "string" && /^-[A-Za-z0-9_-]{18,19}$/.test(role);
 }
 
 function transformEmployees(rid, r, exceptions) {
   const out = [];
   const users = r?.users || {};
   for (const [uid, u] of Object.entries(users)) {
-    if (!u?.name || !u?.role) {
-      exceptions.push({ scope: "employee", restaurantLegacyId: rid, legacyId: uid, reason: "legacy employee has empty role", action: "skipped_no_infer_no_write" });
-      continue;
+    const extra = {};
+    const rawRole = u?.role;
+    const roleEmpty = rawRole == null || String(rawRole).trim() === "";
+    const nameMissing = !u?.name;
+    if (nameMissing) extra.name_from_legacy_id = true;
+    if (roleEmpty) {
+      extra.raw_role = rawRole ?? null;
+      extra.role_resolution_required = true;
+      extra.permissions_fail_closed = true;
+      exceptions.push({
+        scope: "employee",
+        restaurantLegacyId: rid,
+        legacyId: uid,
+        reason: "legacy employee has empty role",
+        action: "migrated_inactive_migration_pending_no_privilege_inferred",
+        businessDecisionRequired: true,
+      });
     }
     out.push({
       legacy_rtdb_id: uid,
-      name: u.name,
-      // No dedicated "login" field exists anywhere in the observed RTDB
-      // employee shape (confirmed by field-union audit) — employees log in
-      // via a per-restaurant 4-digit PIN (login.js), not a username. The
-      // RTDB key itself is already guaranteed unique per restaurant (same
-      // value stored as legacy_rtdb_id), so it is reused as `login` rather
-      // than inventing a new identifier — copying an existing real key,
-      // not fabricating business data.
+      name: u?.name || uid,
       login: uid,
-      role: u.role,
-      active: u.active !== false,
-      created_at: ts(u.createdAt),
+      role: roleEmpty ? ROLE_MIGRATION_PENDING : u.role,
+      active: roleEmpty ? false : u?.active !== false,
+      extra,
+      created_at: ts(u?.createdAt),
     });
   }
   return out;
@@ -295,8 +329,8 @@ function transformMenuItems(r, exceptions, rid) {
 
 // ── UPSERT helpers (each takes the per-restaurant client + pg restaurant id) ──
 async function upsertRestaurant(client, row) {
-  const cols = ["legacy_rtdb_id", "domain", "name", "business_type", "info"];
-  const vals = [row.legacy_rtdb_id, row.domain, row.name, row.business_type, JSON.stringify(row.info)];
+  const cols = ["legacy_rtdb_id", "domain", "name", "business_type", "info", "subscription"];
+  const vals = [row.legacy_rtdb_id, row.domain, row.name, row.business_type, JSON.stringify(row.info || {}), JSON.stringify(row.subscription || {})];
   if (row.status) { cols.push("status"); vals.push(row.status); }
   if (row.created_at) { cols.push("created_at"); vals.push(row.created_at); }
   if (row.updated_at) { cols.push("updated_at"); vals.push(row.updated_at); }
@@ -322,11 +356,109 @@ async function upsertRestaurantSettings(client, restId, settings) {
   return true;
 }
 
-async function upsertEmployees(client, restId, employees) {
+async function upsertCustomRoles(client, restId, customRoles, exceptions, rid) {
+  const idByLegacy = new Map();
+  if (!customRoles || typeof customRoles !== "object") return idByLegacy;
+  const byName = new Map();
+  for (const [key, rec] of Object.entries(customRoles)) {
+    if (!rec || typeof rec !== "object") continue;
+    const name = typeof rec.name === "string" && rec.name.trim() ? rec.name.trim() : key;
+    const fingerprint = JSON.stringify({ modules: rec.modules ?? [], actions: rec.actions ?? [] });
+    const prev = byName.get(name);
+    if (prev && prev.fingerprint !== fingerprint) {
+      exceptions.push({
+        scope: "custom_role",
+        restaurantLegacyId: rid,
+        legacyId: key,
+        reason: "duplicate_display_name_distinct_permissions",
+        detail: `name="${name}" also used by ${prev.key}`,
+        action: "kept_separate_rows_legacy_rtdb_id_identity",
+        businessDecisionRequired: true,
+      });
+    } else if (prev && prev.fingerprint === fingerprint) {
+      exceptions.push({
+        scope: "custom_role",
+        restaurantLegacyId: rid,
+        legacyId: key,
+        reason: "duplicate_display_name_identical_permissions",
+        detail: `name="${name}" also ${prev.key} — NOT merged; source keys stay separate`,
+        action: "kept_separate_rows_legacy_rtdb_id_identity",
+      });
+    } else {
+      byName.set(name, { key, fingerprint });
+    }
+    const { rows } = await client.query(
+      `INSERT INTO custom_roles (restaurant_id, name, modules, actions, legacy_rtdb_id)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5)
+       ON CONFLICT (restaurant_id, legacy_rtdb_id) DO UPDATE
+         SET modules = EXCLUDED.modules, actions = EXCLUDED.actions, name = EXCLUDED.name
+       RETURNING id, legacy_rtdb_id`,
+      [restId, name, JSON.stringify(rec.modules ?? []), JSON.stringify(rec.actions ?? []), key]
+    );
+    if (rows[0]?.legacy_rtdb_id) idByLegacy.set(rows[0].legacy_rtdb_id, rows[0].id);
+    idByLegacy.set(key, rows[0].id);
+  }
+  return idByLegacy;
+}
+
+function moduleEnabled(value) {
+  if (value === true || value === 1) return true;
+  if (value === false || value === 0 || value == null) return false;
+  if (typeof value === "object") {
+    if (value.enabled === false || value.active === false) return false;
+    if (value.enabled === true || value.active === true) return true;
+    return true;
+  }
+  return true;
+}
+
+async function upsertModules(client, restId, modules) {
+  if (!modules || typeof modules !== "object") return { keys: 0, enabled: 0 };
+  const keys = Object.keys(modules);
+  const enabled = keys.filter((k) => moduleEnabled(modules[k]));
+  await client.query(
+    `INSERT INTO restaurant_modules (restaurant_id, enabled_modules, extra)
+     VALUES ($1, $2::text[], $3::jsonb)
+     ON CONFLICT (restaurant_id) DO UPDATE
+       SET enabled_modules = EXCLUDED.enabled_modules, extra = EXCLUDED.extra`,
+    [restId, enabled, JSON.stringify(modules)]
+  );
+  return { keys: keys.length, enabled: enabled.length };
+}
+
+async function upsertEmployees(client, restId, employees, exceptions, rid) {
   let count = 0;
   for (const e of employees) {
+    let customRoleId = null;
+    if (isPushIdRole(e.role)) {
+      const found = await client.query(
+        `SELECT id FROM custom_roles WHERE restaurant_id = $1 AND legacy_rtdb_id = $2 LIMIT 1`,
+        [restId, e.role]
+      );
+      customRoleId = found.rows[0]?.id || null;
+      exceptions.push({
+        scope: "employee",
+        restaurantLegacyId: rid,
+        legacyId: e.legacy_rtdb_id,
+        reason: customRoleId ? "push_id_role_resolved_to_custom_roles" : "push_id_role_unresolved",
+        action: "migrated_raw_role_preserved",
+        businessDecisionRequired: !customRoleId,
+      });
+    } else if (e.role !== ROLE_MIGRATION_PENDING && !CANONICAL_ROLES.has(String(e.role))) {
+      exceptions.push({
+        scope: "employee",
+        restaurantLegacyId: rid,
+        legacyId: e.legacy_rtdb_id,
+        reason: "non_canonical_role_preserved",
+        detail: String(e.role),
+        action: "migrated_raw_role_business_decision",
+        businessDecisionRequired: true,
+      });
+    }
     const cols = ["restaurant_id", "legacy_rtdb_id", "name", "login", "role", "active"];
     const vals = [restId, e.legacy_rtdb_id, e.name, e.login, e.role, e.active];
+    if (customRoleId) { cols.push("custom_role_id"); vals.push(customRoleId); }
+    if (e.extra && Object.keys(e.extra).length) { cols.push("extra"); vals.push(JSON.stringify(e.extra)); }
     if (e.created_at) { cols.push("created_at"); vals.push(e.created_at); }
     const placeholders = cols.map((_, i) => `$${i + 1}`).join(", ");
     const updateSet = cols.filter((c) => !["restaurant_id", "legacy_rtdb_id"].includes(c)).map((c) => `${c} = EXCLUDED.${c}`).join(", ");
@@ -494,8 +626,6 @@ async function upsertComboItems(client, restId, items, itemIdMap, exceptions, ri
 // ── Per-restaurant orchestration ──────────────────────────────────────────
 async function migrateOneRestaurant(pool, rid, r, commit, exceptions) {
   const restaurantRow = validateAndTransformRestaurant(rid, r, exceptions);
-  if (!restaurantRow) return { status: "skipped_restaurant" };
-
   const employees = transformEmployees(rid, r, exceptions);
   const tables = transformTables(rid, r, exceptions);
   const stations = transformKitchenStations(r);
@@ -506,7 +636,9 @@ async function migrateOneRestaurant(pool, rid, r, commit, exceptions) {
   const summary = await runRestaurantTx(pool, async (client) => {
     const restId = await upsertRestaurant(client, restaurantRow);
     const hasSettings = await upsertRestaurantSettings(client, restId, r?.settings || null);
-    const employeeCount = await upsertEmployees(client, restId, employees);
+    const moduleCounts = await upsertModules(client, restId, r?.modules);
+    await upsertCustomRoles(client, restId, r?.customRoles, exceptions, rid);
+    const employeeCount = await upsertEmployees(client, restId, employees, exceptions, rid);
     const tableCount = await upsertTables(client, restId, tables);
     const kitchenMap = await upsertKitchenStations(client, restId, stations);
     const { byRef: categoryMap, realCount, staticCount } = await upsertAllCategories(client, restId, realCats, seedStatic);
@@ -536,8 +668,21 @@ async function migrateOneRestaurant(pool, rid, r, commit, exceptions) {
     return {
       status: "migrated",
       pgRestaurantId: restId,
-      counts: { employees: employeeCount, tables: tableCount, categories: realCount + staticCount, categoriesReal: realCount, categoriesStatic: staticCount, kitchenStations: kitchenMap.size, menuItems: menuItemCount, comboItems: comboItemCount, settings: hasSettings ? 1 : 0 },
-      comboMetaLog, // discount metadata with no Postgres destination column — audit-only, see file header gap #2
+      counts: {
+        employees: employeeCount,
+        tables: tableCount,
+        categories: realCount + staticCount,
+        categoriesReal: realCount,
+        categoriesStatic: staticCount,
+        kitchenStations: kitchenMap.size,
+        menuItems: menuItemCount,
+        comboItems: comboItemCount,
+        settings: hasSettings ? 1 : 0,
+        moduleKeys: moduleCounts.keys,
+        modulesEnabled: moduleCounts.enabled,
+        subscription: restaurantRow.subscription && Object.keys(restaurantRow.subscription).length ? 1 : 0,
+      },
+      comboMetaLog,
     };
   }, { commit });
 
@@ -549,22 +694,23 @@ async function main() {
   console.log(`=== Wave 1 REAL Migration — mode: ${MODE_APPLY ? "APPLY (writes committed)" : "DRY-RUN (transactions rolled back, nothing persists)"} ===`);
   if (!isPgAvailable()) { console.error("❌ PostgreSQL not configured."); process.exit(1); }
   const cfg = maskedConfig();
+  assertMigrationTarget(cfg);
   console.log(`[target] ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
 
   const pool = getPool();
   const { batchId, completed } = batchIdFromCheckpointOrNew();
   console.log(`[batch] ${batchId}${completed.size ? ` (resuming — ${completed.size} restaurant(s) already checkpointed done)` : ""}`);
 
-  console.log("\nReading restaurants/ root from Firebase (Admin SDK, read-only)...");
-  const snap = await systemGet("restaurants");
-  const fbRestaurants = snap.exists() ? snap.val() : {};
-  let rids = Object.keys(fbRestaurants);
+  console.log("\nReading restaurants/ from Firebase REST (fbRead, read-only)...");
+  initFirebase();
+  let rids = await shallowKeys("restaurants");
+  rids.sort();
   if (ONLY) rids = rids.filter((r) => ONLY.has(r));
-  console.log(`Found ${rids.length} restaurant(s) to process (of ${Object.keys(fbRestaurants).length} total in Firebase).\n`);
+  console.log(`Found ${rids.length} restaurant(s) to process.\n`);
 
   const exceptions = [];
   const perRestaurant = [];
-  const totals = { migrated: 0, skippedRestaurants: 0, failed: 0, employees: 0, tables: 0, categories: 0, categoriesReal: 0, categoriesStatic: 0, kitchenStations: 0, menuItems: 0, comboItems: 0, settings: 0 };
+  const totals = { migrated: 0, skippedRestaurants: 0, failed: 0, employees: 0, tables: 0, categories: 0, categoriesReal: 0, categoriesStatic: 0, kitchenStations: 0, menuItems: 0, comboItems: 0, settings: 0, moduleKeys: 0, modulesEnabled: 0, subscription: 0 };
   const comboMetaAudit = [];
 
   for (const rid of rids) {
@@ -574,14 +720,15 @@ async function main() {
     }
     process.stdout.write(`  → ${rid} ... `);
     try {
-      const result = await migrateOneRestaurant(pool, rid, fbRestaurants[rid], MODE_APPLY, exceptions);
+      const rec = await getValue(`restaurants/${rid}`);
+      const result = await migrateOneRestaurant(pool, rid, rec || {}, MODE_APPLY, exceptions);
       if (result.status === "skipped_restaurant") {
         console.log("SKIPPED (malformed — see exceptions)");
         totals.skippedRestaurants++;
       } else {
         console.log(`OK — employees:${result.counts.employees} tables:${result.counts.tables} categories:${result.counts.categories}(real:${result.counts.categoriesReal}/static:${result.counts.categoriesStatic}) stations:${result.counts.kitchenStations} menu_items:${result.counts.menuItems} combo_items:${result.counts.comboItems}`);
         totals.migrated++;
-        for (const k of ["employees", "tables", "categories", "categoriesReal", "categoriesStatic", "kitchenStations", "menuItems", "comboItems", "settings"]) totals[k] += result.counts[k];
+        for (const k of ["employees", "tables", "categories", "categoriesReal", "categoriesStatic", "kitchenStations", "menuItems", "comboItems", "settings", "moduleKeys", "modulesEnabled", "subscription"]) totals[k] += result.counts[k];
         if (result.comboMetaLog?.length) comboMetaAudit.push({ restaurantLegacyId: rid, combos: result.comboMetaLog });
         if (MODE_APPLY) { completed.add(rid); saveCheckpoint(batchId, completed); }
       }
@@ -601,7 +748,13 @@ async function main() {
   try {
     const q = await setup.query(`SELECT
       (SELECT count(*) FROM restaurants) AS restaurants,
+      (SELECT count(*) FROM restaurants WHERE status = 'migration_review') AS restaurants_migration_review,
       (SELECT count(*) FROM employees) AS employees,
+      (SELECT count(*) FROM employees WHERE role = 'migration_pending') AS employees_migration_pending,
+      (SELECT count(*) FROM custom_roles) AS custom_roles,
+      (SELECT count(*) FROM restaurant_modules) AS restaurant_modules,
+      (SELECT coalesce(sum((SELECT count(*) FROM jsonb_object_keys(extra))),0)::int FROM restaurant_modules) AS module_source_keys,
+      (SELECT count(*) FROM restaurants WHERE subscription <> '{}'::jsonb) AS restaurants_with_subscription,
       (SELECT count(*) FROM tables) AS tables,
       (SELECT count(*) FROM menu_categories) AS menu_categories,
       (SELECT count(*) FROM kitchen_stations) AS kitchen_stations,

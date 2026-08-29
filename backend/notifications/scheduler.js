@@ -24,6 +24,7 @@ import {
 } from "./reportGenerator.js";
 import { formatDailyReport, formatWeeklyReport, formatMonthlyReport } from "./templates.js";
 import { NotificationService } from "./NotificationService.js";
+import { isMaintenanceMode } from "../security/maintenance.js";
 // Reused so an automatic (scheduled) report message carries the exact same
 // inline dashboard buttons as the manual /start menu — one keyboard
 // definition, one callback-handling code path, never duplicated/out-of-sync.
@@ -199,6 +200,10 @@ async function tickRestaurant(restId) {
 }
 
 async function tick() {
+  if (isMaintenanceMode()) {
+    console.log("[Scheduler] skipped — NESTA_MAINTENANCE_MODE");
+    return;
+  }
   _tickCount += 1;
   try {
     const restIds = await listRestaurantIds();

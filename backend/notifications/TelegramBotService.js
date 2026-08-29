@@ -39,6 +39,7 @@ import {
 } from "./templates.js";
 import { getTranslator } from "./locales/index.js";
 import { TOGGLEABLE_TYPES } from "./types.js";
+import { isMaintenanceMode } from "../security/maintenance.js";
 import { resolveAndLinkChat } from "./chatRegistry.js";
 import { approveOrderViaBot, cancelOrderViaBot, confirmReservationViaBot, cancelReservationViaBot } from "./orderActions.js";
 
@@ -584,6 +585,7 @@ async function pollLoop(restId, state) {
 }
 
 async function syncPollers() {
+  if (isMaintenanceMode()) return;
   const restIds = await listRestaurantIds();
   const wanted = new Map();
 

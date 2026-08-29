@@ -3,6 +3,7 @@
 import { canonicalizeRestId, parseRestId } from "./restId.js";
 import { isSafeId } from "../security/sanitize.js";
 import { permissionAllows } from "../rbac.js";
+import { isMaintenanceMode } from "../security/maintenance.js";
 
 export const LEGACY_OPERATIONAL_EVENTS = [
   "new-order",
@@ -195,6 +196,7 @@ export function authorizeLegacyEvent(authz, event) {
 }
 
 export async function authorizeLegacyPrivilegedEmit(socket, event, authorizeSocketJoinFn) {
+  if (isMaintenanceMode()) return { ok: false, code: "MAINTENANCE" };
   const current = await revalidateLegacyStaffAuthority(socket, authorizeSocketJoinFn, { force: true });
   if (!current.ok) return current;
   const operational = authorizeLegacyOperational({

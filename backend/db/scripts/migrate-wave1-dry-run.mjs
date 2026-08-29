@@ -1,18 +1,15 @@
 #!/usr/bin/env node
 // db/scripts/migrate-wave1-dry-run.mjs — READ-ONLY comparison of Firebase's
-// real data against Wave 1's Postgres schema. Reads Firebase (via
-// firebaseAdmin.js/systemDb.js, the same trusted Admin SDK path every
-// other backend read already uses) and reads Postgres (via db/postgres.js,
-// platform context). Writes NOTHING to either store — no set/push/update
-// against Firebase, no INSERT/UPDATE against Postgres. Safe to run
-// repeatedly against production data.
+// Reads Firebase via lib/fbRead.mjs (REST GET). Compares against the
+// dedicated migration PostgreSQL target. Writes nothing to Firebase.
 //
 // Entities covered (Wave 1 scope only — orders/finance/inventory/CRM/
 // delivery are later waves): restaurants, employees (users), tables,
 // menu_categories (+ subcategories), kitchen_stations, menu_items,
 // combo composition.
-import { systemGet } from "../../systemDb.js";
-import { getPool, closePool } from "../postgres.js";
+import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
+import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
+import { getPool, closePool, maskedConfig } from "../postgres.js";
 
 const MAX_EXAMPLES = 15; // cap how many concrete examples print per issue bucket
 
@@ -38,17 +35,18 @@ async function main() {
   console.log("=== Wave 1 Dry Run — READ ONLY, no writes to Firebase or PostgreSQL ===");
 
   const pool = getPool();
-  // Platform context for every Postgres read below — this script inspects
-  // across all tenants, matching how a real cross-tenant migration job
-  // would run (never a single restaurant's own session).
+  assertMigrationTarget(maskedConfig());
   const client = await pool.connect();
   await client.query("SELECT set_config('app.current_restaurant_id', '', true)");
 
-  console.log("\nReading restaurants/ root from Firebase (Admin SDK, read-only)...");
-  const snap = await systemGet("restaurants");
-  const fbRestaurants = snap.exists() ? snap.val() : {};
-  const fbRestIds = Object.keys(fbRestaurants);
+  console.log("\nReading restaurants/ from Firebase REST (fbRead, read-only)...");
+  initFirebase();
+  const fbRestIds = await shallowKeys("restaurants");
   console.log(`Found ${fbRestIds.length} restaurant(s) in Firebase.`);
+  const fbRestaurants = {};
+  for (const rid of fbRestIds) {
+    fbRestaurants[rid] = (await getValue(`restaurants/${rid}`)) || {};
+  }
 
   const pgRestaurants = await client.query("SELECT id, legacy_rtdb_id, domain FROM restaurants");
   const pgRestByLegacyId = new Map(pgRestaurants.rows.filter((r) => r.legacy_rtdb_id).map((r) => [r.legacy_rtdb_id, r]));
@@ -60,7 +58,9 @@ async function main() {
     let toCreate = 0, toUpdate = 0;
     for (const [rid, r] of Object.entries(fbRestaurants)) {
       const info = r?.info || {};
-      if (!info.domain && !info.name) { malformed.push(`${rid}: no info.domain or info.name`); continue; }
+      if (!info.domain && !info.name) {
+        malformed.push(`${rid}: no info.domain or info.name — would migrate with placeholder identity, not skip`);
+      }
       if (info.domain && pgDomains.has(info.domain) && !pgRestByLegacyId.has(rid)) {
         conflicts.push(`${rid}: domain "${info.domain}" already exists in Postgres under a different legacy_rtdb_id`);
         continue;
@@ -81,7 +81,7 @@ async function main() {
       const users = r?.users || {};
       for (const [uid, u] of Object.entries(users)) {
         fbCount++;
-        if (!u?.name || !u?.role) { malformed.push(`${rid}/${uid}: missing name or role`); malformedCount++; }
+        if (!u?.name || !u?.role) { malformed.push(`${rid}/${uid}: missing name or role — would migrate inactive/migration_pending, not skip`); }
       }
     }
     const pgCount = await client.query("SELECT count(*) FROM employees");

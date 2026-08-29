@@ -38,6 +38,7 @@
 // nothing about the existing schema was redesigned for this feature.
 import crypto from "crypto";
 import { isAdminAvailable, getAdminDb } from "../firebaseAdmin.js";
+import { isMaintenanceMode } from "../security/maintenance.js";
 import { systemGet, systemSet, systemPush, systemQueryOrderedLimit } from "../systemDb.js";
 import { sha256Hex, encryptSecret } from "../security/crypto.js";
 import { getTranslator } from "./locales/index.js";
@@ -1296,6 +1297,7 @@ async function loadBotSettings() {
 }
 
 async function syncPoller() {
+  if (isMaintenanceMode()) return;
   if (!isAdminAvailable()) return; // same graceful-degrade posture as every other Admin-SDK-only feature
 
   const settings = await loadBotSettings();

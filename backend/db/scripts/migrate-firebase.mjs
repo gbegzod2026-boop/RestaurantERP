@@ -43,6 +43,8 @@ import {
 } from "./lib/normalize.mjs";
 import * as w35 from "./lib/transforms-wave35.mjs";
 import { accept, runWaves35, WAVE2_CONFLICT, drop, postgresCounts } from "./lib/run-engine.mjs";
+import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
+import { classifyOrderFinancials } from "./lib/orderFinancials.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -225,6 +227,7 @@ function transformOrder(key, rec, ctx) {
   const chefRef = rec.chefId ? ctx.maps.users.get(rec.chefId) || null : null;
   if (rec.chefId && !chefRef) t.warnings.push({ field: "chefId", reason: "employee_reference_unresolved", detail: rec.chefId });
   const creatorRef = rec.createdByWaiterId ? ctx.maps.users.get(rec.createdByWaiterId) || null : null;
+  if (rec.createdByWaiterId && !creatorRef) t.warnings.push({ field: "createdByWaiterId", reason: "employee_reference_unresolved", detail: rec.createdByWaiterId });
 
   const custPhone = rec.customerPhone ?? rec.customerId ?? rec.clientPhone ?? null;
   const custNorm = custPhone ? normalizePhone(custPhone) : null;
@@ -300,12 +303,18 @@ function transformOrder(key, rec, ctx) {
     delivered_at: collect(t, toTimestamp(rec.deliveredAt), "deliveredAt", { fatal: false }),
     paid_at: collect(t, toTimestamp(rec.paidAt ?? rec.payment?.paidAt), "paidAt", { fatal: false }),
     cancelled_at: collect(t, toTimestamp(rec.cancelledAt), "cancelledAt", { fatal: false }),
-    extra: leftoverExtra(rec, consumed),
+    extra: (() => {
+      const extraObj = JSON.parse(leftoverExtra(rec, consumed) || "{}");
+      if (rec.waiterId && !waiterRef) extraObj.unresolved_waiter_id = rec.waiterId;
+      if (rec.chefId && !chefRef) extraObj.unresolved_chef_id = rec.chefId;
+      if (rec.createdByWaiterId && !creatorRef) extraObj.unresolved_created_by_waiter_id = rec.createdByWaiterId;
+      extraObj.financial_reconciliation = classifyOrderFinancials(rec);
+      return JSON.stringify(extraObj);
+    })(),
   };
   return { row, ...t };
 }
 
-/** orders/$orderId/items/$compositeKey → order_items row (snapshots) */
 function transformOrderItem(itemKey, item, ctx, orderLegacyId) {
   const t = { issues: [], warnings: [] };
   if (!isRecord(item)) {
@@ -361,7 +370,18 @@ function transformOrderItem(itemKey, item, ctx, orderLegacyId) {
     is_combo: collect(t, toBool(item.isCombo, false), "isCombo", { fatal: false }) ?? false,
     notes: collect(t, toText(item.notes ?? item.comment), "notes", { fatal: false }),
     extra: leftoverExtra(item, consumed),
+    line_total_origin: lineTotal != null && item.total != null && item.total !== "" ? "source_item_total" : "computed_price_x_qty",
   };
+  if (row.line_total_origin === "computed_price_x_qty") {
+    const extraObj = JSON.parse(row.extra || "{}");
+    extraObj.line_total_origin = "computed_price_x_qty";
+    row.extra = JSON.stringify(extraObj);
+  } else {
+    const extraObj = JSON.parse(row.extra || "{}");
+    extraObj.line_total_origin = "source_item_total";
+    row.extra = JSON.stringify(extraObj);
+  }
+  delete row.line_total_origin;
   return { row, ...t };
 }
 
@@ -630,6 +650,11 @@ async function buildReferenceMaps(restId, pg, client) {
 async function main() {
   const pg = await loadPg();
   const transformOnly = !pg;
+  if (pg) {
+    assertMigrationTarget(pg.maskedConfig());
+    const cfg = pg.maskedConfig();
+    console.log(`[target] ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+  }
 
   console.log("=".repeat(78));
   console.log(`Nesta ERP — Firebase → PostgreSQL migration engine`);
@@ -656,7 +681,7 @@ async function main() {
 
   let restIds = ONLY_RESTAURANT ? [ONLY_RESTAURANT] : await shallowKeys("restaurants");
   restIds.sort();
-  if (LIMIT) restIds = restIds.slice(0, LIMIT);
+  if (LIMIT && !RESUME) restIds = restIds.slice(0, LIMIT);
   console.log(`Restaurants to process: ${restIds.length}\n`);
 
   // Global duplicate detection across the whole run.
@@ -868,15 +893,15 @@ async function main() {
   for (const [entity, c] of Object.entries(per)) {
     const accounted = c.migrated + c.skipped + c.failed + c.duplicate + c.malformed;
     const pgN = pgCounts ? pgCounts[entity] : null;
-    const basis = pgCounts ? "firebase_vs_postgres" : "firebase_vs_transform_pipeline";
+    const basis = pgCounts ? (RESUME ? "firebase_vs_transform_pipeline_resume" : "firebase_vs_postgres") : "firebase_vs_transform_pipeline";
     report.reconciliation[entity] = {
       firebaseRecords: c.firebaseRecords,
       accountedFor: accounted,
       wouldMigrate: c.migrated,
       postgresRows: pgN,
-      difference: pgN == null ? null : pgN - c.migrated,
+      difference: pgN == null || RESUME ? null : pgN - c.migrated,
       unaccounted: c.firebaseRecords - accounted,
-      balanced: pgN == null
+      balanced: (RESUME || pgN == null)
         ? c.firebaseRecords === accounted
         : (pgN === c.migrated && c.firebaseRecords === accounted),
       basis,

@@ -89,6 +89,7 @@ import {
 } from "./security/rateLimit.js";
 import { isSafeId } from "./security/sanitize.js";
 import { logAuditEvent, logSecurityEvent } from "./security/auditLog.js";
+import { isMaintenanceMode, maintenanceMiddleware } from "./security/maintenance.js";
 
 dotenv.config();
 
@@ -154,6 +155,7 @@ app.use(cors(buildCorsOptions()));
 // (default 10MB) plus base64 overhead. Every other route's payloads are
 // tiny by comparison, so this is a safe app-wide increase.
 app.use(express.json({ limit: "20mb" }));
+app.use(maintenanceMiddleware);
 
 // ─── Rate limiting — brute-force / abuse protection (spec section 5) ────────
 // A generous app-wide ceiling first, then tighter per-surface limits on the
@@ -514,6 +516,7 @@ app.get("/api/health", async (_req, res) => {
     dataBackend: getDataBackend(),
     postgres: isPgAvailable(),
     qrSigning: qr.qrSigning,
+    maintenance: isMaintenanceMode(),
     ...authEnvironmentDiagnostic(),
   };
   if (!qr.ok) return res.status(503).json(payload);

@@ -1,17 +1,13 @@
 #!/usr/bin/env node
 // db/scripts/migrate-wave2-dry-run.mjs — READ-ONLY Wave 2 (Orders) data
-// quality audit. Reads real Firebase production orders (Admin SDK, via
-// systemGet — the same trusted read path every prior wave's dry-run used)
-// across all restaurants. Writes NOTHING to Firebase. Does NOT connect to
-// PostgreSQL at all — the orders table doesn't exist yet (Wave 2 schema is
-// design-only this round), so "target projection" below is computed purely
-// from the mapping rules against the real Firebase data, not validated
-// against a live table.
+// quality audit. Reads production Firebase via lib/fbRead.mjs (REST GET
+// only). DATA_BACKEND cannot redirect this source. Writes NOTHING to
+// Firebase and does not connect to PostgreSQL.
 //
 // Entities covered: orders, order_items (order.items), order status values,
 // order↔table/waiter/menu-item reference integrity, payment method values,
 // fast-order priority/fee consistency.
-import { systemGet } from "../../systemDb.js";
+import { initFirebase, shallowKeys, getValue, requestCount } from "./lib/fbRead.mjs";
 
 const MAX_EXAMPLES = 12;
 
@@ -55,11 +51,10 @@ function report(entity, counts) {
 }
 
 async function main() {
-  console.log("=== Wave 2 Dry Run — READ ONLY, no writes to Firebase, no PostgreSQL connection ===");
-  console.log("\nReading restaurants/ root from Firebase (Admin SDK, read-only)...");
-  const snap = await systemGet("restaurants");
-  const restaurants = snap.exists() ? snap.val() : {};
-  const rids = Object.keys(restaurants);
+  console.log("=== Wave 2 Dry Run — READ ONLY (fbRead REST GET), no writes to Firebase, no PostgreSQL connection ===");
+  console.log("Source is explicit Firebase REST GET. DATA_BACKEND cannot redirect this read.");
+  initFirebase();
+  const rids = await shallowKeys("restaurants");
   console.log(`Found ${rids.length} restaurant(s) in Firebase.`);
 
   let totalOrders = 0, totalItems = 0;
@@ -76,7 +71,7 @@ async function main() {
   const deliveryOrdersWithoutDeliveryNode = [];
 
   for (const rid of rids) {
-    const r = restaurants[rid];
+    const r = (await getValue(`restaurants/${rid}`)) || {};
     const orders = r?.orders || {};
     const tables = r?.tables || {};
     const users = r?.users || {};
@@ -204,6 +199,7 @@ async function main() {
   console.log(`  orphan menu_item references        : ${orphanItems.length} — item.id would need to resolve against Wave 1's already-migrated menu_items.legacy_rtdb_id`);
 
   console.log("\n=== Dry run complete. No data was written to Firebase. No PostgreSQL connection was made. ===");
+  console.log(`Firebase REST reads: ${requestCount()}`);
 }
 
 main().catch((err) => {

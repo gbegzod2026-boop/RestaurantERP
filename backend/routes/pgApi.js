@@ -1,6 +1,7 @@
 import express from "express";
 import { getDataBackend, usePostgres } from "../pg/config.js";
 import { authEnvironmentDiagnostic } from "../firebaseEnv.js";
+import { isMaintenanceMode } from "../security/maintenance.js";
 import { isPgAvailable } from "../db/postgres.js";
 import { countCanonicalRestaurants } from "../pg/platformCount.js";
 import { requirePgTenant, withRequestTenant, requestedRestId, isPgUnavailableError, isRlsDeniedError } from "../pg/tenant.js";
@@ -31,6 +32,7 @@ router.get("/meta", async (_req, res) => {
     realtime: true,
     mappedCollections: [...pathRouter.MAPPED_COLLECTIONS],
     usePostgres: usePostgres(),
+    maintenance: isMaintenanceMode(),
     ...authEnvironmentDiagnostic(),
   });
 });
