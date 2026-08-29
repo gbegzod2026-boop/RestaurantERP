@@ -4,6 +4,8 @@ import { recordEvent } from "./hub.js";
 import {
   orderToRtdb, itemToRtdb, paymentToRtdb, money, asObject, toMs,
 } from "./shape.js";
+import { sanitizeCustomerOrderCreate, sanitizeCustomerOrderUpdate } from "./customerPolicy.js";
+import { priceCustomerOrderItems, priceCustomerLineFromCatalog, loadCustomerCatalog } from "./customerPricing.js";
 
 export const ORDER_STATUS_IN = Object.freeze({
   order_created: "order_created",
@@ -84,7 +86,14 @@ export async function assembleOrder(client, restaurantUuid, row, empMap) {
   for (const it of itemRows) {
     if (it.legacy_rtdb_id) items[it.legacy_rtdb_id] = itemToRtdb(it);
   }
-  const map = empMap || await loadEmployeeLegacyMap(client, restaurantUuid);
+  let map = empMap;
+  if (!map) {
+    try {
+      map = await loadEmployeeLegacyMap(client, restaurantUuid);
+    } catch {
+      map = { byId: new Map(), byLegacy: new Map() };
+    }
+  }
   return orderToRtdb(row, {
     items,
     payment: paymentToRtdb(payRows[0] || null),
@@ -158,6 +167,45 @@ function jsonOrText(v) {
 
 export async function upsertOrder(client, ctx, legacyId, payload, events) {
   const { restaurantUuid, restId, userId } = ctx;
+  if (ctx.isCustomer === true) {
+    const existingCustomer = await client.query(
+      `SELECT * FROM orders WHERE restaurant_id = $1 AND legacy_rtdb_id = $2`,
+      [restaurantUuid, legacyId]
+    );
+    if (existingCustomer.rows[0]) {
+      const current = await assembleOrder(client, restaurantUuid, existingCustomer.rows[0]);
+      const allowed = sanitizeCustomerOrderUpdate(payload);
+      payload = {
+        ...current,
+        ...allowed,
+        status: existingCustomer.rows[0].status,
+        statusKey: existingCustomer.rows[0].status,
+        payment: current.payment,
+        waiterId: current.waiterId,
+        chefId: current.chefId,
+        total: current.total,
+        subtotal: current.subtotal,
+        customerSessionId: existingCustomer.rows[0].customer_session_id || userId,
+      };
+    } else {
+      payload = sanitizeCustomerOrderCreate(payload, ctx);
+    }
+    if (payload?.items && typeof payload.items === "object") {
+      const priced = await priceCustomerOrderItems(client, ctx, payload.items);
+      if (!priced.ok) return priced;
+      payload.items = priced.items;
+      payload.total = priced.total;
+      payload.subtotal = priced.subtotal;
+      payload.originalTotal = priced.originalTotal;
+      payload.discountAmount = 0;
+      payload.discount = 0;
+    } else {
+      payload.total = 0;
+      payload.subtotal = 0;
+      payload.originalTotal = 0;
+      payload.discountAmount = 0;
+    }
+  }
   if (payload == null) {
     const existing = await client.query(
       `SELECT id FROM orders WHERE restaurant_id = $1 AND legacy_rtdb_id = $2`,
@@ -176,7 +224,9 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
 
   const statusNorm = normalizeStatus(payload.statusKey || payload.statusV2 || payload.status) || "order_created";
   const tableInfo = await resolveTable(client, restaurantUuid, payload.table);
-  const empMap = await loadEmployeeLegacyMap(client, restaurantUuid);
+  const empMap = ctx.isCustomer === true
+    ? { byId: new Map(), byLegacy: new Map() }
+    : await loadEmployeeLegacyMap(client, restaurantUuid);
   const waiterId = payload.waiterId ? empMap.byLegacy.get(payload.waiterId) || null : null;
   const chefId = payload.chefId ? empMap.byLegacy.get(payload.chefId) || null : null;
   const createdBy = payload.createdByWaiterId ? empMap.byLegacy.get(payload.createdByWaiterId) || null : waiterId;
@@ -206,15 +256,21 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
     "inventoryDeducted", "chefScoreAwarded", "items", "createdAt", "updatedAt",
     "confirmedAt", "approvedAt", "cookingStartedAt", "startedAt", "readyAt", "finishedAt",
     "deliveredAt", "cancelledAt", "serviceFeeAmount", "subtotal", "id", "_pgId",
+    "customerSessionId",
   ]);
   const extra = {};
   for (const [k, v] of Object.entries(payload)) {
     if (!consumed.has(k) && v !== undefined) extra[k] = v;
   }
+  extra.customerSessionId = ctx.isCustomer === true
+    ? (userId || ctx.customerSessionId)
+    : (extra.customerSessionId || payload.customerSessionId || null);
 
-  const paymentStatus = payload.payment?.paid === true ? "paid"
-    : payload.payment?.requested === true ? "pending"
-    : (payload.paymentMethod === "pending" ? "pending" : "unpaid");
+  const paymentStatus = ctx.isCustomer === true
+    ? (payload.paymentStatus || "unpaid")
+    : (payload.payment?.paid === true ? "paid"
+      : payload.payment?.requested === true ? "pending"
+      : (payload.paymentMethod === "pending" ? "pending" : "unpaid"));
 
   const params = {
     legacy_rtdb_id: legacyId,
@@ -259,6 +315,9 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
     served_at: payload.servedAt ? new Date(payload.servedAt) : (statusNorm === "served" ? new Date() : null),
     paid_at: payload.paidAt || payload.payment?.paidAt ? new Date(payload.paidAt || payload.payment.paidAt) : (statusNorm === "paid" || payload.payment?.paid ? new Date() : null),
     cancelled_at: payload.cancelledAt ? new Date(payload.cancelledAt) : (statusNorm === "cancelled" ? new Date() : null),
+    customer_session_id: ctx.isCustomer === true
+      ? String(userId || ctx.customerSessionId || ctx.uid || "")
+      : (payload.customerSessionId || extra.customerSessionId || null),
   };
 
   const { rows } = await client.query(
@@ -271,7 +330,8 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
         service_fee_amount, delivery_fee, fast_fee_amount, original_total, total,
         payment_status, payment_method,         delivery_address, delivery_type, is_delivery,
         notes, priority, extra, created_at,
-        confirmed_at, cooking_started_at, ready_at, served_at, paid_at, cancelled_at
+        confirmed_at, cooking_started_at, ready_at, served_at, paid_at, cancelled_at,
+        customer_session_id
      ) VALUES (
         $1,$2,$3,$4,$5,
         $6,$7,$8,$9,$10,
@@ -281,7 +341,8 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
         $23,$24,$25,$26,$27,
         $28,$29,$30::jsonb,$31,$32,
         $33,$34,$35::jsonb,$36,
-        $37,$38,$39,$40,$41,$42
+        $37,$38,$39,$40,$41,$42,
+        NULLIF(COALESCE($43, current_setting('app.current_customer_uid', true)), '')
      )
      ON CONFLICT (restaurant_id, legacy_rtdb_id) DO UPDATE SET
         order_number = COALESCE(EXCLUDED.order_number, orders.order_number),
@@ -322,7 +383,8 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
         ready_at = COALESCE(EXCLUDED.ready_at, orders.ready_at),
         served_at = COALESCE(EXCLUDED.served_at, orders.served_at),
         paid_at = COALESCE(EXCLUDED.paid_at, orders.paid_at),
-        cancelled_at = COALESCE(EXCLUDED.cancelled_at, orders.cancelled_at)
+        cancelled_at = COALESCE(EXCLUDED.cancelled_at, orders.cancelled_at),
+        customer_session_id = COALESCE(orders.customer_session_id, EXCLUDED.customer_session_id)
      RETURNING *, (xmax = 0) AS inserted`,
     [
       params.legacy_rtdb_id, params.restaurant_id, params.order_number, params.order_type, params.source,
@@ -336,15 +398,17 @@ export async function upsertOrder(client, ctx, legacyId, payload, events) {
       params.delivery_type, params.is_delivery,
       params.notes, params.priority, JSON.stringify(params.extra), params.created_at,
       params.confirmed_at, params.cooking_started_at, params.ready_at, params.served_at, params.paid_at, params.cancelled_at,
+      params.customer_session_id,
     ]
   );
   const order = rows[0];
   const inserted = order.inserted === true;
 
   if (payload.items && typeof payload.items === "object") {
-    await syncItems(client, ctx, order, payload.items, events);
+    const itemResult = await syncItems(client, ctx, order, payload.items, events);
+    if (itemResult?.error) return itemResult;
   }
-  if (payload.payment && typeof payload.payment === "object") {
+  if (ctx.isCustomer !== true && payload.payment && typeof payload.payment === "object") {
     await upsertPayment(client, ctx, order, payload.payment, events);
   }
   if (payload.statusHistory && typeof payload.statusHistory === "object") {
@@ -393,8 +457,10 @@ async function syncItems(client, ctx, order, itemsObj, events) {
       }));
       continue;
     }
-    await upsertItem(client, ctx, order, itemKey, item, events);
+    const written = await upsertItem(client, ctx, order, itemKey, item, events);
+    if (written && written.error) return written;
   }
+  return null;
 }
 
 export async function upsertItem(client, ctx, orderOrLegacy, itemKey, item, events) {
@@ -407,10 +473,21 @@ export async function upsertItem(client, ctx, orderOrLegacy, itemKey, item, even
     order = rows[0];
     if (!order) return null;
   }
+  if (ctx.isCustomer === true) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      return { error: "Invalid order", status: 400, code: "item_invalid" };
+    }
+    const catalog = await loadCustomerCatalog(client, ctx.restaurantUuid);
+    const priced = priceCustomerLineFromCatalog(catalog, item, itemKey);
+    if (!priced.ok) return priced;
+    item = priced.item;
+  }
   const qty = Number(item.qty || item.quantity || 1) || 1;
   const price = money(item.price);
   const nameSnap = item.name != null ? item.name : "";
-  const itemStatus = normalizeStatus(item.status) || item.status || "pending";
+  const itemStatus = ctx.isCustomer === true
+    ? "pending"
+    : (normalizeStatus(item.status) || item.status || "pending");
   const allowedItem = new Set(["pending", "cooking", "ready", "delivered", "served", "cancelled", "unknown"]);
   const st = allowedItem.has(itemStatus) ? itemStatus : "pending";
 
@@ -440,8 +517,9 @@ export async function upsertItem(client, ctx, orderOrLegacy, itemKey, item, even
       jsonOrText(nameSnap), price, qty, price * qty,
       JSON.stringify(item.modifiers || []), JSON.stringify(item.extras || []),
       item.variant != null ? jsonOrText(item.variant) : null,
-      st, item.status != null ? String(item.status) : st,
-      item.kitchenStatus || null, item.isCombo === true, item.notes || item.comment || null,
+      st, ctx.isCustomer === true ? "pending" : (item.status != null ? String(item.status) : st),
+      ctx.isCustomer === true ? null : (item.kitchenStatus || null),
+      item.isCombo === true, item.notes || item.comment || null,
       JSON.stringify({}),
     ]
   );
@@ -561,7 +639,8 @@ export async function applyLifecycle(client, ctx, legacyId, action, body, events
       [ctx.restaurantUuid, legacyId]
     );
     if (!rows[0]) return { error: "Order not found", status: 404 };
-    await upsertItem(client, ctx, rows[0], itemKey, body.item || body, events);
+    const added = await upsertItem(client, ctx, rows[0], itemKey, body.item || body, events);
+    if (added?.error) return added;
     await recomputeTotal(client, ctx.restaurantUuid, rows[0].id);
     return { order: await getOrderByLegacy(client, ctx.restaurantUuid, legacyId), itemId: itemKey };
   }
@@ -573,7 +652,8 @@ export async function applyLifecycle(client, ctx, legacyId, action, body, events
       [ctx.restaurantUuid, legacyId]
     );
     if (!rows[0]) return { error: "Order not found", status: 404 };
-    await upsertItem(client, ctx, rows[0], itemKey, body.item || body, events);
+    const updated = await upsertItem(client, ctx, rows[0], itemKey, body.item || body, events);
+    if (updated?.error) return updated;
     await recomputeTotal(client, ctx.restaurantUuid, rows[0].id);
     return { order: await getOrderByLegacy(client, ctx.restaurantUuid, legacyId) };
   }

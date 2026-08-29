@@ -35,17 +35,22 @@ test("transient PostgreSQL connectivity failures map to unavailable", () => {
 });
 
 test("tenant scope enforces 401, same-tenant access, and unconditional mismatch 403", () => {
-  assert.equal(tenantScopeDecision({ verified: false }, "tenant-a").status, 401);
-  assert.deepEqual(tenantScopeDecision({ verified: true, restId: "tenant-a" }, "tenant-a"), { restId: "tenant-a" });
-  assert.equal(tenantScopeDecision({ verified: true, restId: "tenant-a", isSuperAdmin: true }, "tenant-b").status, 403);
-  assert.equal(tenantScopeDecision({ verified: true, restId: null, platformSuperAdmin: true }, "tenant-a").status, 403);
+  assert.equal(tenantScopeDecision({ verified: false }, "rest_1000000000001").status, 401);
+  assert.deepEqual(tenantScopeDecision({ verified: true, restId: "rest_1000000000001" }, "rest_1000000000001"), { restId: "rest_1000000000001" });
+  assert.equal(tenantScopeDecision({ verified: true, restId: "rest_1000000000001", isSuperAdmin: true }, "rest_2000000000002").status, 403);
+  assert.deepEqual(
+    tenantScopeDecision({ verified: true, restId: null, platformSuperAdmin: true }, "rest_1000000000001"),
+    { restId: "rest_1000000000001", isSuperAdmin: true }
+  );
+  assert.equal(tenantScopeDecision({ verified: true, restId: null, platformSuperAdmin: true }, null).code, "token_missing_restId");
 });
 
 test("RBAC tenant routes require an exact verified tenant claim", () => {
-  assert.equal(tenantAuthorityDecision({ verified: false }, "tenant-a").status, 401);
-  assert.deepEqual(tenantAuthorityDecision({ verified: true, restId: "tenant-a" }, "tenant-a"), { restId: "tenant-a" });
-  assert.equal(tenantAuthorityDecision({ verified: true, restId: "tenant-b" }, "tenant-a").status, 403);
-  assert.equal(tenantAuthorityDecision({ verified: true, restId: null, platformSuperAdmin: true }, "tenant-a").status, 403);
+  assert.equal(tenantAuthorityDecision({ verified: false }, "rest_1000000000001").status, 401);
+  assert.deepEqual(tenantAuthorityDecision({ verified: true, restId: "rest_1000000000001" }, "rest_1000000000001"), { restId: "rest_1000000000001" });
+  assert.equal(tenantAuthorityDecision({ verified: true, restId: "rest_2000000000002" }, "rest_1000000000001").status, 403);
+  assert.deepEqual(tenantAuthorityDecision({ verified: true, restId: null, platformSuperAdmin: true }, "rest_1000000000001"), { restId: "rest_1000000000001" });
+  assert.equal(tenantAuthorityDecision({ verified: true, restId: null, platformSuperAdmin: true }, null).status, 403);
 });
 
 test("tenant bridge has no request-controlled platform escalation", async () => {
@@ -58,4 +63,15 @@ test("RTDB platform grants require canonical claim", async () => {
   const raw = await readFile(new URL("../../../database.rules.json", import.meta.url), "utf8");
   assert.doesNotMatch(raw, /auth\.token\.restId == null && auth\.token\.firebase\.sign_in_provider/);
   assert.match(raw, /auth\.token\.platformSuperAdmin == true/);
+});
+
+test("legacy admin and chef socket rooms use canonical token plus PostgreSQL authority", async () => {
+  const source = await readFile(new URL("../../server.js", import.meta.url), "utf8");
+  assert.match(source, /const token = data\.token \|\| socket\.handshake\?\.auth\?\.token/);
+  assert.match(source, /authorizeSocketJoin\(\{ token, restId, userId:/);
+  assert.match(source, /socket\.on\("chef:join"/);
+  assert.match(source, /socket\.on\("admin-connect"/);
+  assert.match(source, /revalidateLegacyStaffAuthority/);
+  assert.match(source, /authorizeLegacyPrivilegedEmit/);
+  assert.match(source, /leaveOperationalRooms\(socket\)/);
 });

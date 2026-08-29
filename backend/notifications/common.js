@@ -6,6 +6,8 @@
 // restaurants/$restId now, so every read/write here goes through the
 // admin-or-client fallback (systemDb.js) instead of the plain client SDK.
 import { systemGet, systemUpdate, systemPush } from "../systemDb.js";
+import { usePostgres } from "../pg/config.js";
+import { getPool } from "../db/postgres.js";
 
 export function basePath(restId) {
   return `restaurants/${restId}`;
@@ -60,6 +62,12 @@ export async function appendNotificationLog(restId, entry) {
 }
 
 export async function listRestaurantIds() {
+  if (usePostgres()) {
+    const { rows } = await getPool().query(
+      "SELECT legacy_rtdb_id FROM restaurants WHERE legacy_rtdb_id IS NOT NULL ORDER BY legacy_rtdb_id"
+    );
+    return rows.map((row) => row.legacy_rtdb_id);
+  }
   const snap = await systemGet("restaurants");
   const data = snap.val() || {};
   return Object.keys(data);

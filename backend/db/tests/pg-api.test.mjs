@@ -25,8 +25,8 @@ async function main() {
 
   try {
     console.log("Creating Phase 2 API fixtures...");
-    legacyA = `rest_p2a_${suffix}`;
-    legacyB = `rest_p2b_${suffix}`;
+    legacyA = `rest_${suffix}`;
+    legacyB = `rest_${suffix + 1}`;
     const ra = await setup.query(
       `INSERT INTO restaurants (domain, name, legacy_rtdb_id) VALUES ($1,$2,$3) RETURNING id`,
       [`p2-a-${suffix}.nestacrm.uz`, "Phase2 A", legacyA]

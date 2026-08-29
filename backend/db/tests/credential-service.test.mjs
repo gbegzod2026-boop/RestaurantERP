@@ -10,12 +10,13 @@ import {
 
 test("credential upsert stores only a bcrypt hash", async () => {
   const calls = [];
-  const client = { query: async (...args) => { calls.push(args); return { rows: [] }; } };
+  const client = { query: async (...args) => { calls.push(args); return { rows: [], rowCount: 0 }; } };
   await upsertEmployeeCredential(client, { employeeId: "employee-id", pin: "2468" });
-  assert.equal(calls.length, 1);
-  assert.doesNotMatch(calls[0][0], /password_enc\s*=\s*EXCLUDED/i);
-  assert.notEqual(calls[0][1][1], "2468");
-  assert.match(calls[0][1][1], /^\$2[aby]\$/);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0][0], /^UPDATE employee_credentials/);
+  assert.match(calls[1][0], /^INSERT INTO employee_credentials/);
+  assert.ok(calls.every(([sql]) => !/ON CONFLICT/i.test(sql)));
+  assert.ok(calls.every(([, params]) => params[1] !== "2468" && /^\$2[aby]\$/.test(params[1])));
 });
 
 test("PIN uniqueness check uses login-reader privilege and restores nesta_app", async () => {

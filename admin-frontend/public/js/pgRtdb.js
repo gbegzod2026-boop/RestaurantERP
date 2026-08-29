@@ -1,6 +1,7 @@
-// pgRtdb.js — Firebase RTDB drop-in that routes mapped paths through the
-// PostgreSQL HTTPS API + Socket.IO when DATA_BACKEND=postgres.
-// Unmapped paths (subscription, systemData, credentials, …) still use Firebase.
+// pgRtdb.js — Firebase RTDB drop-in that routes tenant application data
+// through the PostgreSQL HTTPS API + Socket.IO when DATA_BACKEND=postgres.
+// In postgres mode, unmapped tenant paths fail closed (unmapped_path).
+// Retained native Firebase: Auth (outside this module), systemData, .info.
 import {
   ref as fbRef,
   onValue as fbOnValue,
@@ -20,15 +21,11 @@ import {
   onChildRemoved as fbOnChildRemoved,
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { canonicalizeRestId, parseRestId } from "./pgRestId.js";
+import { isMapped, postgresDataPlane } from "./pgDataPlane.js";
+import { matchesSubscriptionMessage, matchesTenantEvent } from "./pgRealtimeProtocol.js";
 
 export { forceWebSockets, getDatabase } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-const MAPPED = new Set([
-  "orders", "menu", "categories", "tables", "users", "customers", "reservations",
-  "inventory", "ingredients", "notifications", "settings", "orderChangeRequests",
-  "courierAssignments", "couriers", "orderTimeline", "meta", "activityLogs",
-  "waiterCalls", "kitchenStations", "orderChats",
-]);
 
 let _mode = "unknown";
 let _modeP = null;
@@ -44,19 +41,110 @@ let _tokenCache = { token: null, exp: 0, uid: null };
 let _getTokenP = null;
 let _forceRefreshP = null;
 let _authHooked = false;
+let _tenantAuthority = { uid: null, restId: null, platformSuperAdmin: false, ts: 0, expMs: 0, gen: null };
 let _tenantAuthorityP = null;
 const _inflightGet = new Map();
 const _refreshTimers = new Map();
+let _authDenied = null; // { status, code, uid, restId, gen, ts }
+let _subscribedAck = false;
+let _pendingResync = false;
+let _resyncInFlight = false;
+let _authEpoch = 0;
+let _authTransitionSeq = 0;
+let _observedIdentityKey = null;
+let _subscriptionSerial = 0;
+let _activeSubscription = null; // { restId, generation, epoch }
+
+function clearAuthorityCaches() {
+  _tenantAuthority = { uid: null, restId: null, platformSuperAdmin: false, ts: 0, expMs: 0, gen: null };
+  _tenantAuthorityP = null;
+  _authDenied = null;
+}
+
+function tokenGeneration(user) {
+  return `${user?.uid || ""}:${_tokenCache.exp || 0}`;
+}
+
+function denialHits(uid, restId, gen) {
+  if (!_authDenied) return false;
+  if (_authDenied.uid !== uid || _authDenied.restId !== restId || _authDenied.gen !== gen) return false;
+  return Date.now() - _authDenied.ts < 15_000;
+}
+
+function rememberDenial(status, code, uid, restId, gen) {
+  _authDenied = { status, code, uid, restId, gen, ts: Date.now() };
+}
+
+function invalidateRealtimeSubscription() {
+  _authEpoch += 1;
+  _subscriptionSerial += 1;
+  const previous = _activeSubscription;
+  _activeSubscription = null;
+  _subscribedAck = false;
+  _pendingResync = false;
+  _resyncInFlight = false;
+  _lastSeq = 0;
+  _socketRestId = null;
+  if (_socket && previous) {
+    _socket.emit("nesta:unsubscribe", {
+      restId: previous.restId,
+      generation: previous.generation,
+    });
+  }
+  for (const L of _listeners) {
+    L.halted = true;
+    L.epoch = -1;
+  }
+  if (typeof window !== "undefined") window.__nestaRealtimeState = "idle";
+}
+
+async function resumeRealtimeForCurrentIdentity(transitionSeq) {
+  for (const L of _listeners) {
+    if (transitionSeq !== _authTransitionSeq) return;
+    const restId = restIdOf(L.path);
+    if (!restId) continue;
+    try {
+      await ensureTenantAuthority(L.path);
+      if (transitionSeq !== _authTransitionSeq) return;
+      L.halted = false;
+      L.epoch = _authEpoch;
+      await ensureSocket(restId);
+      if (transitionSeq === _authTransitionSeq) scheduleRefresh(L);
+    } catch {
+      L.halted = true;
+    }
+  }
+}
+
+async function handleAuthIdentity(user) {
+  const transitionSeq = ++_authTransitionSeq;
+  let restId = null;
+  if (user) {
+    try {
+      const result = await user.getIdTokenResult(false);
+      if (transitionSeq !== _authTransitionSeq) return;
+      restId = canonicalizeRestId(result?.claims?.restId ?? result?.claims?.restaurantId ?? null);
+    } catch { /* invalid tokens are handled by normal API authorization */ }
+  }
+  const identityKey = user ? `${user.uid}:${restId || ""}` : null;
+  if (identityKey === _observedIdentityKey) return;
+  _observedIdentityKey = identityKey;
+  _tokenCache = { token: null, exp: 0, uid: null };
+  _waitUserP = null;
+  clearAuthorityCaches();
+  invalidateRealtimeSubscription();
+  if (user) await resumeRealtimeForCurrentIdentity(transitionSeq);
+}
 
 function hookAuthLifecycle() {
   if (_authHooked) return;
   _authHooked = true;
   try {
-    getAuth().onAuthStateChanged((user) => {
-      if (!user || user.uid !== _tokenCache.uid) {
-        _tokenCache = { token: null, exp: 0, uid: null };
-      }
-    });
+    const auth = getAuth();
+    auth.onAuthStateChanged((user) => { void handleAuthIdentity(user); });
+    if (typeof auth.onIdTokenChanged === "function") {
+      auth.onIdTokenChanged((user) => { void handleAuthIdentity(user); });
+    }
   } catch { /* Auth app may not be ready on first import */ }
 }
 
@@ -117,6 +205,7 @@ async function getBearerToken({ forceRefresh = false } = {}) {
   if (forceRefresh) {
     if (_forceRefreshP) return _forceRefreshP;
     _forceRefreshP = (async () => {
+      clearAuthorityCaches();
       const token = await user.getIdToken(true);
       _tokenCache = {
         token,
@@ -150,7 +239,10 @@ export async function resolveClientDataBackend() {
 
 export function classifyClientError(error) {
   const status = Number(error?.status) || 0;
-  const code = error?.code === "PG_UNAVAILABLE" ? "PG_UNAVAILABLE" : null;
+  const code = error?.code === "PG_UNAVAILABLE" ? "PG_UNAVAILABLE" : (error?.code || error?.error || null);
+  if (status === 400 || code === "unmapped_path" || code === "restId_invalid" || code === "restId_conflict") {
+    return { code: code || "INVALID_INPUT", status: 400 };
+  }
   if (status === 401) return { code: "AUTH_REQUIRED", status: 401 };
   if (status === 403) return { code: "TENANT_FORBIDDEN", status: 403 };
   if (status === 404) return { code: "NOT_FOUND", status: 404 };
@@ -159,28 +251,70 @@ export function classifyClientError(error) {
   return { code: "UNEXPECTED", status: 500 };
 }
 
+function restIdOf(path) {
+  const segs = String(path).split("/").filter(Boolean);
+  return segs[0] === "restaurants" ? segs[1] : null;
+}
+
+function authorityTtlMs(expMs) {
+  const untilExp = (Number(expMs) || 0) - Date.now() - 30_000;
+  return Math.max(0, Math.min(60_000, untilExp));
+}
+
 async function ensureTenantAuthority(path) {
-  const requestedRestId = restIdOf(path);
-  if (!requestedRestId) return;
+  const rawRestId = restIdOf(path);
+  if (!rawRestId) return;
+  const parsed = parseRestId(rawRestId);
+  if (!parsed.ok || parsed.empty) {
+    throw httpError(400, { error: "Invalid restaurant id", code: "restId_invalid" });
+  }
+  const requestedRestId = parsed.restId;
   const user = await waitForAuthUser();
-  if (!user) throw httpError(401, { error: "AUTH_REQUIRED" });
+  if (!user) throw httpError(401, { error: "AUTH_REQUIRED", code: "token_missing" });
+  const gen = tokenGeneration(user);
+  if (denialHits(user.uid, requestedRestId, gen)) {
+    throw httpError(_authDenied.status, { error: _authDenied.code, code: _authDenied.code });
+  }
+  const now = Date.now();
+  const cacheTtl = authorityTtlMs(_tenantAuthority.expMs);
+  const cacheFresh = _tenantAuthority.uid === user.uid
+    && _tenantAuthority.gen === gen
+    && cacheTtl > 0
+    && (now - _tenantAuthority.ts) < cacheTtl;
+  if (cacheFresh && (_tenantAuthority.restId || _tenantAuthority.platformSuperAdmin === true)) {
+    if (_tenantAuthority.platformSuperAdmin === true) return;
+    if (_tenantAuthority.restId !== requestedRestId) {
+      throw httpError(403, { error: "TENANT_FORBIDDEN", code: "restId_mismatch" });
+    }
+    return;
+  }
   if (!_tenantAuthorityP) {
     _tenantAuthorityP = (async () => {
       try {
         const result = await user.getIdTokenResult(true);
         const claims = result?.claims || {};
+        const expMs = result?.expirationTime ? Date.parse(result.expirationTime) : (tokenExpMs(_tokenCache.token, Date.now() + 60_000));
         return {
           uid: user.uid,
-          restId: claims.restId ?? claims.restaurantId ?? null,
+          restId: canonicalizeRestId(claims.restId ?? claims.restaurantId ?? null),
+          platformSuperAdmin: claims.platformSuperAdmin === true,
+          expMs,
+          gen: `${user.uid}:${expMs}`,
         };
       } catch {
-        throw httpError(403, { error: "TENANT_FORBIDDEN" });
+        throw httpError(403, { error: "TENANT_FORBIDDEN", code: "token_invalid" });
       }
     })().finally(() => { _tenantAuthorityP = null; });
   }
   const authority = await _tenantAuthorityP;
-  if (authority.uid !== user.uid || authority.restId !== requestedRestId) {
-    throw httpError(403, { error: "TENANT_FORBIDDEN" });
+  _tokenCache.exp = authority.expMs || _tokenCache.exp;
+  _tenantAuthority = { ...authority, ts: Date.now() };
+  if (authority.uid !== user.uid) {
+    throw httpError(403, { error: "TENANT_FORBIDDEN", code: "restId_mismatch" });
+  }
+  if (authority.platformSuperAdmin === true) return;
+  if (authority.restId !== requestedRestId) {
+    throw httpError(403, { error: "TENANT_FORBIDDEN", code: "restId_mismatch" });
   }
 }
 
@@ -224,21 +358,11 @@ function pathOf(r) {
   return "";
 }
 
-function restIdOf(path) {
-  const segs = String(path).split("/").filter(Boolean);
-  return segs[0] === "restaurants" ? segs[1] : null;
-}
-
-function isMapped(path) {
-  const segs = String(path).split("/").filter(Boolean);
-  return segs[0] === "restaurants" && segs.length >= 3 && MAPPED.has(segs[2]);
-}
-
 async function authHeaders(path, { forceRefresh = false } = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = await getBearerToken({ forceRefresh });
   if (token) headers.Authorization = `Bearer ${token}`;
-  const restId = restIdOf(path);
+  const restId = canonicalizeRestId(restIdOf(path));
   if (restId) {
     headers["x-rest-id"] = restId;
     headers["x-user-id"] = getAuth().currentUser?.uid || "";
@@ -247,10 +371,11 @@ async function authHeaders(path, { forceRefresh = false } = {}) {
 }
 
 function httpError(status, json) {
-  const classification = classifyClientError({ status, code: json?.error });
+  const classification = classifyClientError({ status, code: json?.error || json?.code });
   const err = new Error(classification.code);
-  err.status = classification.status;
-  err.code = classification.code;
+  err.status = status === 400 ? 400 : classification.status;
+  err.code = json?.code || classification.code;
+  err.details = json?.details != null ? json.details : json || null;
   return err;
 }
 
@@ -261,7 +386,7 @@ async function api(method, url, body, pathForAuth, { _retried401 = false, _retri
   if (!headers.Authorization) {
     throw httpError(401, { error: "Authentication required" });
   }
-  const restId = restIdOf(path);
+  const restId = canonicalizeRestId(restIdOf(path));
   const payload = body && restId ? { ...body, restId } : body;
   const res = await fetch(url, {
     method,
@@ -273,6 +398,17 @@ async function api(method, url, body, pathForAuth, { _retried401 = false, _retri
   if (res.status === 401 && !_retried401) {
     await getBearerToken({ forceRefresh: true });
     return api(method, url, body, pathForAuth, { _retried401: true, _retried429 });
+  }
+  if (res.status === 401) {
+    const user = getAuth().currentUser;
+    rememberDenial(401, json?.code || "token_invalid", user?.uid || null, restId, tokenGeneration(user));
+  }
+  if (res.status === 403) {
+    const code = json?.code || "";
+    if (code === "restId_mismatch" || code === "token_missing_restId") {
+      const user = getAuth().currentUser;
+      rememberDenial(403, code, user?.uid || null, restId, tokenGeneration(user));
+    }
   }
   if (res.status === 429 && _retried429 < 3) {
     const retryAfter = Number(res.headers.get("Retry-After"));
@@ -320,9 +456,17 @@ function toFb(r) {
 }
 
 async function usePg(r) {
-  await ensureTenantAuthority(pathOf(r));
+  const path = pathOf(r);
   const mode = await ensureMode();
-  return mode === "postgres" && isMapped(pathOf(r));
+  const plane = postgresDataPlane(path, mode);
+  if (plane === "unmapped") {
+    throw httpError(400, { error: "Unsupported path", code: "unmapped_path" });
+  }
+  if (plane === "postgres") {
+    await ensureTenantAuthority(path);
+    return true;
+  }
+  return false;
 }
 
 function applyQuery(value, constraints) {
@@ -358,7 +502,7 @@ function applyQuery(value, constraints) {
 
 async function pgGet(r) {
   const path = pathOf(r);
-  const qkey = path + "\0" + JSON.stringify(r._query || null);
+  const qkey = `${_authEpoch}\0${path}\0${JSON.stringify(r._query || null)}`;
   if (_inflightGet.has(qkey)) return _inflightGet.get(qkey);
   const pending = (async () => {
     const json = await api("POST", "/api/pg/rtdb/get", { path }, path);
@@ -369,6 +513,85 @@ async function pgGet(r) {
   })().finally(() => { _inflightGet.delete(qkey); });
   _inflightGet.set(qkey, pending);
   return pending;
+}
+
+function clientPushId() {
+  const chars = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+  let ts = Date.now();
+  let time = "";
+  for (let i = 7; i >= 0; i--) {
+    time = chars.charAt(ts % 64) + time;
+    ts = Math.floor(ts / 64);
+  }
+  let rand = "";
+  for (let i = 0; i < 12; i++) rand += chars.charAt(Math.floor(Math.random() * 64));
+  return time + rand;
+}
+
+async function emitSubscribe(restId) {
+  const token = await getBearerToken().catch(() => null);
+  const canonical = canonicalizeRestId(restId);
+  if (!canonical || !_socket) return;
+  const generation = `${Date.now()}:${++_subscriptionSerial}:${_authEpoch}`;
+  _activeSubscription = { restId: canonical, generation, epoch: _authEpoch };
+  _subscribedAck = false;
+  _socket.emit("nesta:subscribe", {
+    restId: canonical,
+    generation,
+    token,
+    userId: getAuth().currentUser?.uid,
+  });
+}
+
+function waitForSocketEvent(event, timeoutMs, predicate = () => true) {
+  return new Promise((resolve) => {
+    if (!_socket) return resolve(false);
+    const t = setTimeout(() => {
+      _socket.off(event, onMsg);
+      resolve(false);
+    }, timeoutMs);
+    const onMsg = (msg) => {
+      if (!predicate(msg)) return;
+      clearTimeout(t);
+      _socket.off(event, onMsg);
+      resolve(true);
+    };
+    _socket.on(event, onMsg);
+  });
+}
+
+async function emitResyncWithRetry() {
+  if (_resyncInFlight || !_socket || !_socketRestId || !_subscribedAck) return;
+  const expected = _activeSubscription;
+  if (!expected || expected.epoch !== _authEpoch || expected.restId !== _socketRestId) return;
+  _resyncInFlight = true;
+  try {
+    for (let i = 0; i < 3; i++) {
+      if (
+        !_subscribedAck ||
+        _activeSubscription?.generation !== expected.generation ||
+        _activeSubscription?.epoch !== expected.epoch
+      ) break;
+      _socket.emit("nesta:resync", {
+        restId: expected.restId,
+        generation: expected.generation,
+        afterSeq: _lastSeq,
+      });
+      const ok = await Promise.race([
+        waitForSocketEvent("nesta:resync", 4000, (msg) =>
+          msg?.restId === expected.restId && msg?.generation === expected.generation),
+        waitForSocketEvent("nesta:error", 4000, (e) =>
+          e?.generation === expected.generation &&
+          (e?.error === "not_subscribed" || e?.error === "resync_failed" || e?.error === "subscribe_denied")
+        ).then((hit) => !hit && false),
+      ]);
+      if (ok) return;
+      await sleep(300 * (i + 1));
+    }
+    for (const L of _listeners) scheduleRefresh(L);
+  } finally {
+    _resyncInFlight = false;
+  }
 }
 
 async function ensureSocket(restId) {
@@ -406,39 +629,67 @@ async function ensureSocket(restId) {
     _socket.on("connect", async () => {
       const wasReconnect = window.__nestaRealtimeState === "disconnected";
       window.__nestaRealtimeState = "connected";
+      _subscribedAck = false;
+      _pendingResync = wasReconnect;
       try {
-        const token = await getBearerToken();
-        if (_socketRestId) _socket.emit("nesta:subscribe", { restId: _socketRestId, token, userId: getAuth().currentUser?.uid });
-        if (wasReconnect) _socket.emit("nesta:resync", { restId: _socketRestId, afterSeq: _lastSeq });
+        if (_socketRestId) await emitSubscribe(_socketRestId);
       } catch { /* */ }
     });
-    _socket.on("disconnect", () => { window.__nestaRealtimeState = "disconnected"; });
+    _socket.on("disconnect", () => {
+      window.__nestaRealtimeState = "disconnected";
+      _subscribedAck = false;
+    });
     _socket.on("nesta:event", (ev) => {
+      const active = _activeSubscription;
+      if (!matchesTenantEvent(active, ev, _authEpoch, _subscribedAck)) return;
       if (ev?.seq) _lastSeq = Math.max(_lastSeq, Number(ev.seq) || 0);
+      if (!ev?.path) return;
       for (const L of _listeners) {
+        if (L.halted || L.epoch !== _authEpoch || restIdOf(L.path) !== active.restId) continue;
         const p = L.path;
-        if (!ev.path || ev.path === p || ev.path.startsWith(p + "/") || p.startsWith(String(ev.path) + "/") || prefixMatch(p, ev.path)) {
-          scheduleRefresh(L);
-        } else if (ev.restId && restIdOf(p) === ev.restId) {
+        if (ev.path === p || ev.path.startsWith(p + "/") || p.startsWith(String(ev.path) + "/") || prefixMatch(p, ev.path)) {
           scheduleRefresh(L);
         }
       }
     });
     _socket.on("nesta:resync", (msg) => {
+      const active = _activeSubscription;
+      if (!matchesSubscriptionMessage(active, msg, _authEpoch)) return;
       const events = msg?.events || [];
       if (events.length) _lastSeq = Math.max(_lastSeq, ...events.map((e) => Number(e.seq) || 0));
-      for (const L of _listeners) scheduleRefresh(L);
+      for (const L of _listeners) {
+        if (!L.halted && L.epoch === _authEpoch && restIdOf(L.path) === active.restId) scheduleRefresh(L);
+      }
     });
-    _socket.on("nesta:subscribed", () => { window.__nestaRealtimeState = "subscribed"; });
+    _socket.on("nesta:subscribed", async (msg) => {
+      const active = _activeSubscription;
+      if (!matchesSubscriptionMessage(active, msg, _authEpoch, { requireOk: true })) return;
+      _subscribedAck = true;
+      window.__nestaRealtimeState = "subscribed";
+      if (_pendingResync) {
+        _pendingResync = false;
+        await emitResyncWithRetry();
+      }
+    });
+    _socket.on("nesta:error", (err) => {
+      if (err?.generation && err.generation !== _activeSubscription?.generation) return;
+      if (err?.error === "resync_failed" || err?.error === "not_subscribed") {
+        for (const L of _listeners) {
+          if (!L.halted && L.epoch === _authEpoch) scheduleRefresh(L);
+        }
+      }
+    });
   }
   if (_socketRestId !== restId) {
-    _socketRestId = restId;
-    try {
-      const token = await getBearerToken();
-      _socket.emit("nesta:subscribe", { restId, token, userId: getAuth().currentUser?.uid });
-    } catch {
-      _socket.emit("nesta:subscribe", { restId, userId: getAuth().currentUser?.uid });
+    if (_activeSubscription) {
+      _socket.emit("nesta:unsubscribe", {
+        restId: _activeSubscription.restId,
+        generation: _activeSubscription.generation,
+      });
     }
+    _lastSeq = 0;
+    _socketRestId = restId;
+    await emitSubscribe(restId);
   }
 }
 
@@ -452,7 +703,8 @@ function prefixMatch(listenerPath, eventPath) {
 }
 
 function scheduleRefresh(L) {
-  const key = L.path + "\0" + JSON.stringify(L.query || null);
+  if (L.halted || L.epoch !== _authEpoch) return;
+  const key = `${L.epoch}\0${L.path}\0${JSON.stringify(L.query || null)}`;
   if (_refreshTimers.has(key)) return;
   const t = setTimeout(() => {
     _refreshTimers.delete(key);
@@ -462,10 +714,16 @@ function scheduleRefresh(L) {
 }
 
 async function refreshListener(L) {
+  if (L.halted || L.epoch !== _authEpoch) return;
+  const expectedEpoch = L.epoch;
   try {
     const value = await pgGet({ __nestaPath: L.path, _query: L.query });
+    if (L.halted || L.epoch !== expectedEpoch || expectedEpoch !== _authEpoch) return;
     L.cb(snap(L.path, value));
   } catch (err) {
+    if (err?.status === 401 || (err?.status === 403 && (err?.code === "restId_mismatch" || err?.code === "token_missing_restId" || err?.code === "TENANT_FORBIDDEN"))) {
+      L.halted = true;
+    }
     if (L.errCb) L.errCb(err);
   }
 }
@@ -480,7 +738,7 @@ export function onValue(r, cb, errCb) {
       unsub = fbOnValue(toFb(r), cb, errCb) || (() => fbOff(toFb(r), "value", cb));
       return;
     }
-    const L = { path, cb, errCb, query: r._query };
+    const L = { path, cb, errCb, query: r._query, epoch: _authEpoch, halted: false };
     _listeners.add(L);
     await ensureSocket(restIdOf(path));
     await refreshListener(L);
@@ -549,14 +807,17 @@ export async function set(r, value) {
 
 export async function update(r, values) {
   const path = pathOf(r);
-  await ensureTenantAuthority(path);
+  const mode = await ensureMode();
   const keys = values && typeof values === "object" ? Object.keys(values) : [];
-  const looksMulti = keys.some((k) => k.includes("/"));
-  if ((await ensureMode()) !== "postgres") return fbUpdate(toFb(r), values);
-  const anyMapped = looksMulti
-    ? keys.some((k) => isMapped(k.startsWith("restaurants/") ? k : `${path}/${k}`))
-    : isMapped(path);
-  if (!anyMapped) return fbUpdate(toFb(r), values);
+  const absKeys = keys.map((k) => (k.startsWith("restaurants/") || k.startsWith("systemData/") || k.startsWith(".info/") ? k : (path ? `${path}/${k}` : k)));
+  if (mode !== "postgres") return fbUpdate(toFb(r), values);
+  const planes = (absKeys.length ? absKeys : [path]).map((k) => postgresDataPlane(k, mode));
+  if (planes.some((p) => p === "unmapped") || postgresDataPlane(path, mode) === "unmapped") {
+    throw httpError(400, { error: "Unsupported path", code: "unmapped_path" });
+  }
+  const anyPg = planes.some((p) => p === "postgres") || postgresDataPlane(path, mode) === "postgres";
+  if (!anyPg) return fbUpdate(toFb(r), values);
+  await ensureTenantAuthority(path || absKeys[0]);
   const json = await api("POST", "/api/pg/rtdb/update", { path, value: values }, path || keys[0]);
   if (json.fallback) throw httpError(503, { error: "PG_UNAVAILABLE" });
 }
@@ -570,14 +831,16 @@ export async function remove(r) {
 
 export function push(r, value) {
   const path = pathOf(r);
-  const native = fbPush(toFb(r));
-  const key = native.key;
-  const childPath = path ? `${path}/${key}` : key;
+  const localKey = clientPushId();
+  const childPath = path ? `${path}/${localKey}` : localKey;
   const wrapped = wrapRef(childPath, r?._db);
-  wrapped.key = key;
-  wrapped._fb = native;
+  wrapped.key = localKey;
   const thenable = Promise.resolve().then(async () => {
     if (!(await usePg(r))) {
+      const native = fbPush(toFb(r));
+      wrapped.key = native.key;
+      wrapped._fb = native;
+      wrapped.__nestaPath = path ? `${path}/${native.key}` : native.key;
       if (value !== undefined) await fbSet(native, value);
       return wrapped;
     }

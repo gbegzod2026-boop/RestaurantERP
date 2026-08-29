@@ -59,7 +59,7 @@ if (!isAdminAvailable()) {
   process.exit(1);
 }
 
-const db = getAdminDb();
+const db = getAdminDb({ purpose: "migration" });
 
 const restaurantsSnap = await db.ref("restaurants").get(); // READ ONLY at this point
 const restaurants = restaurantsSnap.val() || {};

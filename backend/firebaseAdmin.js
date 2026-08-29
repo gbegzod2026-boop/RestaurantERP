@@ -29,6 +29,15 @@ import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import admin from "firebase-admin";
+import { assertFirebaseDataPlaneAccess } from "./dataPlane.js";
+import {
+  assertIsolatedAuthEnvironment,
+  getAuthEmulatorHost,
+  getConfiguredFirebaseProjectId,
+  isolatedAuthRequired,
+  isProductionFirebaseProject,
+  logAuthEnvironment,
+} from "./firebaseEnv.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,12 +47,43 @@ const SERVICE_ACCOUNT_PATH =
 
 let _app = null;
 let _warned = false;
+const _dbViews = new Map();
 
 function tryInit() {
   if (_app) return _app;
   if (admin.apps.length) {
     _app = admin.apps[0];
     return _app;
+  }
+
+  try {
+    assertIsolatedAuthEnvironment();
+  } catch (err) {
+    console.error("❌ [firebaseAdmin]", err.message);
+    if (isolatedAuthRequired()) process.exit(1);
+    return null;
+  }
+
+  const emulatorHost = getAuthEmulatorHost();
+  const projectId = getConfiguredFirebaseProjectId();
+
+  // Auth emulator: never load production service-account JSON. Admin SDK
+  // talks to FIREBASE_AUTH_EMULATOR_HOST and verifyIdToken is real emulator crypto.
+  if (emulatorHost) {
+    if (isProductionFirebaseProject(projectId)) {
+      console.error("❌ [firebaseAdmin] refusing Auth emulator with production FIREBASE_PROJECT_ID");
+      if (isolatedAuthRequired()) process.exit(1);
+      return null;
+    }
+    try {
+      _app = admin.initializeApp({ projectId: projectId || "nesta-staging" });
+      console.log("✅ Firebase Admin SDK initialized (Auth emulator; real verifyIdToken)");
+      logAuthEnvironment();
+      return _app;
+    } catch (err) {
+      console.error("❌ [firebaseAdmin] Failed to initialize emulator Admin:", err.message);
+      return null;
+    }
   }
 
   // GOOGLE_APPLICATION_CREDENTIALS is the standard Google Cloud env var —
@@ -69,11 +109,18 @@ function tryInit() {
       ? admin.credential.applicationDefault()
       : admin.credential.cert(JSON.parse(readFileSync(SERVICE_ACCOUNT_PATH, "utf8")));
 
+    if (isolatedAuthRequired() && isProductionFirebaseProject(projectId)) {
+      console.error("❌ [firebaseAdmin] isolated auth refused production service account project");
+      process.exit(1);
+    }
+
     _app = admin.initializeApp({
       credential,
-      databaseURL: process.env.FIREBASE_DATABASE_URL,
+      databaseURL: isolatedAuthRequired() ? undefined : process.env.FIREBASE_DATABASE_URL,
+      projectId: projectId || undefined,
     });
     console.log("✅ Firebase Admin SDK initialized (real auth sessions enabled)");
+    logAuthEnvironment();
     return _app;
   } catch (err) {
     console.error("❌ [firebaseAdmin] Failed to initialize:", err.message);
@@ -90,9 +137,26 @@ export function getAdminAuth() {
   return app ? admin.auth(app) : null;
 }
 
-export function getAdminDb() {
+export function getAdminDb({ purpose = "runtime" } = {}) {
   const app = tryInit();
-  return app ? admin.database(app) : null;
+  if (!app) return null;
+  const key = String(purpose);
+  if (_dbViews.has(key)) return _dbViews.get(key);
+  const database = admin.database(app);
+  const guarded = new Proxy(database, {
+    get(target, property, receiver) {
+      if (property === "ref") {
+        return (path) => {
+          assertFirebaseDataPlaneAccess(path, { purpose });
+          return target.ref(path);
+        };
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  _dbViews.set(key, guarded);
+  return guarded;
 }
 
 // adminAuth()/adminDb() — plain aliases of getAdminAuth()/getAdminDb().

@@ -29,8 +29,63 @@
 import { ref, push, set, update, get, remove, query, orderByChild, orderByKey, orderByValue, equalTo, limitToLast, limitToFirst, runTransaction } from "firebase/database";
 import { getDB } from "./db.js";
 import { isAdminAvailable, getAdminDb } from "./firebaseAdmin.js";
+import { assertFirebaseDataPlaneAccess, classifyBackendDataPath } from "./dataPlane.js";
+import { usePostgres } from "./pg/config.js";
+import { withLegacyRest } from "./pg/legacyBridge.js";
+import * as pathRouter from "./pg/pathRouter.js";
+
+function snapshot(value) {
+  return { exists: () => value !== null && value !== undefined, val: () => value ?? null };
+}
+
+function postgresTenantPath(path) {
+  if (!usePostgres()) return null;
+  const classification = classifyBackendDataPath(path);
+  if (classification.kind !== "tenant") return null;
+  const restId = classification.segments[0] === "restaurants" ? classification.segments[1] : null;
+  if (!restId || !pathRouter.isMappedPath(classification.path)) {
+    assertFirebaseDataPlaneAccess(path);
+  }
+  return { path: classification.path, restId };
+}
+
+async function pgRead(path) {
+  const tenant = postgresTenantPath(path);
+  if (!tenant) return null;
+  const result = await withLegacyRest(tenant.restId, (client, ctx) =>
+    pathRouter.rtdbGet(client, ctx, tenant.path));
+  if (result?.error) {
+    const err = new Error(result.error);
+    err.code = result.code || "PG_PATH_UNAVAILABLE";
+    throw err;
+  }
+  return snapshot(result?.value);
+}
+
+async function pgWrite(operation, path, value) {
+  const tenant = postgresTenantPath(path);
+  if (!tenant) return null;
+  const result = await withLegacyRest(tenant.restId, (client, ctx, events) =>
+    operation === "rtdbRemove"
+      ? pathRouter.rtdbRemove(client, ctx, tenant.path, events)
+      : pathRouter[operation](client, ctx, tenant.path, value, events));
+  if (result?.error) {
+    const err = new Error(result.error);
+    err.code = result.code || "PG_PATH_UNAVAILABLE";
+    throw err;
+  }
+  return result;
+}
 
 export async function systemPush(path, data) {
+  const tenant = postgresTenantPath(path);
+  if (tenant) {
+    const result = await withLegacyRest(tenant.restId, (client, ctx, events) =>
+      pathRouter.rtdbPush(client, ctx, tenant.path, data, events));
+    if (result?.error) throw Object.assign(new Error(result.error), { code: result.code });
+    return result?.key;
+  }
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) {
     const newRef = getAdminDb().ref(path).push();
     await newRef.set(data);
@@ -42,16 +97,25 @@ export async function systemPush(path, data) {
 }
 
 export async function systemSet(path, data) {
+  const routed = await pgWrite("rtdbSet", path, data);
+  if (routed) return routed.value;
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) return getAdminDb().ref(path).set(data);
   return set(ref(getDB(), path), data);
 }
 
 export async function systemUpdate(path, data) {
+  const routed = await pgWrite("rtdbUpdate", path, data);
+  if (routed) return routed.value;
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) return getAdminDb().ref(path).update(data);
   return update(ref(getDB(), path), data);
 }
 
 export async function systemGet(path) {
+  const routed = await pgRead(path);
+  if (routed) return routed;
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) {
     const snap = await getAdminDb().ref(path).once("value");
     return { exists: () => snap.exists(), val: () => snap.val() };
@@ -61,6 +125,18 @@ export async function systemGet(path) {
 
 /** Admin-or-client equivalent of query(ref(db,path), orderByChild(field), limitToLast(n)). */
 export async function systemQueryOrderedLimit(path, field, limitCount) {
+  const routed = await pgRead(path);
+  if (routed) {
+    const entries = Object.entries(routed.val() || {})
+      .sort((a, b) => {
+        const av = a[1]?.[field];
+        const bv = b[1]?.[field];
+        return av === bv ? a[0].localeCompare(b[0]) : (av > bv ? 1 : -1);
+      })
+      .slice(-Math.max(0, Number(limitCount) || 0));
+    return snapshot(Object.fromEntries(entries));
+  }
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) {
     const snap = await getAdminDb().ref(path).orderByChild(field).limitToLast(limitCount).once("value");
     return { exists: () => snap.exists(), val: () => snap.val() };
@@ -81,6 +157,10 @@ export async function systemQueryOrderedLimit(path, field, limitCount) {
  */
 export async function systemQuery(path, opts = {}) {
   const { orderByChild: orderField, orderByKey: byKey, orderByValue: byValue, equalTo: eq, limitToFirst: firstN, limitToLast: lastN } = opts;
+
+  const routed = await pgRead(path);
+  if (routed) return routed;
+  assertFirebaseDataPlaneAccess(path);
 
   if (isAdminAvailable()) {
     let q = getAdminDb().ref(path);
@@ -105,6 +185,9 @@ export async function systemQuery(path, opts = {}) {
 }
 
 export async function systemRemove(path) {
+  const routed = await pgWrite("rtdbRemove", path);
+  if (routed) return routed.value;
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) return getAdminDb().ref(path).remove();
   return remove(ref(getDB(), path));
 }
@@ -122,6 +205,21 @@ export async function systemRemove(path) {
  * two concurrent orders can never both consume the same claim.
  */
 export async function systemTransaction(path, updateFn) {
+  const tenant = postgresTenantPath(path);
+  if (tenant) {
+    return withLegacyRest(tenant.restId, async (client, ctx, events) => {
+      const txn = await pathRouter.rtdbTransaction(client, ctx, tenant.path);
+      if (txn?.error) throw Object.assign(new Error(txn.error), { code: txn.code });
+      const next = updateFn(txn.value);
+      if (next === undefined) return { committed: false, snapshot: snapshot(txn.value) };
+      const applied = txn.apply
+        ? await txn.apply(next, events)
+        : await pathRouter.rtdbSet(client, ctx, tenant.path, next, events);
+      if (applied?.error) throw Object.assign(new Error(applied.error), { code: applied.code });
+      return { committed: true, snapshot: snapshot(next) };
+    });
+  }
+  assertFirebaseDataPlaneAccess(path);
   if (isAdminAvailable()) {
     const result = await getAdminDb().ref(path).transaction(updateFn);
     return { committed: result.committed, snapshot: { val: () => (result.snapshot ? result.snapshot.val() : null) } };

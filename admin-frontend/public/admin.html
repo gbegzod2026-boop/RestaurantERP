@@ -4850,24 +4850,11 @@
       </script>
 
       <script type="module">
-        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
+        import { getDatabase, forceWebSockets, ref, onValue } from "./js/pgRtdb.js";
 
-        const _fbCfg = {
-          apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-          authDomain: "restoran-30d51.firebaseapp.com",
-          databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-          projectId: "restoran-30d51",
-          storageBucket: "restoran-30d51.firebasestorage.app",
-          messagingSenderId: "862261129762",
-          appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-        };
-        const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbCfg);
-        // Force WebSocket-only transport (never fall back to `.lp`
-        // long-polling) — must run before any ref()/onValue() below.
-        // (Idempotent/harmless if admin.js already called this on the same
-        // shared app instance — the SDK just logs a notice, not an error.)
         forceWebSockets();
+        const _fbApp = await loadNestaFirebaseApp();
         const _db = getDatabase(_fbApp);
 
         function _applyLogo(url) {
@@ -4909,20 +4896,11 @@
 
 
       <script type="module">
-        import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
         import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
         import { t } from "./js/i18n.js";
 
-        const _fbCfgGA = {
-          apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-          authDomain: "restoran-30d51.firebaseapp.com",
-          databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-          projectId: "restoran-30d51",
-          storageBucket: "restoran-30d51.firebasestorage.app",
-          messagingSenderId: "862261129762",
-          appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-        };
-        const _fbAppGA = getApps().length ? getApps()[0] : initializeApp(_fbCfgGA);
+        const _fbAppGA = await loadNestaFirebaseApp();
         // Force WebSocket-only transport — idempotent if already forced by
         // an earlier script block on this same page.
         forceWebSockets();

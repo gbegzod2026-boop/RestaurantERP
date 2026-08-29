@@ -21,6 +21,11 @@
     "db:test:unit": "node --test db/tests/normalize.test.mjs db/tests/migration.test.mjs",
     "db:test:rls": "node db/tests/rls.test.mjs && node db/tests/rls-wave1.test.mjs && node db/tests/rls-wave2.test.mjs",
     "db:test:rls:strict": "node db/tests/run-rls-strict.mjs",
+    "db:acceptance:step1:seed": "node db/scripts/step1-local-acceptance.mjs seed",
+    "db:acceptance:step1:status": "node db/scripts/step1-local-acceptance.mjs status",
+    "db:acceptance:step1:cleanup": "node db/scripts/step1-local-acceptance.mjs cleanup",
+    "auth:emulator": "npx --yes firebase-tools emulators:start --only auth --project nesta-staging",
+    "auth:probe": "node db/scripts/step1-runtime-env-probe.mjs",
     "test:pg-http": "node --test db/tests/pg-http-errors.test.mjs",
     "test:security": "node --test db/tests/security-authority.test.mjs"
   },

@@ -4,6 +4,7 @@ import test from "node:test";
 
 const pg = readFileSync(new URL("../public/js/pgRtdb.js", import.meta.url), "utf8");
 const admin = readFileSync(new URL("../public/js/admin.js", import.meta.url), "utf8");
+const chef = readFileSync(new URL("../public/js/chef.js", import.meta.url), "utf8");
 
 test("backend discovery accepts only explicit postgres or firebase mode", () => {
   assert.match(pg, /j\.dataBackend !== "postgres" && j\.dataBackend !== "firebase"/);
@@ -17,7 +18,7 @@ test("meta failure is fail-closed as sanitized PG_UNAVAILABLE", () => {
 
 test("explicit firebase mode preserves the native Firebase flow", () => {
   assert.match(pg, /_mode = j\.dataBackend;/);
-  assert.match(pg, /mode === "postgres" && isMapped/);
+  assert.match(pg, /postgresDataPlane/);
   assert.match(pg, /if \(!\(await usePg\(r\)\)\) return fbGet/);
   assert.match(pg, /if \(!\(await usePg\(r\)\)\) return fbSet/);
 });
@@ -31,11 +32,72 @@ test("postgres bridge fallback never invokes a Firebase operation", () => {
   }
 });
 
+test("postgres mode fails closed for unmapped tenant paths instead of native Firebase", () => {
+  assert.match(pg, /plane === "unmapped"/);
+  assert.match(pg, /code: "unmapped_path"/);
+  assert.match(pg, /postgresDataPlane\(path, mode\)/);
+  assert.doesNotMatch(pg, /return mode === "postgres" && isMapped/);
+});
+
 test("tenant path authority comes only from a fresh verified token claim", () => {
   assert.match(pg, /user\.getIdTokenResult\(true\)/);
   assert.match(pg, /claims\.restId \?\? claims\.restaurantId \?\? null/);
   assert.match(pg, /authority\.restId !== requestedRestId/);
-  assert.match(pg, /async function usePg\(r\) \{\s*await ensureTenantAuthority\(pathOf\(r\)\);/);
+  assert.match(pg, /async function usePg\(r\) \{/);
+  assert.match(pg, /await ensureTenantAuthority\(path\)/);
+});
+
+test("denial cache is scoped by uid, restId, and token generation", () => {
+  assert.match(pg, /function denialHits\(uid, restId, gen\)/);
+  assert.match(pg, /_authDenied.uid !== uid \|\| _authDenied.restId !== restId \|\| _authDenied.gen !== gen/);
+  assert.match(pg, /function rememberDenial/);
+  assert.doesNotMatch(pg, /_tenantAuthority.uid === user.uid && \(Date.now\(\) - _tenantAuthority.ts\) < 50 \* 60 \* 1000/);
+  assert.match(pg, /Math.min\(60_000/);
+});
+
+test("resync waits for nesta:subscribed acknowledgment", () => {
+  assert.match(pg, /_pendingResync = wasReconnect/);
+  assert.match(pg, /nesta:subscribed/);
+  assert.match(pg, /emitResyncWithRetry/);
+  assert.doesNotMatch(pg, /if \(wasReconnect\) _socket.emit\("nesta:resync"/);
+});
+
+test("subscription ACK and resync are correlated to the active tenant generation", () => {
+  assert.match(pg, /_activeSubscription = \{ restId: canonical, generation, epoch: _authEpoch \}/);
+  assert.match(pg, /matchesSubscriptionMessage\(active, msg, _authEpoch/);
+  assert.match(pg, /generation: expected\.generation,\s*afterSeq: _lastSeq/);
+  assert.match(pg, /e\?\.generation === expected\.generation/);
+});
+
+test("identity and tenant transitions invalidate old realtime state", () => {
+  assert.match(pg, /const identityKey = user \? `\$\{user\.uid\}:\$\{restId \|\| ""\}` : null/);
+  assert.match(pg, /invalidateRealtimeSubscription\(\)/);
+  assert.match(pg, /_socket\.emit\("nesta:unsubscribe"/);
+  assert.match(pg, /_socketRestId = null/);
+  assert.match(pg, /_lastSeq = 0/);
+  assert.match(pg, /L\.epoch = -1/);
+  assert.match(pg, /resumeRealtimeForCurrentIdentity/);
+});
+
+test("stale tenant events cannot refresh current listeners", () => {
+  assert.match(pg, /matchesTenantEvent\(active, ev, _authEpoch, _subscribedAck\)/);
+  assert.match(pg, /L\.epoch !== _authEpoch/);
+  assert.match(pg, /restIdOf\(L\.path\) !== active\.restId/);
+  assert.match(pg, /const expectedEpoch = L\.epoch/);
+  assert.match(pg, /L\.epoch !== expectedEpoch \|\| expectedEpoch !== _authEpoch/);
+  assert.match(pg, /const qkey = `\$\{_authEpoch\}\\0/);
+});
+
+test("resync retries are bounded and reconnect uses Socket.IO backoff", () => {
+  assert.match(pg, /for \(let i = 0; i < 3; i\+\+\)/);
+  assert.match(pg, /reconnectionDelay: 400/);
+  assert.match(pg, /reconnectionDelayMax: 5000/);
+  assert.doesNotMatch(pg, /while\s*\(\s*true\s*\)/);
+});
+
+test("legacy chef room join sends a current verified token", () => {
+  assert.match(chef, /auth\.currentUser \? await auth\.currentUser\.getIdToken\(\) : null/);
+  assert.match(chef, /emitSocket\("chef:join",[\s\S]{0,500}\btoken\b/);
 });
 
 test("admin top-level tenant listeners await full tenant auth readiness", () => {

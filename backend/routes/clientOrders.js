@@ -33,6 +33,7 @@ import { isSafeId } from "../security/sanitize.js";
 import { usePostgres } from "../pg/config.js";
 import { withLegacyRest } from "../pg/legacyBridge.js";
 import { getOrderByLegacy } from "../pg/ordersService.js";
+import { isCanonicalCustomerClaims, customerTableClaims, customerOwnsOrder } from "../pg/customerIdentity.js";
 
 const router = express.Router();
 
@@ -56,13 +57,17 @@ async function requireCustomerSession(req, res, next) {
     if (!isAdminAvailable()) return res.status(503).json({ error: "Session verification unavailable" });
 
     const decoded = await getAdminAuth().verifyIdToken(idToken);
-    if (decoded.type !== "customer" || decoded.role !== "client" || !decoded.restId) {
+    if (!isCanonicalCustomerClaims(decoded) || !decoded.restId) {
       return res.status(403).json({ error: "Not a valid customer session" });
     }
+    const tables = customerTableClaims(decoded);
     req.clientSession = {
       restId: String(decoded.restId),
-      table: decoded.table != null ? String(decoded.table) : "",
-      tableId: decoded.tableId != null ? String(decoded.tableId) : "",
+      table: tables.table,
+      tableId: tables.tableId || tables.table,
+      userId: decoded.uid,
+      uid: decoded.uid,
+      customerSessionId: decoded.uid,
     };
     next();
   } catch (_err) {
@@ -105,7 +110,7 @@ router.get("/client/orders/:orderId", requireCustomerSession, async (req, res) =
     const { orderId } = req.params;
     if (!isSafeId(String(orderId))) return res.status(400).json({ error: "Invalid orderId" });
 
-    const { restId, table } = req.clientSession;
+    const { restId } = req.clientSession;
     let order = null;
     if (usePostgres()) {
       order = await withLegacyRest(restId, (client, ctx) => getOrderByLegacy(client, ctx.restaurantUuid, orderId));
@@ -128,8 +133,7 @@ router.get("/client/orders/:orderId", requireCustomerSession, async (req, res) =
     // here). See the fix report for why this residual scope is a
     // structural limit of the current session-identity scheme, not an
     // oversight.
-    const hasTable = order.table !== undefined && order.table !== null && String(order.table) !== "";
-    if (hasTable && String(order.table) !== table) {
+    if (!customerOwnsOrder(req.clientSession, order)) {
       return res.status(403).json({ error: "Access Denied" });
     }
 

@@ -118,7 +118,7 @@
 <script type="module">
     import { applyLang, getLang, setLang } from './js/i18n.js';
     import './js/langs.js';
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
     import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -136,19 +136,7 @@
     // Force WebSocket-only transport (never fall back to `.lp` long-polling) —
     // same convention used by every other panel in the project.
     forceWebSockets();
-
-    // Same Firebase project as login.js/admin.js/etc.
-    const firebaseConfig = {
-        apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-        authDomain: "restoran-30d51.firebaseapp.com",
-        databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-        projectId: "restoran-30d51",
-        storageBucket: "restoran-30d51.firebasestorage.app",
-        messagingSenderId: "862261129762",
-        appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-        measurementId: "G-8NG56H5ZGG"
-    };
-    const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+    const app = await loadNestaFirebaseApp();
     const db = getDatabase(app);
 
     // Support Center contact info — single source of truth is

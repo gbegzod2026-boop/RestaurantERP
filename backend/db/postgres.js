@@ -117,7 +117,7 @@ export function getPool() {
  *  whenever the caller is a real employee session, so the role-escalation
  *  trigger can tell an owner/admin's role change from anyone else's. Leave
  *  it unset for system-initiated writes with no employee behind them. */
-export async function withTenantContext(restaurantId, fn, { actingRole = null } = {}) {
+export async function withTenantContext(restaurantId, fn, { actingRole = null, customerUid = null, customerTable = null } = {}) {
   if (!restaurantId) throw new Error("withTenantContext requires a restaurantId — use withPlatformContext for platform-level work");
   const client = await getPool().connect();
   try {
@@ -128,11 +128,15 @@ export async function withTenantContext(restaurantId, fn, { actingRole = null } 
     await client.query("SET LOCAL ROLE nesta_app");
     await client.query("SELECT set_config('app.current_restaurant_id', $1, true)", [String(restaurantId)]);
     await client.query("SELECT set_config('app.current_employee_role', $1, true)", [actingRole ? String(actingRole) : ""]);
+    await client.query("SELECT set_config('app.current_customer_uid', $1, true)", [customerUid ? String(customerUid) : ""]);
+    await client.query("SELECT set_config('app.current_customer_table', $1, true)", [customerTable ? String(customerTable) : ""]);
     const result = await fn(client);
     await client.query("COMMIT");
+    try { await client.query("DISCARD ALL"); } catch { /* pool hygiene after tenant txn */ }
     return result;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    try { await client.query("DISCARD ALL"); } catch { /* pool hygiene after rollback */ }
     throw err;
   } finally {
     client.release();
@@ -151,11 +155,15 @@ export async function withPlatformContext(fn) {
     await client.query("SET LOCAL ROLE nesta_app");
     await client.query("SELECT set_config('app.current_restaurant_id', '', true)");
     await client.query("SELECT set_config('app.current_employee_role', '', true)");
+    await client.query("SELECT set_config('app.current_customer_uid', '', true)");
+    await client.query("SELECT set_config('app.current_customer_table', '', true)");
     const result = await fn(client);
     await client.query("COMMIT");
+    try { await client.query("DISCARD ALL"); } catch { /* pool hygiene after platform txn */ }
     return result;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    try { await client.query("DISCARD ALL"); } catch { /* pool hygiene after rollback */ }
     throw err;
   } finally {
     client.release();

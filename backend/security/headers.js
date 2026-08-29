@@ -4,6 +4,7 @@
 // the browser, Telegram/Click/Payme/Uzum webhooks hitting this same origin)
 // keeps working unchanged. Nothing here touches business logic.
 import helmet from "helmet";
+import { getAuthEmulatorHost } from "../firebaseEnv.js";
 
 // P1-2 fix (PRODUCTION-AUDIT.md): matches the production frontend's actual
 // domain shape — this app is subdomain-per-restaurant
@@ -82,6 +83,26 @@ export function buildCorsOptions() {
  * "just in case". See CSP_AUDIT.md at the repo root for the full origin ↔
  * usage-site mapping this was derived from.
  */
+function authEmulatorConnectSrc() {
+  const host = getAuthEmulatorHost();
+  if (!host) return [];
+  const raw = host.includes("://") ? host : `http://${host}`;
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return [];
+  }
+  if (!["127.0.0.1", "localhost", "::1"].includes(parsed.hostname)) return [];
+  const origins = new Set([parsed.origin]);
+  if (parsed.hostname === "127.0.0.1") {
+    origins.add(`http://localhost:${parsed.port || "9099"}`);
+  } else if (parsed.hostname === "localhost") {
+    origins.add(`http://127.0.0.1:${parsed.port || "9099"}`);
+  }
+  return [...origins];
+}
+
 export function buildHelmetOptions() {
   return {
     contentSecurityPolicy: {
@@ -250,6 +271,7 @@ export function buildHelmetOptions() {
           "https://cdnjs.cloudflare.com",
           "https://cdn.jsdelivr.net",
           "https://www.gstatic.com",
+          ...authEmulatorConnectSrc(),
         ],
         // No Worker/ServiceWorker exists anywhere in admin-frontend today
         // (audited, zero matches) — set explicitly to 'self' instead of

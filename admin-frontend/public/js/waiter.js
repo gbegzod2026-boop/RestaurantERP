@@ -10,7 +10,7 @@
 //    UI esa ularni WAITER_STATUS_MAP orqali soddalashtirib ko'rsatadi.
 // ══════════════════════════════════════════════════════════════
 
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 import {
   getDatabase, forceWebSockets, ref, onValue, update, push, get, runTransaction
 } from "./pgRtdb.js";
@@ -107,16 +107,7 @@ if (viewAsId && restIdFromUrl) {
 
 const BASE_PATH = `restaurants/${currentRestaurantId}`;
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-};
-const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const app = await loadNestaFirebaseApp();
 const db   = getDatabase(app);
 const auth = getAuth(app);
 

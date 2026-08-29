@@ -31,6 +31,14 @@ export async function getSettings(client, restaurantUuid) {
   return rows[0]?.settings || {};
 }
 
+export async function getPublicSettingsRaw(client, restaurantUuid) {
+  const { rows } = await client.query(
+    `SELECT public_restaurant_settings($1) AS settings`,
+    [restaurantUuid]
+  );
+  return rows[0]?.settings || {};
+}
+
 export async function patchSettings(client, restaurantUuid, restId, patch, events) {
   const current = await getSettings(client, restaurantUuid);
   const next = { ...current, ...patch };
@@ -628,22 +636,25 @@ export async function upsertChangeRequest(client, ctx, legacyId, payload, events
     );
     orderId = o.rows[0]?.id || null;
   }
+  const status = ctx.isCustomer === true ? "pending" : (payload.status || "pending");
   await client.query(
     `INSERT INTO order_change_requests (
         legacy_rtdb_id, restaurant_id, order_id, legacy_order_id, request_type, request_type_raw,
         status, status_raw, requested_by, reason, payload
      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb)
      ON CONFLICT (restaurant_id, legacy_rtdb_id) DO UPDATE SET
-        status = EXCLUDED.status,
-        status_raw = EXCLUDED.status_raw,
+        status = CASE WHEN $12::boolean THEN order_change_requests.status ELSE EXCLUDED.status END,
+        status_raw = CASE WHEN $12::boolean THEN order_change_requests.status_raw ELSE EXCLUDED.status_raw END,
         payload = order_change_requests.payload || EXCLUDED.payload`,
     [
       key, restaurantUuid, orderId, payload.orderId || null,
       payload.requestType && ["cancel_item","replace_item","change_qty","cancel_order"].includes(payload.requestType)
         ? payload.requestType : "cancel_item",
       payload.requestType || "cancel_item",
-      payload.status || "pending", payload.status || "pending",
-      payload.requestedBy || ctx.userId || null, payload.reason || null, json(payload),
+      status, status,
+      ctx.isCustomer === true ? (ctx.userId || "customer") : (payload.requestedBy || ctx.userId || null),
+      payload.reason || null, json(payload),
+      ctx.isCustomer === true,
     ]
   );
   events.push(await recordEvent(client, {
@@ -674,6 +685,76 @@ export async function getReportsSummary(client, restaurantUuid) {
     [restaurantUuid]
   );
   return rows[0];
+}
+
+export async function createWaiterCall(client, ctx, legacyId, payload, events) {
+  const { restaurantUuid, restId } = ctx;
+  const key = legacyId || pushId();
+  const tableKey = payload.table || payload.tableId || payload.legacy_table_key || ctx.tableId || ctx.table || null;
+  const status = ctx.isCustomer === true ? "open" : (payload.status || "open");
+  await client.query(
+    `INSERT INTO waiter_calls (legacy_rtdb_id, restaurant_id, legacy_table_key, call_type, status, status_raw, extra)
+     VALUES ($1,$2,$3,$4,$5,$5,$6::jsonb)
+     ON CONFLICT (restaurant_id, legacy_rtdb_id) DO UPDATE SET
+        extra = waiter_calls.extra || EXCLUDED.extra
+     WHERE $7::boolean = false`,
+    [
+      key, restaurantUuid, tableKey != null ? String(tableKey) : null,
+      payload.callType || payload.type || "call", status,
+      json({ ...payload, table: tableKey, status }),
+      ctx.isCustomer === true,
+    ]
+  );
+  events.push(await recordEvent(client, {
+    restaurantUuid, restId, type: REALTIME_EVENTS.PATH_CHANGED,
+    path: `restaurants/${restId}/waiterCalls/${key}`, payload: { callId: key },
+  }));
+  return key;
+}
+
+export async function getOrderChatMessage(client, ctx, orderLegacyId, messageId) {
+  const { rows } = await client.query(
+    `SELECT m.legacy_rtdb_id, m.sender_id, m.sender_role, m.body
+       FROM order_chat_messages m
+       JOIN order_chats c ON c.id = m.order_chat_id
+      WHERE m.restaurant_id = $1 AND c.legacy_order_id = $2 AND m.legacy_rtdb_id = $3
+      LIMIT 1`,
+    [ctx.restaurantUuid, orderLegacyId, messageId]
+  );
+  return rows[0] || null;
+}
+
+export async function appendOrderChatMessage(client, ctx, orderLegacyId, channel, messageId, payload, events) {
+  const { restaurantUuid, restId, userId } = ctx;
+  const order = await client.query(
+    `SELECT id FROM orders WHERE restaurant_id = $1 AND legacy_rtdb_id = $2 LIMIT 1`,
+    [restaurantUuid, orderLegacyId]
+  );
+  const orderUuid = order.rows[0]?.id || null;
+  const chat = await client.query(
+    `INSERT INTO order_chats (restaurant_id, order_id, legacy_order_id, channel)
+     VALUES ($1,$2,$3,$4)
+     ON CONFLICT (restaurant_id, legacy_order_id, channel) DO UPDATE SET last_message_at = now()
+     RETURNING id`,
+    [restaurantUuid, orderUuid, orderLegacyId, channel || "chef"]
+  );
+  const senderRole = ctx.isCustomer === true ? "customer" : (payload.senderRole || payload.sender || "staff");
+  const body = payload.text || payload.body || payload.message || "";
+  await client.query(
+    `INSERT INTO order_chat_messages
+      (legacy_rtdb_id, order_chat_id, restaurant_id, sender_id, sender_name, sender_role, body, sent_at, payload)
+     VALUES ($1,$2,$3,$4,$5,$6,$7, now(), $8::jsonb)
+     ON CONFLICT (order_chat_id, legacy_rtdb_id) DO NOTHING`,
+    [
+      messageId, chat.rows[0].id, restaurantUuid, userId || null,
+      payload.senderName || payload.author || null, senderRole, body, json(payload),
+    ]
+  );
+  events.push(await recordEvent(client, {
+    restaurantUuid, restId, type: REALTIME_EVENTS.PATH_CHANGED,
+    path: `restaurants/${restId}/orderChats/${orderLegacyId}`, payload: { orderId: orderLegacyId, messageId },
+  }));
+  return { key: messageId };
 }
 
 export { pushId };

@@ -1,9 +1,11 @@
 import express from "express";
-import { usePostgres, getDataBackend } from "../pg/config.js";
+import { getDataBackend, usePostgres } from "../pg/config.js";
+import { authEnvironmentDiagnostic } from "../firebaseEnv.js";
 import { isPgAvailable } from "../db/postgres.js";
 import { countCanonicalRestaurants } from "../pg/platformCount.js";
-import { requirePgTenant, withRequestTenant, requestedRestId, isPgUnavailableError } from "../pg/tenant.js";
+import { requirePgTenant, withRequestTenant, requestedRestId, isPgUnavailableError, isRlsDeniedError } from "../pg/tenant.js";
 import { requirePermission } from "../rbac.js";
+import { authorizeRtdbPath } from "../pg/rtdbAuthz.js";
 import { isSafeId } from "../security/sanitize.js";
 import { broadcastAll, listEventsSince } from "../pg/hub.js";
 import * as pathRouter from "../pg/pathRouter.js";
@@ -29,6 +31,7 @@ router.get("/meta", async (_req, res) => {
     realtime: true,
     mappedCollections: [...pathRouter.MAPPED_COLLECTIONS],
     usePostgres: usePostgres(),
+    ...authEnvironmentDiagnostic(),
   });
 });
 
@@ -45,17 +48,36 @@ function sendEvents(events) {
 }
 
 export function sendPgFailure(res, err) {
+  if (isRlsDeniedError(err)) return res.status(403).json({ error: "Access Denied", code: "rls_denied" });
   if (isPgUnavailableError(err)) return res.status(503).json({ error: "PG_UNAVAILABLE" });
   return res.status(500).json({ error: "Internal server error" });
+}
+
+function sendRtdbError(res, result) {
+  const code = result.code || result.error;
+  return res.status(result.status || 400).json({ error: result.error, code, details: result.details || null });
+}
+
+async function requireRtdbAccess(req, res, op) {
+  const path = String(req.body?.path || "");
+  const decision = await authorizeRtdbPath(req.pgTenant, path, op, {
+    writeValue: req.body?.value ?? req.body?.patch ?? req.body?.next,
+  });
+  if (decision.status) {
+    sendRtdbError(res, decision);
+    return false;
+  }
+  return true;
 }
 
 // ── RTDB compatibility bridge ────────────────────────────────────────────
 router.post("/rtdb/get", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "get"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, (client) => pathRouter.rtdbGet(client, req.pgTenant, path));
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (result.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -66,10 +88,11 @@ router.post("/rtdb/get", requirePgTenant(), async (req, res) => {
 
 router.post("/rtdb/set", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "set"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, (client) => pathRouter.rtdbSet(client, req.pgTenant, path, req.body?.value, events));
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (result.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -80,10 +103,11 @@ router.post("/rtdb/set", requirePgTenant(), async (req, res) => {
 
 router.post("/rtdb/update", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "update"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, (client) => pathRouter.rtdbUpdate(client, req.pgTenant, path, req.body?.value || req.body?.patch, events));
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (result.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -94,10 +118,11 @@ router.post("/rtdb/update", requirePgTenant(), async (req, res) => {
 
 router.post("/rtdb/remove", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "remove"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, (client) => pathRouter.rtdbRemove(client, req.pgTenant, path, events));
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (result.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -108,10 +133,11 @@ router.post("/rtdb/remove", requirePgTenant(), async (req, res) => {
 
 router.post("/rtdb/push", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "push"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, (client) => pathRouter.rtdbPush(client, req.pgTenant, path, req.body?.value, events));
-    if (result.error) return res.status(result.status || 400).json({ error: result.error });
+    if (result.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -122,6 +148,7 @@ router.post("/rtdb/push", requirePgTenant(), async (req, res) => {
 
 router.post("/rtdb/transaction", requirePgTenant(), async (req, res) => {
   try {
+    if (!(await requireRtdbAccess(req, res, "transaction"))) return;
     const path = String(req.body?.path || "");
     const events = [];
     const result = await withRequestTenant(req, async (client) => {
@@ -134,11 +161,15 @@ router.post("/rtdb/transaction", requirePgTenant(), async (req, res) => {
         return { value: n };
       }
       if (typeof req.body?.next !== "undefined") {
-        await pathRouter.rtdbSet(client, req.pgTenant, path, req.body.next, events);
+        const setResult = await pathRouter.rtdbSet(client, req.pgTenant, path, req.body.next, events);
+        if (setResult?.error) return setResult;
         return { value: req.body.next };
       }
-      return pathRouter.rtdbTransaction(client, req.pgTenant, path);
+      const txn = await pathRouter.rtdbTransaction(client, req.pgTenant, path);
+      if (txn?.error) return txn;
+      return txn;
     });
+    if (result?.error) return sendRtdbError(res, result);
     sendEvents(events);
     res.json(result);
   } catch (err) {
@@ -177,6 +208,7 @@ router.post("/orders", requirePgTenant(), requirePermission("orders", "create", 
     const events = [];
     const id = req.body?.id || pushId();
     const order = await withRequestTenant(req, (client) => orders.upsertOrder(client, req.pgTenant, id, req.body, events));
+    if (order?.error) return sendRtdbError(res, order);
     sendEvents(events);
     res.status(201).json({ id, order });
   } catch (err) {
@@ -279,6 +311,9 @@ router.get("/reports/summary", requirePgTenant(), requirePermission("report", "v
 
 router.get("/realtime/since", requirePgTenant(), async (req, res) => {
   try {
+    if (req.pgTenant?.isCustomer === true) {
+      return res.status(403).json({ error: "Access Denied", code: "role_denied" });
+    }
     const after = Number(req.query.afterSeq || 0);
     const events = await withRequestTenant(req, (client) => listEventsSince(client, req.pgTenant.restaurantUuid, after));
     res.json({ restId: req.pgTenant.restId, events });

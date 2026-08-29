@@ -100,7 +100,7 @@ test("employee partial patch merges current values instead of applying create de
         return { rows: [{ ...currentRow, name: params[2], login: params[3], role: params[4], active: params[5], modules: JSON.parse(params[6]), actions: JSON.parse(params[7]) }] };
       }
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
-      if (sql.includes("INSERT INTO realtime_events")) return { rows: [{ seq: 1 }] };
+      if (sql.includes("INSERT INTO realtime_events") || sql.includes("record_realtime_event")) return { rows: [{ seq: 1 }] };
       throw new Error(`unexpected query: ${sql}`);
     },
   };
@@ -111,8 +111,8 @@ test("employee partial patch merges current values instead of applying create de
   );
   const result = await rtdbUpdate(
     client,
-    { restaurantUuid: "restaurant-uuid", restId: "tenant-a" },
-    "restaurants/tenant-a/users/waiter_1",
+    { restaurantUuid: "restaurant-uuid", restId: "rest_1000000000001" },
+    "restaurants/rest_1000000000001/users/waiter_1",
     preparedPatch.staffPatch,
     events
   );

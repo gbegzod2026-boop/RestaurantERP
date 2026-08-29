@@ -37,6 +37,8 @@
 import express from "express";
 import { systemGet } from "../systemDb.js";
 import { countCanonicalRestaurants } from "../pg/platformCount.js";
+import { usePostgres } from "../pg/config.js";
+import { getPool } from "../db/postgres.js";
 
 const router = express.Router();
 
@@ -97,6 +99,23 @@ async function getStats() {
   if (inFlight) return inFlight; // collapse concurrent misses into one read
 
   inFlight = (async () => {
+    if (usePostgres()) {
+      const { rows } = await getPool().query(
+        `SELECT
+           (SELECT COUNT(*)::int FROM restaurants) AS restaurants,
+           (SELECT COUNT(*)::int FROM customers) AS customers,
+           (SELECT COUNT(*)::int FROM orders) AS orders,
+           (SELECT COALESCE(SUM(total), 0)::numeric FROM orders
+             WHERE lower(COALESCE(status, '')) IN ('paid', 'to''landi')) AS revenue`
+      );
+      const row = rows[0] || {};
+      return {
+        restaurants: Number(row.restaurants || 0),
+        customers: Number(row.customers || 0),
+        orders: Number(row.orders || 0),
+        revenue: Math.round(Number(row.revenue || 0)),
+      };
+    }
     const snap = await systemGet("restaurants");
     const tree = snap.exists() ? snap.val() : {};
     const stats = computeAggregates(tree);

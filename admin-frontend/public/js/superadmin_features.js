@@ -18,11 +18,14 @@
  * =====================================================
  */
 
-import {
-  ref, get, set, update, onValue, forceWebSockets
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-forceWebSockets();
+async function _saFeatureApi(path, options) {
+  if (typeof window._saSettingsFetch !== "function" || typeof window._saDashFetch !== "function") {
+    throw new Error("SUPERADMIN_API_NOT_READY");
+  }
+  return path === "/tariffs"
+    ? window._saSettingsFetch(path, options)
+    : window._saDashFetch(path, options);
+}
 
 // ─────────────────────────────────────────────────────
 // 1. BARCHA MAVJUD FUNKSIYALAR
@@ -48,33 +51,32 @@ const ALL_FEATURES = [
  * @param {string} restId - Firebase restoran IDsi
  */
 window.openRestaurantFeaturesModal = async function(restId) {
-  const db = window.db;
-  if (!db || !restId) return;
+  if (!restId) return;
 
   const t = window.t || ((k, d) => d || k);
 
   // Restoran ma'lumotlarini olamiz
-  const restSnap = await get(ref(db, `restaurants/${restId}`));
-  if (!restSnap.exists()) {
+  const restaurants = await _saFeatureApi("/restaurants");
+  const rest = restaurants?.[restId];
+  if (!rest) {
     alert(t("sa_rest_not_found", "Restoran topilmadi!"));
     return;
   }
-  const rest       = restSnap.val();
   const restName   = rest.info?.name || restId;
   const tariffKey  = (rest.info?.tariff || "start").toLowerCase();
 
   // Global tariflar
   let allTariffs = window.allTariffs || {};
   if (!allTariffs[tariffKey]) {
-    const snap = await get(ref(db, "systemData/settings/tariffs"));
-    if (snap.exists()) { allTariffs = snap.val(); window.allTariffs = allTariffs; }
+    allTariffs = await _saFeatureApi("/tariffs") || {};
+    window.allTariffs = allTariffs;
   }
 
   const planFeatures    = Array.isArray(allTariffs[tariffKey]?.features) ? allTariffs[tariffKey].features : [];
   const customFeatures  = Array.isArray(rest.subscription?.customFeatures) ? rest.subscription.customFeatures : [];
   const currentFeatures = _computeEffective(planFeatures, customFeatures);
 
-  _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, customFeatures, currentFeatures, db, t });
+  _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, customFeatures, currentFeatures, t });
 };
 
 // ─────────────────────────────────────────────────────
@@ -98,7 +100,7 @@ window._computeEffective = _computeEffective;
 // ─────────────────────────────────────────────────────
 // 4. MODAL RENDER
 // ─────────────────────────────────────────────────────
-function _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, customFeatures, currentFeatures, db, t }) {
+function _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, customFeatures, currentFeatures, t }) {
   const old = document.getElementById("sa-feat-modal");
   if (old) old.remove();
 
@@ -212,8 +214,6 @@ function _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, c
   document.body.appendChild(modal);
   modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
 
-  // DB ni modal scope ga saqlash
-  modal._db = db;
   modal._allTariffs = allTariffs;
 }
 
@@ -222,12 +222,13 @@ function _renderModal({ restId, restName, tariffKey, allTariffs, planFeatures, c
 //    Firebase'ga yozib, UI'ni yangilaydi
 // ─────────────────────────────────────────────────────
 window._saFeatToggle = async function(restId, featureId, action) {
-  const db = window.db;
   const t  = window.t || ((k, d) => d || k);
-  if (!db || !restId || !featureId) return;
+  if (!restId || !featureId) return;
 
-  const snap = await get(ref(db, `restaurants/${restId}/subscription/customFeatures`));
-  let custom = Array.isArray(snap.val()) ? snap.val() : [];
+  const restaurants = await _saFeatureApi("/restaurants");
+  const rest = restaurants?.[restId];
+  if (!rest) throw new Error("RESTAURANT_NOT_FOUND");
+  let custom = Array.isArray(rest.subscription?.customFeatures) ? rest.subscription.customFeatures : [];
 
   // Eski formatni tozalash
   custom = custom.filter(c => {
@@ -241,28 +242,20 @@ window._saFeatToggle = async function(restId, featureId, action) {
   // "reset" → shunchaki olib tashlanadi (tarif qoidasi ishlaydi)
 
   // Firebase ga yozish
-  const tariffKey = ((await get(ref(db, `restaurants/${restId}/info/tariff`))).val() || "start").toLowerCase();
+  const tariffKey = (rest.info?.tariff || "start").toLowerCase();
   const allTariffs = window.allTariffs || {};
   const planFeatures = Array.isArray(allTariffs[tariffKey]?.features) ? allTariffs[tariffKey].features : [];
   const effective = _computeEffective(planFeatures, custom);
 
-  await Promise.all([
-    // customFeatures saqlash
-    set(ref(db, `restaurants/${restId}/subscription/customFeatures`), custom),
-    // yakuniy features ni ham yozamiz (plan_features.js listeneri uchun)
-    update(ref(db, `restaurants/${restId}/subscription`), { features: effective }),
-    // restaurants_meta ham yangilash
-    update(ref(db, `restaurants_meta/${restId}/subscription`), { features: effective, customFeatures: custom })
-  ]);
+  await _saFeatureApi(`/restaurants/${encodeURIComponent(restId)}/features`, {
+    method: "POST",
+    body: JSON.stringify({ customFeatures: custom, features: effective })
+  });
 
   // Modal'ni yangilash
   const modal = document.getElementById("sa-feat-modal");
   if (modal) {
-    const restSnap = await get(ref(db, `restaurants/${restId}`));
-    if (restSnap.exists()) {
-      const rest = restSnap.val();
-      window.openRestaurantFeaturesModal(restId);
-    }
+    window.openRestaurantFeaturesModal(restId);
   }
 
   // Toast xabari

@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 import {
   getDatabase, forceWebSockets, ref, onValue, update, get, runTransaction
 } from "./pgRtdb.js";
@@ -87,18 +87,7 @@ if (viewAsId && restIdFromUrl) {
 const BASE_PATH = `restaurants/${currentRestaurantId}`;
 
 // ── 2. Firebase (loyihaning boshqa panellari bilan bir xil config) ──
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-  measurementId: "G-8NG56H5ZGG"
-};
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = await loadNestaFirebaseApp();
 const db = getDatabase(app);
 // 🔒 P0 AUTH FIX — getAuth(app) triggers automatic session restoration
 // from whatever real Firebase Auth session is already persisted for this

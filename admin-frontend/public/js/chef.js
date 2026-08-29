@@ -2,7 +2,7 @@
 
 import { CATEGORY_DATA } from "./shared.js";
 
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 
 // 🔒 P0 AUTH FIX (same root cause as waiter.js/kassa.js) — chef.js never
 // imported firebase-auth.js, so it never had a Firebase Auth session even
@@ -89,27 +89,7 @@ window.formatOrderNumber = formatOrderNumber;
 
 ========================= */
 
-const firebaseConfig = {
-
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-
-  authDomain: "restoran-30d51.firebaseapp.com",
-
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-
-  projectId: "restoran-30d51",
-
-  storageBucket: "restoran-30d51.firebasestorage.app",
-
-  messagingSenderId: "862261129762",
-
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-
-};
-
-
-
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = await loadNestaFirebaseApp();
 
 const db = getDatabase(app);
 
@@ -775,7 +755,9 @@ window.addEventListener('beforeunload', () => {
 
   const userId = sessionStorage.getItem("userId") || sessionStorage.getItem("chefId") || sessionStorage.getItem("uid");
 
-  if (!restId || !userId) return;
+  // An administrator previewing a chef is not that employee. Never create
+  // attendance or presence records from a view-as session.
+  if (!restId || !userId || sessionStorage.getItem("isViewingAsAdmin") === "true") return;
 
 
 
@@ -814,24 +796,6 @@ window.addEventListener('beforeunload', () => {
       update(attendRef, updates).catch(() => { });
 
     }).catch(err => console.warn("[CHEF-AUTH] initChefAttendance get() failed:", err?.code || err?.message));
-
-
-
-    // Firebase onDisconnect — internet uzilsa avtomatik offlineAt yoziladi
-
-    import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(({ onDisconnect }) => {
-
-      onDisconnect(attendRef).update({
-
-        status: "offline",
-
-        offlineAt: Date.now(),
-
-        lastSeen: Date.now()
-
-      }).catch(() => { });
-
-    });
 
 
 
@@ -955,9 +919,14 @@ function listenSocket() {
 
 
 
-  socket.on("connect", () => {
+  socket.on("connect", async () => {
 
     socketConnected = true;
+
+    let token = null;
+    try {
+      token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+    } catch { /* server denies the join without a current verified token */ }
 
     emitSocket("chef:join", {
 
@@ -967,7 +936,9 @@ function listenSocket() {
 
       role: "chef",
 
-      restId: currentRestaurantId
+      restId: currentRestaurantId,
+
+      token
 
     });
 

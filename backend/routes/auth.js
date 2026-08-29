@@ -29,6 +29,7 @@
 // Admin-SDK-dependent piece of this fix pass.
 import express from "express";
 import { isAdminAvailable, getAdminAuth } from "../firebaseAdmin.js";
+import { assertAuthMintAllowed } from "../firebaseEnv.js";
 import { systemGet, systemUpdate } from "../systemDb.js";
 import { verifyPassword } from "../security/password.js";
 import { isSafeId } from "../security/sanitize.js";
@@ -37,7 +38,7 @@ import { decryptSecret, sha256Hex } from "../security/crypto.js";
 import { verifyTotpCode } from "../security/totp.js";
 import { requireSuperAdmin } from "../security/requireSuperAdmin.js";
 import { usePostgres } from "../pg/config.js";
-import { authenticateStaffWithPostgres, CredentialConflictError } from "../pg/credentialService.js";
+import { authenticateManagerWithPostgres, authenticateStaffWithPostgres, CredentialConflictError } from "../pg/credentialService.js";
 
 console.log("========== AUTH ROUTER LOADED ==========");
 
@@ -56,7 +57,12 @@ const TRANSIENT_POSTGRES_CODES = new Set([
 ]);
 
 export function isTransientPostgresError(error) {
-  return TRANSIENT_POSTGRES_CODES.has(String(error?.code || ""));
+  if (!error) return false;
+  const code = String(error.code || error.errno || error.cause?.code || "");
+  if (TRANSIENT_POSTGRES_CODES.has(code)) return true;
+  if (Array.isArray(error.errors)) return error.errors.some(isTransientPostgresError);
+  if (error.cause && error.cause !== error) return isTransientPostgresError(error.cause);
+  return false;
 }
 
 function subscriptionGate(restData) {
@@ -120,6 +126,12 @@ function subscriptionGate(restData) {
  * login time that could go stale if an admin changes the role mid-session. */
 async function mintSessionToken(restId, userId, role, isSubAdmin = false) {
   if (!isAdminAvailable()) return null;
+  try {
+    assertAuthMintAllowed();
+  } catch (err) {
+    console.error("[auth] mintSessionToken refused:", err.message);
+    return null;
+  }
   const auth = getAdminAuth();
   // Globally-unique across every restaurant — see the function header for
   // why the bare userId can no longer be used directly.
@@ -470,6 +482,33 @@ router.post("/manager-login", async (req, res) => {
             return res.status(401).json({ error: "Invalid credentials" });
         }
 
+        if (usePostgres()) {
+            const match = await authenticateManagerWithPostgres(login, password, {
+                restId: requestedRestId && isSafeId(requestedRestId) ? requestedRestId : null,
+            });
+            if (!match) {
+                logSecurityEvent({ type: "login_failed", restId: requestedRestId || null, ip: req.ip, details: { mode: "manager" } });
+                return res.status(401).json({ error: "Invalid credentials" });
+            }
+            if (match.active === false) return res.status(403).json({ error: "Account disabled" });
+            if (match.restaurant.status === "blocked" || match.restaurant.status === "paused") {
+                return res.status(402).json({ error: "expired", restId: match.restaurant.legacy_rtdb_id });
+            }
+            const restId = match.restaurant.legacy_rtdb_id;
+            const userId = match.legacy_rtdb_id || String(match.id);
+            const twoFactor = await verify2FA(restId, userId, req.body?.code);
+            if (twoFactor.required && !req.body?.code) return res.status(200).json({ requires2FA: true });
+            if (!twoFactor.ok) return res.status(401).json({ error: "Invalid verification code" });
+            const token = await mintSessionToken(restId, userId, match.role, match.extra?.isSubAdmin === true);
+            logSecurityEvent({ type: "login_success", restId, userId, ip: req.ip, details: { mode: "manager" } });
+            return res.json({
+                ok: true,
+                user: { id: userId, name: match.name, role: match.role },
+                restId,
+                token,
+            });
+        }
+
         // ─────────────────────────────────────────
         // CANDIDATE RESTAURANT SET
         // ─────────────────────────────────────────
@@ -712,11 +751,11 @@ router.post("/manager-login", async (req, res) => {
         });
 
     } catch (err) {
-        console.error(
-            "MANAGER LOGIN ERROR:",
-            err
-        );
-
+        if (err instanceof CredentialConflictError) {
+            return res.status(409).json({ error: "Ambiguous credentials — contact your administrator" });
+        }
+        if (isTransientPostgresError(err)) return res.status(503).json({ error: "PG_UNAVAILABLE" });
+        console.error("MANAGER LOGIN ERROR:", err?.code || "UNEXPECTED_ERROR");
         return res.status(500).json({
             error: "Internal server error"
         });

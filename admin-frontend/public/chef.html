@@ -212,36 +212,16 @@
   <script type="module" src="js/i18n.js"></script>
   <script type="module" src="js/chef.js?v=1"></script>
   <script type="module">
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getDatabase, forceWebSockets, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
+    import { getDatabase, forceWebSockets, ref, onValue } from "./js/pgRtdb.js";
     import { renderHeader, setHeaderLogo } from "./js/header.js";
 
     // Barcha panellarda yagona brend: "Nesta Kitchen" emas, "Nesta ERP" —
     // rol yorlig'i o'zgarishsiz qoladi.
     renderHeader("nestaHeaderBrand", { product: "erp", role: "kitchen" });
 
-    // ====== RESTORAN LOGOTIPI (Admin → Sozlamalar) ======
-    // Ilgari bu yerda img[src*="logo (2)"] kabi BROAD, src-KONTENTIGA
-    // qarab moslashtiruvchi selector ishlatilardi — bu ikki jihatdan
-    // ishonchsiz edi: (1) logo o'chirilsa (bo'sh qiymat) standart Nesta
-    // logosiga hech qachon qaytmasdi ("qotib" qolardi), (2) BIRINCHI
-    // muvaffaqiyatli yangilanishdan keyin <img>ning src'i endi "logo (2)"
-    // qatorini o'z ichiga olmay qolgani uchun keyingi har qanday yangilanish
-    // (masalan admin YANGI logo yuklasa) o'sha elementni QAYTA topa olmasdi.
-    // Endi header.js'ning setHeaderLogo() — barcha panellar bilan bir xil,
-    // klass asosida (har doim ishonchli topiladigan) — ishlatiladi.
-    const _fbCfg = {
-      apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-      authDomain: "restoran-30d51.firebaseapp.com",
-      databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-      projectId: "restoran-30d51",
-      storageBucket: "restoran-30d51.firebasestorage.app",
-      messagingSenderId: "862261129762",
-      appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-    };
-    const _fbApp = getApps().length ? getApps()[0] : initializeApp(_fbCfg);
-    // Force WebSocket-only transport — idempotent if chef.js already forced it.
     forceWebSockets();
+    const _fbApp = await loadNestaFirebaseApp();
     const _db = getDatabase(_fbApp);
 
     const _restId = new URLSearchParams(location.search).get("rest")

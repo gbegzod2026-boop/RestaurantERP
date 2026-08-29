@@ -46,6 +46,7 @@ export function orderToRtdb(row, { items = null, payment = null, waiterLegacy = 
     createdByWaiterId: createdByLegacy || extra.createdByWaiterId || null,
     customerName: row.customer_name_snapshot || extra.customerName || null,
     customerPhone: row.customer_phone_snapshot || extra.customerPhone || null,
+    customerSessionId: row.customer_session_id || extra.customerSessionId || null,
     status: row.status_raw || row.status,
     statusKey: row.status_key_raw || row.status,
     statusV2: row.status_v2_raw || row.status,

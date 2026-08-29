@@ -30,12 +30,8 @@ export async function recordEvent(client, { restaurantUuid, restId, type, payloa
     seq: null,
   };
   if (client && restaurantUuid) {
-    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))`, [String(restaurantUuid)]);
     const { rows } = await client.query(
-      `INSERT INTO realtime_events (restaurant_id, seq, event_type, payload)
-       SELECT $1, COALESCE(MAX(seq), 0) + 1, $2, $3::jsonb
-         FROM realtime_events WHERE restaurant_id = $1
-       RETURNING seq`,
+      `SELECT record_realtime_event($1, $2, $3::jsonb) AS seq`,
       [restaurantUuid, type, JSON.stringify({ ...event.payload, path: path || undefined })]
     );
     event.seq = rows[0]?.seq != null ? Number(rows[0].seq) : null;

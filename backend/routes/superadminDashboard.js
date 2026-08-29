@@ -31,8 +31,19 @@
 // Issues").
 import express from "express";
 import { getAdminAuth, getAdminDb } from "../firebaseAdmin.js";
-import { systemGet, systemPush, systemQueryOrderedLimit } from "../systemDb.js";
+import {
+  systemGet,
+  systemPush,
+  systemUpdate,
+  systemRemove,
+  systemQueryOrderedLimit,
+} from "../systemDb.js";
 import { requireSuperAdmin } from "../security/requireSuperAdmin.js";
+import { usePostgres } from "../pg/config.js";
+import { withPlatformContext } from "../db/postgres.js";
+import { broadcastAll } from "../pg/hub.js";
+import * as pathRouter from "../pg/pathRouter.js";
+import { parseRestId } from "../pg/restId.js";
 
 const router = express.Router();
 
@@ -43,6 +54,80 @@ const router = express.Router();
 // exports it and this app's routers each define their own auth middleware
 // (see routes/notifications.js, routes/aiImport.js, etc.).
 router.use(requireSuperAdmin);
+
+async function pgRestaurantProjection() {
+  return withPlatformContext(async (client) => {
+    const restaurants = await client.query(
+      `SELECT id, legacy_rtdb_id, domain, name, status, info, created_at, updated_at
+         FROM restaurants ORDER BY created_at`
+    );
+    const employees = await client.query(
+      `SELECT restaurant_id, legacy_rtdb_id, login, created_at FROM employees ORDER BY created_at`
+    );
+    const modules = await client.query(
+      `SELECT restaurant_id, enabled_modules FROM restaurant_modules`
+    );
+    const orderCounts = await client.query(
+      `SELECT restaurant_id, COUNT(*)::integer AS count FROM orders GROUP BY restaurant_id`
+    );
+    const employeesByRestaurant = new Map();
+    for (const employee of employees.rows) {
+      const users = employeesByRestaurant.get(employee.restaurant_id) || {};
+      users[employee.legacy_rtdb_id] = {
+        login: employee.login ?? null,
+        createdAt: employee.created_at ? new Date(employee.created_at).getTime() : null,
+      };
+      employeesByRestaurant.set(employee.restaurant_id, users);
+    }
+    const modulesByRestaurant = new Map(modules.rows.map((row) => [
+      row.restaurant_id,
+      Object.fromEntries((row.enabled_modules || []).map((name) => [name, true])),
+    ]));
+    const ordersByRestaurant = new Map(orderCounts.rows.map((row) => [row.restaurant_id, row.count]));
+    return Object.fromEntries(restaurants.rows.filter((row) => row.legacy_rtdb_id).map((row) => {
+      const stored = row.info && typeof row.info === "object" ? row.info : {};
+      const subscription = stored.subscription && typeof stored.subscription === "object"
+        ? stored.subscription
+        : {};
+      const info = {
+        ...stored,
+        name: stored.name || row.name,
+        domain: stored.domain || row.domain,
+        status: stored.status || row.status,
+        createdAt: stored.createdAt || (row.created_at ? new Date(row.created_at).getTime() : null),
+        updatedAt: row.updated_at ? new Date(row.updated_at).getTime() : null,
+      };
+      delete info.subscription;
+      return [row.legacy_rtdb_id, {
+        info,
+        subscription,
+        modules: modulesByRestaurant.get(row.id) || {},
+        users: employeesByRestaurant.get(row.id) || {},
+        ordersCount: ordersByRestaurant.get(row.id) || 0,
+      }];
+    }));
+  });
+}
+
+async function withPgRestaurant(restId, fn) {
+  return withPlatformContext(async (client) => {
+    const { rows } = await client.query(
+      `SELECT id, legacy_rtdb_id FROM restaurants WHERE legacy_rtdb_id = $1 LIMIT 1`,
+      [restId]
+    );
+    if (!rows[0]) return null;
+    const events = [];
+    const result = await fn(client, {
+      restaurantUuid: rows[0].id,
+      restId: rows[0].legacy_rtdb_id,
+      userId: null,
+      role: "owner",
+      actingRole: "owner",
+      isSuperAdmin: true,
+    }, events);
+    return { result, events };
+  });
+}
 
 router.get("/health", async (req, res) => {
   const db = getAdminDb();
@@ -123,6 +208,7 @@ router.get("/health", async (req, res) => {
 // list the dashboard needs, just missing this one field.
 router.get("/restaurants", async (req, res) => {
   try {
+    if (usePostgres()) return res.json(await pgRestaurantProjection());
     const snap = await systemGet("restaurants");
     const raw = snap.exists() ? snap.val() : {};
     const projected = {};
@@ -143,6 +229,110 @@ router.get("/restaurants", async (req, res) => {
   } catch (err) {
     console.error("[superadminDashboard] restaurants read failed:", err?.message || err);
     res.status(503).json({ error: "Unavailable" });
+  }
+});
+
+router.delete("/restaurants", async (req, res) => {
+  try {
+    if (usePostgres()) {
+      const deleted = await withPlatformContext(async (client) => {
+        const { rowCount } = await client.query("DELETE FROM restaurants");
+        return rowCount;
+      });
+      return res.json({ ok: true, deleted });
+    }
+    await Promise.all([
+      systemRemove("restaurants"),
+      systemRemove("restaurants_meta"),
+    ]);
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[superadminDashboard] restaurants delete failed:", err?.code || "UNKNOWN");
+    return res.status(503).json({ error: "Unavailable" });
+  }
+});
+
+router.get("/restaurants/:restId/superadmin-chat", async (req, res) => {
+  try {
+    const parsed = parseRestId(req.params.restId);
+    if (!parsed.ok || parsed.empty) return res.status(400).json({ error: "Invalid restaurant id", code: "restId_invalid" });
+    const restId = parsed.restId;
+    if (usePostgres()) {
+      const wrapped = await withPgRestaurant(restId, (client, ctx) =>
+        pathRouter.rtdbGet(client, ctx, `restaurants/${restId}/superadmin_chat`));
+      if (!wrapped) return res.status(404).json({ error: "Not found" });
+      if (wrapped.result?.error) return res.status(wrapped.result.status || 400).json({ error: wrapped.result.code });
+      return res.json(wrapped.result?.value || {});
+    }
+    const snap = await systemGet(`restaurants/${restId}/superadmin_chat`);
+    return res.json(snap.exists() ? snap.val() : {});
+  } catch (err) {
+    console.error("[superadminDashboard] chat read failed:", err?.code || "UNKNOWN");
+    return res.status(503).json({ error: "Unavailable" });
+  }
+});
+
+router.post("/restaurants/:restId/superadmin-chat", async (req, res) => {
+  try {
+    const parsed = parseRestId(req.params.restId);
+    if (!parsed.ok || parsed.empty) return res.status(400).json({ error: "Invalid restaurant id", code: "restId_invalid" });
+    const restId = parsed.restId;
+    const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+    if (!text || text.length > 4000) return res.status(400).json({ error: "Invalid payload" });
+    const message = { sender: "superadmin", text, timestamp: Date.now() };
+    if (usePostgres()) {
+      const wrapped = await withPgRestaurant(restId, (client, ctx, events) =>
+        pathRouter.rtdbPush(client, ctx, `restaurants/${restId}/superadmin_chat`, message, events));
+      if (!wrapped) return res.status(404).json({ error: "Not found" });
+      if (wrapped.result?.error) return res.status(wrapped.result.status || 400).json({ error: wrapped.result.code });
+      broadcastAll(wrapped.events);
+      return res.json({ ok: true, key: wrapped.result.key });
+    }
+    const key = await systemPush(`restaurants/${restId}/superadmin_chat`, message);
+    return res.json({ ok: true, key });
+  } catch (err) {
+    console.error("[superadminDashboard] chat write failed:", err?.code || "UNKNOWN");
+    return res.status(503).json({ error: "Unavailable" });
+  }
+});
+
+router.post("/restaurants/:restId/features", async (req, res) => {
+  try {
+    const parsed = parseRestId(req.params.restId);
+    if (!parsed.ok || parsed.empty) return res.status(400).json({ error: "Invalid restaurant id", code: "restId_invalid" });
+    const restId = parsed.restId;
+    const customFeatures = Array.isArray(req.body?.customFeatures) ? req.body.customFeatures : null;
+    const features = Array.isArray(req.body?.features) ? req.body.features : null;
+    const valid = (items) => items && items.length <= 100 && items.every((item) =>
+      typeof item === "string" && item.length > 0 && item.length <= 80);
+    if (!valid(customFeatures) || !valid(features)) {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+    if (usePostgres()) {
+      const updated = await withPlatformContext(async (client) => {
+        const { rows } = await client.query(
+          `UPDATE restaurants
+              SET info = jsonb_set(
+                COALESCE(info, '{}'::jsonb),
+                '{subscription}',
+                COALESCE(info->'subscription', '{}'::jsonb) ||
+                  jsonb_build_object('customFeatures', $2::jsonb, 'features', $3::jsonb),
+                true
+              )
+            WHERE legacy_rtdb_id = $1
+            RETURNING legacy_rtdb_id`,
+          [restId, JSON.stringify(customFeatures), JSON.stringify(features)]
+        );
+        return rows[0] || null;
+      });
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      return res.json({ ok: true });
+    }
+    await systemUpdate(`restaurants/${restId}/subscription`, { customFeatures, features });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[superadminDashboard] features update failed:", err?.code || "UNKNOWN");
+    return res.status(503).json({ error: "Unavailable" });
   }
 });
 

@@ -80,6 +80,8 @@ Credentials stay at Firebase `credentials/$r/$id` (and `employee_credentials` in
 |---|---|---|---|---|
 | `restaurants/$r/inventory` | onValue/transaction | admin | `/api/pg/inventory` | INVENTORY_UPDATED |
 | `restaurants/$r/ingredients` | onValue/transaction | admin, chef | rtdb (`tracked_as=ingredients`) | INVENTORY_UPDATED |
+| `restaurants/$r/attendance/$date/$user` | get/update | current staff; admin by RBAC | rtdb → `attendance` | PATH_CHANGED |
+| `restaurants/$r/kitchenAnnouncements` | get/push/update | current staff | rtdb → `kitchen_announcements` | PATH_CHANGED |
 
 ---
 
@@ -99,6 +101,8 @@ Credentials stay at Firebase `credentials/$r/$id` (and `employee_credentials` in
 |---|---|---|---|---|
 | `restaurants/$r/notifications` | onValue/push | all | `/api/pg/notifications` | NOTIFICATION_CREATED |
 | `restaurants/$r/settings` | onValue/update | admin | `/api/pg/settings` | PATH_CHANGED |
+| `restaurants/$r/info`, `subscription` | get/onValue | current active staff | rtdb → `restaurants.info`; writes only through canonical platform API | PATH_CHANGED |
+| `restaurants/$r/chats`, `superadmin_chat` | get/push/update | current active staff / canonical platform superadmin | rtdb → `chats` + `chat_messages`; platform HTTP API | PATH_CHANGED |
 | reports (derived) | computed in admin.js from orders | admin | `GET /api/pg/reports/summary` | none |
 
 ---
@@ -131,9 +135,9 @@ Required event names: `ORDER_CREATED`, `ORDER_UPDATED`, `ORDER_STATUS_CHANGED`, 
 | Path | Why |
 |---|---|
 | `systemData/*` | Superadmin / platform |
-| `credentials/*` | Auth secrets; `/api/auth` already mediates login |
-| `restaurants/$r/subscription`, `info`, `bonus`, `apiKeys` | Billing / superadmin |
-| `restaurants/$r/modules`, `customRoles`, `roleOverrides` | RBAC still resolved via Firebase in `rbac.js` (templates also in code) |
+| `credentials/*` | Forbidden tenant RTDB path in postgres mode; `/api/auth` uses `employee_credentials` and Firebase only to mint/verify sessions |
+| `restaurants/$r/bonus`, `apiKeys` | Unmapped tenant application data; fail closed in postgres mode |
+| `restaurants/$r/modules`, `customRoles`, `roleOverrides` | PostgreSQL-backed RBAC; generic RTDB writes remain intentionally unmapped |
 | Root `promocodes` | 68k orphan rows, no tenant |
 | Firebase Storage | Images |
 | Telegram bot tokens in settings (read by bot poller) | Telegram phase |

@@ -1,9 +1,10 @@
 ﻿// client.js 
 import { CATEGORY_DATA, ORDER_STATUS, ORDER_STATUS_V2, ORDER_STATUS_V2_FLOW, normalizeOrderStatusV2, getStatusV2Label, getStatusV2Order, writeOrderAuditLog, ORDER_TYPE, computeDeliveryFee, haversineDistanceKm, formatDeliveryAddress, normalizePhone } from "./shared.js";
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 import {
   getDatabase,
   forceWebSockets,
+  resolveClientDataBackend,
   ref,
   get,
   set,
@@ -25,21 +26,7 @@ import { discountClaimsClient } from "./discountClaimsClient.js";
 
 forceWebSockets();
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-  measurementId: "G-8NG56H5ZGG"
-};
-
-const app =
-  getApps().length === 0
-    ? initializeApp(firebaseConfig)
-    : getApps()[0];
+const app = await loadNestaFirebaseApp();
 
 const auth = getAuth(app);
 auth.languageCode = getLang();
@@ -4972,14 +4959,21 @@ async function sendTableOrder() {
 
     const newOrderRef = push(ref(db, BASE_PATH + "/orders"));
     const newOrderId = newOrderRef.key;
-    const counterRes = await runTransaction(ref(db, BASE_PATH + "/meta/orderCounterOrd"), n => (typeof n === "number" ? n : 0) + 1);
-    const orderNumber = Number(counterRes.snapshot.val());
-    if (!Number.isFinite(orderNumber) || orderNumber <= 0) {
-      throw new Error("order_counter_invalid");
-    }
     const clientId = localStorage.getItem("clientId") || "anonymous";
     const now = Date.now();
     const tableKey = getTableKey(table);
+    const pgMode = (await resolveClientDataBackend()) === "postgres";
+
+    let orderNumber;
+    if (pgMode) {
+      orderNumber = 0;
+    } else {
+      const counterRes = await runTransaction(ref(db, BASE_PATH + "/meta/orderCounterOrd"), n => (typeof n === "number" ? n : 0) + 1);
+      orderNumber = Number(counterRes.snapshot.val());
+      if (!Number.isFinite(orderNumber) || orderNumber <= 0) {
+        throw new Error("order_counter_invalid");
+      }
+    }
 
     const orderPayload = {
       orderNumber,
@@ -5009,14 +5003,27 @@ async function sendTableOrder() {
       ...(customerPhone ? { customerPhone, clientPhone: customerPhone } : {})
     };
 
-    const updates = {};
-    updates[`${BASE_PATH}/meta/orderCounterOrd`] = orderNumber;
-    updates[`${BASE_PATH}/orders/${newOrderId}`] = orderPayload;
-    updates[`${BASE_PATH}/tables/${tableKey}/status`] = "occupied";
-    updates[`${BASE_PATH}/tables/${tableKey}/busy`] = true;
-    updates[`${BASE_PATH}/tables/${tableKey}/orderId`] = newOrderId;
-    updates[`${BASE_PATH}/tables/${tableKey}/occupiedAt`] = now;
-    await update(ref(db), updates);
+    if (pgMode) {
+      // Customer meta/table writes are denied; the order SET is enough.
+      // PostgreSQL assigns order_number, catalog prices, and session binding.
+      await set(ref(db, `${BASE_PATH}/orders/${newOrderId}`), orderPayload);
+      const persisted = await get(ref(db, `${BASE_PATH}/orders/${newOrderId}`));
+      const saved = persisted.exists() ? persisted.val() : null;
+      orderNumber = Number(saved?.orderNumber);
+      if (!Number.isFinite(orderNumber) || orderNumber <= 0) {
+        throw new Error("order_counter_invalid");
+      }
+      if (saved) Object.assign(orderPayload, saved);
+    } else {
+      const updates = {};
+      updates[`${BASE_PATH}/meta/orderCounterOrd`] = orderNumber;
+      updates[`${BASE_PATH}/orders/${newOrderId}`] = orderPayload;
+      updates[`${BASE_PATH}/tables/${tableKey}/status`] = "occupied";
+      updates[`${BASE_PATH}/tables/${tableKey}/busy`] = true;
+      updates[`${BASE_PATH}/tables/${tableKey}/orderId`] = newOrderId;
+      updates[`${BASE_PATH}/tables/${tableKey}/occupiedAt`] = now;
+      await update(ref(db), updates);
+    }
 
     if (customerPhone) await _recordCustomerVisit(customerPhone, finalPrice);
 

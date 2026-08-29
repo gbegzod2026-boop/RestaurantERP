@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp, loadNestaNamedFirebaseApp } from "./nestaFirebaseApp.js";
 import { getDatabase, forceWebSockets, ref, get, set, update, onValue, remove, push, runTransaction } from "./pgRtdb.js";
 import { getAuth, onAuthStateChanged, signOut, createUserWithEmailAndPassword, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { t, getLang, setLang, applyLang, onLangChange } from "./i18n.js";
@@ -2014,18 +2014,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-  measurementId: "G-8NG56H5ZGG"
-};
-
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+const app = await loadNestaFirebaseApp();
 const db = getDatabase(app);
 window.db = db;
 const auth = getAuth(app);
@@ -2058,9 +2047,7 @@ setPersistence(auth, browserSessionPersistence).catch((e) =>
 // isolated app+auth pair keeps that side effect off the main
 // session. We sign this instance out again immediately after use.
 // ─────────────────────────────────────────────────────────
-const _puSecondaryApp = getApps().some(a => a.name === 'puSecondary')
-  ? getApps().find(a => a.name === 'puSecondary')
-  : initializeApp(firebaseConfig, 'puSecondary');
+const _puSecondaryApp = await loadNestaNamedFirebaseApp("puSecondary");
 const _puSecondaryAuth = getAuth(_puSecondaryApp);
 
 // ============================================
@@ -6015,12 +6002,7 @@ window.deleteAllRestaurants = async function () {
   if (!confirmFirst) return;
 
   try {
-    const database = window.db;
-
-    import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(async ({ ref, remove }) => {
-
-      await remove(ref(database, "restaurants"));
-      await remove(ref(database, "restaurants_meta"));
+    await _saDashFetch("/restaurants", { method: "DELETE" });
 
       window.logAudit("delete_all", null, t("sa_log_all_deleted", "Tizimdagi BARCHA restoranlar o'chirildi"));
 
@@ -6034,7 +6016,6 @@ window.deleteAllRestaurants = async function () {
       if (typeof updateDashboardStats === "function") {
         updateDashboardStats();
       }
-    });
 
   } catch (error) {
     console.error(t("sa_err_delete_all", "Barchasini o'chirishda xato:"), error);
@@ -7932,7 +7913,7 @@ window.filterSaChatList = function () {
 
 window.currentChatRestId = null;
 
-window.openSaChatRoom = function (restId, restName) {
+window.openSaChatRoom = async function (restId, restName) {
   window.currentChatRestId = restId;
   document.getElementById('saChatList').style.display = 'none';
   document.getElementById('saChatSearchContainer').style.display = 'none';
@@ -7942,18 +7923,13 @@ window.openSaChatRoom = function (restId, restName) {
   const msgsDiv = document.getElementById('saChatMessages');
   msgsDiv.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px;">${t("sa_loading", "Yuklanmoqda...")}</div>`;
 
-  import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(({ ref, onValue }) => {
-    const chatRef = ref(window.db, `restaurants/${restId}/superadmin_chat`);
-
-    if (window.saChatUnsubscribe) window.saChatUnsubscribe();
-
-    window.saChatUnsubscribe = onValue(chatRef, (snap) => {
+  try {
+    const msgs = await _saDashFetch(`/restaurants/${encodeURIComponent(restId)}/superadmin-chat`);
       msgsDiv.innerHTML = '';
-      if (!snap.exists()) {
+      if (!msgs || !Object.keys(msgs).length) {
         msgsDiv.innerHTML = `<div style="text-align:center; color:#888; margin-top:20px; font-size:13px;">${t("sa_chat_empty", "Hali xabarlar yo'q. Birinchi bo'lib yozing!")}</div>`;
         return;
       }
-      const msgs = snap.val();
       Object.values(msgs).forEach(m => {
         const isMe = m.sender === 'superadmin';
         msgsDiv.innerHTML += `
@@ -7963,8 +7939,9 @@ window.openSaChatRoom = function (restId, restName) {
           </div>`;
       });
       msgsDiv.scrollTop = msgsDiv.scrollHeight;
-    });
-  });
+  } catch (_) {
+    msgsDiv.innerHTML = `<div style="text-align:center; color:#b91c1c; margin-top:20px;">${t("sa_error_loading", "Yuklashda xatolik")}</div>`;
+  }
 };
 
 window.closeSaChatRoom = function () {
@@ -8088,7 +8065,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
-window.sendSaMessage = function () {
+window.sendSaMessage = async function () {
   const input = document.getElementById('saChatInput');
   const text = input.value.trim();
   const restId = window.currentChatRestId;
@@ -8097,20 +8074,9 @@ window.sendSaMessage = function () {
   input.value = '';
   const now = Date.now();
 
-  import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js").then(({ ref, push }) => {
-    push(ref(window.db, `restaurants/${restId}/superadmin_chat`), {
-      sender: "superadmin",
-      text: text,
-      timestamp: now
-    });
-
-    push(ref(window.db, `restaurants/${restId}/notifications`), {
-      title: t("sa_notification_title", "Tizim Egasi (Superadmin)"),
-      message: text,
-      type: "superadmin_chat",
-      date: now,
-      isRead: false
-    });
+  await _saDashFetch(`/restaurants/${encodeURIComponent(restId)}/superadmin-chat`, {
+    method: "POST",
+    body: JSON.stringify({ text })
   });
 };
 

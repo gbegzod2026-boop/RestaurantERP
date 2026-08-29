@@ -1,4 +1,4 @@
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
   import { getDatabase, forceWebSockets, ref, get, set, update, push, onValue, runTransaction }
     from "./pgRtdb.js";
   // 🔒 P0 AUTH FIX (same root cause as waiter.js) — kassa.js never imported
@@ -181,17 +181,7 @@ import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.
     }
   };
 
-  const firebaseConfig = {
-    apiKey:            "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-    authDomain:        "restoran-30d51.firebaseapp.com",
-    databaseURL:       "https://restoran-30d51-default-rtdb.firebaseio.com",
-    projectId:         "restoran-30d51",
-    storageBucket:     "restoran-30d51.firebasestorage.app",
-    messagingSenderId: "your-sender-id",
-    appId:             "your-app-id"
-  };
-
-  const app  = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
+  const app  = await loadNestaFirebaseApp();
   const db   = getDatabase(app);
   const auth = getAuth(app);
 

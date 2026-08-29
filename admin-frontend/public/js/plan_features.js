@@ -23,7 +23,7 @@
 
 import {
   getDatabase, forceWebSockets, ref, onValue, get
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+} from "./pgRtdb.js";
 
 // Redundant, idempotent safety net (see superadmin_features.js for the
 // full rationale) — this module's own onValue() calls are all inside
@@ -362,21 +362,6 @@ function _recomputeAndApply(db, restId, tariffKey, allTariffs) {
     : [];
   const custom = Array.isArray(window._customFeatures) ? window._customFeatures : [];
   const merged = _mergeFeatures(tariffFeatures, custom);
-
-  // Firebase ga ham yozamiz (admin.js eski listeneri uchun)
-  try {
-    const { ref: r, update: u } = window._fbModules || {};
-    if (db && restId) {
-      import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js")
-        .then(({ ref, update }) => {
-          update(ref(db, `restaurants/${restId}/subscription`), {
-            features: merged,
-            planId: tariffKey,
-            planName: allTariffs[tariffKey]?.name || tariffKey.toUpperCase()
-          });
-        });
-    }
-  } catch (_) {}
 
   applyPlanFeaturesToUI(merged);
 }

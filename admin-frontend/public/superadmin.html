@@ -3167,24 +3167,10 @@
 
 
   <script type="module">
-    import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
     import { getDatabase, forceWebSockets } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-      authDomain: "restoran-30d51.firebaseapp.com",
-      databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-      projectId: "restoran-30d51",
-      storageBucket: "restoran-30d51.firebasestorage.app",
-      messagingSenderId: "862261129762",
-      appId: "1:862261129762:web:5577e6821b4ad7ea4e507b"
-    };
-
-    window._fbApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
-    // Force WebSocket-only transport (never fall back to `.lp`
-    // long-polling) — idempotent if superadmin.js already forced it on
-    // this same shared app; must run before any ref()/onValue() anywhere
-    // on this page, including the next <script> block below.
+    window._fbApp = await loadNestaFirebaseApp();
     forceWebSockets();
     window._fbDb = getDatabase(window._fbApp);
   </script>
@@ -3569,10 +3555,12 @@
     }
 
     function subscribeNotifSources() {
-      onValue(ref(db, 'restaurants'), snap => {
-        _notifRestaurants = snap.val() || {};
+      const refreshRestaurants = () => {
+        _notifRestaurants = window.allRestaurants || {};
         renderNotifications();
-      });
+      };
+      refreshRestaurants();
+      setInterval(refreshRestaurants, 30000);
       onValue(ref(db, 'landingRequests'), snap => {
         _notifRequests = snap.val() || {};
         renderNotifications();
@@ -3601,11 +3589,6 @@
 
   <!-- ── EXPIRING SUBSCRIPTIONS MODULE ── -->
   <script type="module">
-    import { ref, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-    const app = window._fbApp;
-    const db = window._fbDb;
-
     const DAY_MS = 24 * 60 * 60 * 1000;
     let _expRestaurants = {};
 
@@ -3825,11 +3808,13 @@
     };
 
     function subscribeExpiring() {
-      onValue(ref(db, 'restaurants'), snap => {
-        _expRestaurants = snap.val() || {};
+      const refresh = () => {
+        _expRestaurants = window.allRestaurants || {};
         window.renderExpiringSubscriptions();
         window.renderTrialTabs();
-      });
+      };
+      refresh();
+      setInterval(refresh, 30000);
     }
 
     // Til almashtirilganda ro'yxatlarni refreshsiz qayta chizish

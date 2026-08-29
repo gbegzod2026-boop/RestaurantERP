@@ -80,7 +80,7 @@ function translateIngName(name) {
   return name;
 }
 
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 import { getDatabase, forceWebSockets, resolveClientDataBackend, ref, onValue as _onValueRaw, update, get, set, remove, push, query, orderByChild, limitToLast, runTransaction, equalTo } from "./pgRtdb.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, inMemoryPersistence, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
@@ -117,17 +117,7 @@ const restIdFromUrl = urlParams.get('rest') || urlParams.get('id');
 if (currentRestaurantId) {
   localStorage.setItem("restaurantId", currentRestaurantId);
 }
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-  measurementId: "G-8NG56H5ZGG"
-};
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = await loadNestaFirebaseApp();
 const db = getDatabase(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
@@ -4926,7 +4916,6 @@ function listenPlanFeatures() {
 
     const features = Array.isArray(tariffData.features) ? tariffData.features : [];
     console.log(`📋 Tarif: ${tariffKey.toUpperCase()} | Features:`, features);
-    update(ref(db, `restaurants/${restId}/subscription`), { features });
 
     applyPlanFeaturesToUI(features);
   });
@@ -4940,7 +4929,6 @@ function listenPlanFeatures() {
     window._currentPlanName = tariffData.name || tariffKey.toUpperCase();
 
     const features = Array.isArray(tariffData.features) ? tariffData.features : [];
-    update(ref(db, `restaurants/${restId}/subscription`), { features });
 
     applyPlanFeaturesToUI(features);
   });
@@ -7173,6 +7161,8 @@ window.deleteAllMenus = async function () {
 };
 
 function listenMenu() {
+  if (window._menuListenerStarted) return;
+  window._menuListenerStarted = true;
   onValue(ref(db, BASE_PATH + "/menu"), snap => {
     window.allMenu = snap.val() || {};
     renderMenu();
@@ -10270,6 +10260,8 @@ window.filterStaffCards = function () {
 };
 
 function listenStaff() {
+  if (window._staffListenerStarted) return;
+  window._staffListenerStarted = true;
   onValue(ref(db, BASE_PATH + "/users"), snap => {
     const users = snap.val() || {};
     window.allUsers = users;
@@ -10395,6 +10387,8 @@ function debouncedChartUpdate() {
 }
 
 function listenOrders() {
+  if (window._ordersMainListenerStarted) return;
+  window._ordersMainListenerStarted = true;
   const ordersRef = query(ref(db, BASE_PATH + "/orders"), orderByChild("createdAt"), limitToLast(300));
 
   onValue(ordersRef, async snap => {
@@ -10450,6 +10444,8 @@ function listenOrders() {
 }
 
 function listenCustomersRealtime() {
+  if (window._customersListenerStarted) return;
+  window._customersListenerStarted = true;
   onValue(ref(db, BASE_PATH + "/customers"), snap => {
     const customers = snap.val() || {};
     window.customerProfilesByPhone = buildCustomerProfilePhoneCache(customers);
@@ -10556,6 +10552,11 @@ window.listenTablesRealtime = function () {
   const restId = localStorage.getItem("restaurantId");
 
   onValue(ref(db, `restaurants/${restId}/tables`), async (snap) => {
+    const tablesObj = snap.val() || {};
+    const hasNumericKeys = Object.keys(tablesObj).some((key) => /^\d+$/.test(key));
+    if (hasNumericKeys) {
+      await window.migrateTableKeys();
+    }
     // Stollar ma'lumotini global saqlaymiz (phone lookup uchun)
     window.allTables = snap.val() || {};
 
@@ -10603,7 +10604,6 @@ window.listenTablesRealtime = function () {
       return;
     }
 
-    const tablesObj = snap.val();
     const _netOrigin = await getNetworkOrigin();
 
     // ── STOL TURLARINI ANIQLASH ──────────────────────────────────────────────
@@ -14352,11 +14352,13 @@ function listenToInventory() {
   });
 }
 
-// Sahifa yuklanganda ham bir marta ishga tushiramiz
-if (!window._inventoryListenerStarted) {
-  listenToInventory();
-  window._inventoryListenerStarted = true;
-}
+// Sahifa yuklanganda ham bir marta ishga tushiramiz — auth tayyor bo'lgach.
+window._afterAdminTenantReady(async () => {
+  if (!window._inventoryListenerStarted) {
+    listenToInventory();
+    window._inventoryListenerStarted = true;
+  }
+}).catch(() => {});
 
 // ══════════════════════════════════════════════════════
 // 📦 WAREHOUSE SUBTAB SWITCH  (Masalliqlar | Forecast)
@@ -20653,7 +20655,12 @@ async function signQrUrl(url) {
     signUrl.searchParams.set("restId", restId);
     if (table) signUrl.searchParams.set("table", table);
     if (tableId) signUrl.searchParams.set("tableId", tableId);
-    const resp = await fetch(signUrl.toString());
+    const headers = {};
+    try {
+      const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
+      if (token) headers.Authorization = `Bearer ${token}`;
+    } catch (_e) { /* best-effort */ }
+    const resp = await fetch(signUrl.toString(), { headers });
     if (!resp.ok) return url;
     const { sig, exp } = await resp.json();
     if (!sig || !exp) return url;
@@ -26851,9 +26858,6 @@ async function checkPermissions() {
 
     const features = Array.isArray(tariffData.features) ? tariffData.features : [];
 
-    // subscription/features ni sinxron saqlash (superadmin.js ga mos)
-    await update(ref(db, `restaurants/${restId}/subscription`), { features });
-
     applyPlanFeaturesToUI(features);
   } catch (err) {
     console.error("[checkPermissions] Admin access denied yoki xato — clean exit:", err.code || err.message);
@@ -27624,7 +27628,7 @@ async function init() {
   // Stollar statistikasini (Band/Bo'sh) darhol boshlash
   if (!window._tablesListenerStarted) {
     window._tablesListenerStarted = true;
-    window.migrateTableKeys().then(() => window.listenTablesRealtime());
+    window.listenTablesRealtime();
   }
 
   // Bronlar sonini darhol yuklash (reservations bo'limiga kirmasdan)

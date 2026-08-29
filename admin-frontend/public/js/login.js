@@ -12,9 +12,10 @@
 // session every other admin-frontend page (admin.js, kassa.js, chef.js, ...)
 // already shares via the same Firebase app config, so this is the only file
 // that needed to change for the rest of the app to gain a real identity.
-import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, forceWebSockets, ref, get } from "./pgRtdb.js";
+import { getDatabase, forceWebSockets } from "./pgRtdb.js";
+import { parseRestId } from "./pgRestId.js";
 import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { loadNestaFirebaseApp } from "./nestaFirebaseApp.js";
 import { t, getLang, setLang, applyLang, onLangChange } from "./i18n.js";
 
 // Force WebSocket-only transport (never fall back to `.lp` long-polling) —
@@ -61,19 +62,8 @@ async function notifyEmployeeLogin(restId, userId) {
   } catch (_e) { /* ignore — non-critical */ }
 }
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCGCCIP3eFg40bOEENDLGcrw9c484ySCHQ",
-  authDomain: "restoran-30d51.firebaseapp.com",
-  databaseURL: "https://restoran-30d51-default-rtdb.firebaseio.com",
-  projectId: "restoran-30d51",
-  storageBucket: "restoran-30d51.firebasestorage.app",
-  messagingSenderId: "862261129762",
-  appId: "1:862261129762:web:5577e6821b4ad7ea4e507b",
-  measurementId: "G-8NG56H5ZGG"
-};
-
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const app = await loadNestaFirebaseApp();
+getDatabase(app);
 const auth = getAuth(app);
 
 // 🩹 Cross-tab session bleed fix — live-reproduced: a cashier's kassa.html
@@ -123,34 +113,34 @@ async function _setLoginPersistence() {
 let currentRestaurantId = null;
 let restaurantScopeError = null;
 
+function acceptRestaurantScope(raw) {
+  const parsed = parseRestId(raw);
+  if (!parsed.ok || parsed.empty || parsed.composite) return null;
+  return parsed.restId;
+}
+
 async function resolveRestaurantScope() {
   const urlRestId = new URLSearchParams(window.location.search).get("rest");
 
   if (urlRestId) {
-    try {
-      const infoSnap = await get(ref(db, `restaurants/${urlRestId}/info`));
-
-      if (!infoSnap.exists()) {
-        restaurantScopeError = t(
-          "error_invalid_restaurant_link",
-          "Havola noto'g'ri: bunday restoran topilmadi."
-        );
-        return;
-      }
-    } catch (e) {
+    // PIN login is restaurant-scoped; existence/credentials are proven at
+    // /api/auth/staff-login. Do not pre-read restaurants/*/info: the
+    // PostgreSQL data plane requires a token, so that GET 401s before login
+    // and permanently disables the keypad.
+    const restId = acceptRestaurantScope(urlRestId);
+    if (!restId) {
       restaurantScopeError = t(
-        "error_network",
-        "Internet aloqasini tekshiring."
+        "error_invalid_restaurant_link",
+        "Havola noto'g'ri: bunday restoran topilmadi."
       );
       return;
     }
-
-    currentRestaurantId = urlRestId;
-    localStorage.setItem("restaurantId", urlRestId);
+    currentRestaurantId = restId;
+    localStorage.setItem("restaurantId", restId);
     return;
   }
 
-  const storedRestId = localStorage.getItem("restaurantId");
+  const storedRestId = acceptRestaurantScope(localStorage.getItem("restaurantId"));
 
   if (storedRestId) {
     currentRestaurantId = storedRestId;
@@ -469,6 +459,11 @@ async function handleLogin() {
       // holatda "Login yoki parol noto'g'ri" umumiy xabari chalkash bo'lardi
       // (parol to'g'ri bo'lishi mumkin, faqat urinishlar soni cheklangan).
       showError(t("error_too_many_attempts", "Juda ko'p urinish. Bir necha daqiqadan keyin qayta urinib ko'ring."));
+      resetBtn();
+      return;
+    }
+    if (loginResult.status === 503 || loginResult.body?.error === "PG_UNAVAILABLE") {
+      showError(t("error_temporarily_unavailable", "Tizim vaqtincha mavjud emas. Keyinroq urinib ko'ring."));
       resetBtn();
       return;
     }

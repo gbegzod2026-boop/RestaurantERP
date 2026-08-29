@@ -31,6 +31,7 @@ import qrRouter from "./routes/qr.js";
 import clientOrdersRouter from "./routes/clientOrders.js";
 import superadminCredentialsRouter from "./routes/superadminCredentials.js";
 import publicStatsRouter from "./routes/publicStats.js";
+import publicFirebaseConfigRouter from "./routes/publicFirebaseConfig.js";
 import superadminDashboardRouter from "./routes/superadminDashboard.js";
 import superadminSessionsRouter from "./routes/superadminSessions.js";
 import superadmin2faRouter from "./routes/superadmin2fa.js";
@@ -42,7 +43,23 @@ import discountClaimsRouter from "./routes/discountClaims.js";
 import pgApiRouter from "./routes/pgApi.js";
 import { attachIo } from "./pg/hub.js";
 import { attachPgRealtime } from "./pg/socket.js";
+import { authorizeSocketJoin } from "./pg/rbacPg.js";
+import {
+  authorizeLegacyClientConnect,
+  authorizeLegacyStaffConnect,
+  leaveOperationalRooms,
+  joinOperationalRooms,
+  rememberLegacyStaff,
+  revalidateLegacyStaffAuthority,
+  authorizeLegacyPrivilegedEmit,
+  staffRoomsForConnect,
+  CHEF_CONNECT_ROLES,
+  ADMIN_CONNECT_ROLES,
+  LEGACY_STAFF_RECHECK_MS,
+} from "./pg/legacySocketPolicy.js";
+import { assertQrSigningConfigured, qrSigningHealth } from "./security/qrSign.js";
 import { getDataBackend, usePostgres } from "./pg/config.js";
+import { assertIsolatedAuthEnvironment, authEnvironmentDiagnostic, logAuthEnvironment } from "./firebaseEnv.js";
 import { isPgAvailable, maskedConfig, withTenantContext } from "./db/postgres.js";
 import { isPgUnavailableError, lookupRestaurantByLegacyId } from "./pg/tenant.js";
 import { broadcastAll } from "./pg/hub.js";
@@ -237,6 +254,7 @@ app.use("/api/restaurant", restaurantConfigRouter);
 // superadminCredentialsLimiter/"/api/superadmin/credentials" above) rather
 // than the broad "/api" other routers below use, so this limiter can only
 // ever consume its quota for this router's own requests.
+app.use("/api/public", publicFirebaseConfigRouter);
 app.use("/api/public", publicStatsLimiter, publicStatsRouter);
 
 // PostgreSQL RTDB bridge must be mounted BEFORE the broad `/api` + limiter
@@ -296,12 +314,18 @@ app.use("/api", twoFactorRouter);
 // connectDB() is idempotent (safe to call more than once — see db.js), so
 // gating all three behind this one await here doesn't change anything about
 // the existing connectDB() call further down.
-connectDB().then(() => {
+if (usePostgres()) {
   startScheduler();
-  startDbMonitor();
   startTelegramBotPolling();
   startSuperAdminBotPolling();
-});
+} else {
+  connectDB().then(() => {
+    startScheduler();
+    startDbMonitor();
+    startTelegramBotPolling();
+    startSuperAdminBotPolling();
+  });
+}
 
 // ─── BASE_PATH: frontend ile aynı yapı ───────────────────────────────────────
 // Frontend: restaurants/${restId}/orders  vb.
@@ -420,6 +444,7 @@ async function auditFromReq(req, restId, module, action, details) {
 
 // ─── DB guard ─────────────────────────────────────────────────────────────────
 async function ensureDatabase(res) {
+  if (usePostgres()) return true;
   if (isDatabaseConnected()) return true;
   const db = await connectDB();
   if (db) return true;
@@ -481,13 +506,18 @@ app.get("/api/local-ip", (_req, res) => {
 });
 
 app.get("/api/health", async (_req, res) => {
-  if (!isDatabaseConnected()) await connectDB();
-  res.json({
-    ok: true,
+  if (!usePostgres() && !isDatabaseConnected()) await connectDB();
+  const qr = qrSigningHealth();
+  const payload = {
+    ok: qr.ok !== false,
     dbState: getDatabaseState(),
     dataBackend: getDataBackend(),
     postgres: isPgAvailable(),
-  });
+    qrSigning: qr.qrSigning,
+    ...authEnvironmentDiagnostic(),
+  };
+  if (!qr.ok) return res.status(503).json(payload);
+  res.json(payload);
 });
 
 // ── Categories ────────────────────────────────────────────────────────────────
@@ -1229,72 +1259,120 @@ function normalizeStaff(id, data) {
 // same scope without needing every payload to repeat it.
 io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
+  socket.legacyJoinedRooms = [];
 
-  socket.on("client-connect", (data={}) => {
-    const clientId = String(data.clientId||socket.id);
-    const restId = data.restId && isSafeId(String(data.restId)) ? String(data.restId) : null;
-    socket.clientId = clientId; socket.table = data.table||""; socket.role = "client"; socket.restId = restId;
+  const legacyAuthorityTimer = setInterval(async () => {
+    if (!socket.legacyStaffVerified) return;
+    const result = await revalidateLegacyStaffAuthority(socket, authorizeSocketJoin, { force: true });
+    if (!result.ok) socket.emit("legacy:unauthorized", { error: result.code });
+  }, LEGACY_STAFF_RECHECK_MS);
+  legacyAuthorityTimer.unref?.();
+
+  socket.on("client-connect", async (data={}) => {
+    leaveOperationalRooms(socket);
+    const token = data.token || socket.handshake?.auth?.token || socket.handshake?.query?.token || "";
+    const identity = await resolveIdentity({
+      headers: { authorization: token ? `Bearer ${token}` : "" },
+      ip: socket.handshake?.address,
+      originalUrl: "socket:client-connect",
+    }).catch(() => ({ verified: false }));
+    const decision = authorizeLegacyClientConnect({ identity, requestedRestId: data.restId });
+    if (!decision.ok) {
+      logSecurityEvent({
+        type: "socket_join_denied",
+        restId: data.restId || null,
+        userId: identity?.userId || null,
+        ip: socket.handshake?.address,
+        details: { event: "client-connect", error: decision.code },
+      });
+      return;
+    }
+    const clientId = String(data.clientId || socket.id);
+    socket.clientId = clientId;
+    socket.table = decision.table || "";
+    socket.role = "client";
+    socket.isCustomer = true;
+    socket.restId = null;
+    socket.customerRestId = decision.restId;
     rooms.clients.set(clientId, socket.id);
-    if (restId) socket.join(`rest-${restId}`);
-    joinTableRooms(socket, data.table, restId);
+    for (const room of decision.joinRooms) socket.join(room);
   });
 
-  const handleChefConnect = async (data={}) => {
-    const chefId = String(data.chefId||data.id||"");
-    const restId = String(data.restId||"");
-    if (!chefId || !restId || !isSafeId(chefId) || !isSafeId(restId)) return;
-    const perms = await resolveRequestPermissions(restId, chefId).catch(() => null);
-    if (!perms) {
-      logSecurityEvent({ type: "socket_join_denied", restId, userId: chefId, ip: socket.handshake?.address, details: { event: "chef-connect" } });
+  const handleStaffConnect = async (data={}, kind) => {
+    leaveOperationalRooms(socket);
+    const requestedUserId = String(kind === "chef" ? (data.chefId || data.id || "") : (data.userId || ""));
+    const restId = String(data.restId || "");
+    const allowedRoles = kind === "chef" ? CHEF_CONNECT_ROLES : ADMIN_CONNECT_ROLES;
+    if (!requestedUserId || !restId || !isSafeId(requestedUserId) || !isSafeId(restId)) return;
+    const token = data.token || socket.handshake?.auth?.token || socket.handshake?.query?.token || "";
+    const identity = await resolveIdentity({
+      headers: { authorization: token ? `Bearer ${token}` : "" },
+      ip: socket.handshake?.address,
+      originalUrl: `socket:${kind}-connect`,
+    }).catch(() => ({ verified: false }));
+    const authz = await authorizeSocketJoin({ token, restId, userId: requestedUserId }).catch(() => null);
+    const decision = authorizeLegacyStaffConnect({
+      identity, authz, requestedRestId: restId, requestedUserId, allowedRoles,
+    });
+    if (!decision.ok) {
+      logSecurityEvent({
+        type: "socket_join_denied",
+        restId,
+        userId: requestedUserId,
+        ip: socket.handshake?.address,
+        details: { event: `${kind}-connect`, error: decision.code },
+      });
       return;
     }
-    socket.chefId = chefId; socket.chefName = data.name||data.chefName||"Chef"; socket.role = "chef"; socket.restId = restId;
-    rooms.chefs.set(chefId, { socketId: socket.id, restId });
-    socket.join(`chefs:${restId}`);
-    socket.join(`rest-${restId}`);
-    broadcastActiveOrders(chefId, restId);
+    rememberLegacyStaff(socket, {
+      token, restId: decision.restId, userId: decision.userId, kind, allowedRoles, authz,
+      chefId: kind === "chef" ? requestedUserId : null,
+    });
+    if (kind === "chef") socket.chefName = data.name || data.chefName || "Chef";
+    joinOperationalRooms(socket, staffRoomsForConnect(decision.restId, kind));
+    if (kind === "chef") {
+      rooms.chefs.set(requestedUserId, { socketId: socket.id, restId: decision.restId });
+      broadcastActiveOrders(requestedUserId, decision.restId);
+    }
   };
-  socket.on("chef-connect",  handleChefConnect);
-  socket.on("chef:join",     handleChefConnect);
+  socket.on("chef-connect",  (data={}) => handleStaffConnect(data, "chef"));
+  socket.on("chef:join",     (data={}) => handleStaffConnect(data, "chef"));
 
-  socket.on("admin-connect", async (data={}) => {
-    const restId = String(data.restId||"");
-    const userId = String(data.userId||"");
-    if (!restId || !userId || !isSafeId(restId) || !isSafeId(userId)) return;
-    const perms = await resolveRequestPermissions(restId, userId).catch(() => null);
-    if (!perms) {
-      logSecurityEvent({ type: "socket_join_denied", restId, userId, ip: socket.handshake?.address, details: { event: "admin-connect" } });
-      return;
-    }
-    socket.role = "admin"; socket.restId = restId;
-    socket.join(`admins:${restId}`);
-    socket.join(`rest-${restId}`);
-  });
+  socket.on("admin-connect", (data={}) => handleStaffConnect(data, "admin"));
 
-  socket.on("new-order", (data={}) => {
+  async function requireLegacyStaffOp(event) {
+    return authorizeLegacyPrivilegedEmit(socket, event, authorizeSocketJoin);
+  }
+
+  socket.on("new-order", async (data={}) => {
+    const decision = await requireLegacyStaffOp("new-order");
+    if (!decision.ok) return;
     const orderId = String(data.orderId||"");
-    const restId = socket.restId || (data.restId && isSafeId(String(data.restId)) ? String(data.restId) : null);
+    const restId = decision.restId;
     if (!orderId) return;
     trackOrder(orderId, { chefId:null, table:data.order?.table, status:data.order?.status||"new", clientId:socket.clientId||null, restId });
-    if (restId) io.to(`chefs:${restId}`).emit("new-order", { orderId, order: data.order, timestamp: Date.now() });
+    io.to(`chefs:${restId}`).emit("new-order", { orderId, order: data.order, timestamp: Date.now() });
     socket.emit("order-created", { orderId, status:"created" });
   });
 
-  socket.on("chef:new-order", (data={}) => {
-    if (!data.orderId) return;
-    const restId = socket.restId || null;
+  socket.on("chef:new-order", async (data={}) => {
+    const decision = await requireLegacyStaffOp("chef:new-order");
+    if (!decision.ok || !data.orderId) return;
+    const restId = decision.restId;
     trackOrder(data.orderId, { chefId: data.chefId||null, table: data.table||null, status:"approved", restId });
     const payload = { ...data, timestamp: Date.now() };
     if (data.chefId) {
       const entry = rooms.chefs.get(String(data.chefId));
       if (entry) io.to(entry.socketId).emit("chef:new-order", payload);
     }
-    if (restId) io.to(`chefs:${restId}`).emit("chef:new-order", payload);
+    io.to(`chefs:${restId}`).emit("chef:new-order", payload);
   });
 
-  socket.on("order-assigned", (data={}) => {
+  socket.on("order-assigned", async (data={}) => {
+    const decision = await requireLegacyStaffOp("order-assigned");
+    if (!decision.ok) return;
     const { orderId, chefId, table } = data;
-    const restId = socket.restId || null;
+    const restId = decision.restId;
     if (!orderId) return;
     trackOrder(orderId, { chefId:chefId||null, table:table||null, status:"Tasdiqlandi", restId });
     const entry = rooms.chefs.get(String(chefId||""));
@@ -1305,9 +1383,11 @@ io.on("connection", (socket) => {
     emitToTable(table, "order-accepted", { orderId, status:"Tasdiqlandi", chefId }, restId);
   });
 
-  socket.on("chef-status-update", (data={}) => {
+  socket.on("chef-status-update", async (data={}) => {
+    const decision = await requireLegacyStaffOp("chef-status-update");
+    if (!decision.ok) return;
     const { orderId, status, chefId, table, orderNumber } = data;
-    const restId = socket.restId || null;
+    const restId = decision.restId;
     if (!orderId) return;
     trackOrder(orderId, { chefId: chefId||socket.chefId||null, table:table||null, status, restId });
     const payload = {
@@ -1321,64 +1401,73 @@ io.on("connection", (socket) => {
       timestamp:   Date.now(),
     };
     emitToTable(table, "order-status-update", payload, restId);
-    if (restId) {
-      socket.to(`chefs:${restId}`).emit("other-chef-status", payload);
-      io.to(`chefs:${restId}`).emit("chef:status-updated", payload);
-      io.to(`admins:${restId}`).emit("order-status-changed", payload);
-    }
-    if (restId) io.to(`rest-${restId}`).emit("order:updated", payload);
+    socket.to(`chefs:${restId}`).emit("other-chef-status", payload);
+    io.to(`chefs:${restId}`).emit("chef:status-updated", payload);
+    io.to(`admins:${restId}`).emit("order-status-changed", payload);
+    io.to(`rest-${restId}`).emit("order:updated", payload);
   });
 
-  socket.on("payment-request", (data={}) => {
-    const restId = socket.restId || (data.restId && isSafeId(String(data.restId)) ? String(data.restId) : null);
-    if (restId) io.to(`admins:${restId}`).emit("payment-request", { ...data, clientId: socket.clientId||null, timestamp: Date.now() });
+  socket.on("payment-request", async (data={}) => {
+    const decision = await requireLegacyStaffOp("payment-request");
+    if (!decision.ok) return;
+    io.to(`admins:${decision.restId}`).emit("payment-request", { ...data, clientId: socket.clientId||null, timestamp: Date.now() });
   });
 
-  socket.on("payment-approved", (data={}) => {
+  socket.on("payment-approved", async (data={}) => {
+    const decision = await requireLegacyStaffOp("payment-approved");
+    if (!decision.ok) return;
     const { orderId, table, clientId } = data;
-    const restId = socket.restId || null;
+    const restId = decision.restId;
     const s = rooms.clients.get(String(clientId||""));
     if (s) io.to(s).emit("payment-approved", { orderId, approved:true, timestamp: Date.now() });
     emitToTable(table, "payment-approved", { ...data, approved:true, timestamp: Date.now() }, restId);
   });
 
-  socket.on("chef-message", (data={}) => {
-    const restId = socket.restId || null;
+  socket.on("chef-message", async (data={}) => {
+    const decision = await requireLegacyStaffOp("chef-message");
+    if (!decision.ok) return;
+    const restId = decision.restId;
     const payload = { ...data, chefName: data.chefName||socket.chefName||"Chef", timestamp: Date.now() };
     emitToTable(data.table, "chef-message", payload, restId);
-    if (restId) io.to(`chefs:${restId}`).emit("chef:chat-message", payload);
+    io.to(`chefs:${restId}`).emit("chef:chat-message", payload);
   });
 
-  socket.on("chef:chat-message", (data={}) => {
-    const restId = socket.restId || null;
-    if (restId) io.to(`chefs:${restId}`).emit("chef:chat-message", { ...data, timestamp: Date.now() });
+  socket.on("chef:chat-message", async (data={}) => {
+    const decision = await requireLegacyStaffOp("chef:chat-message");
+    if (!decision.ok) return;
+    io.to(`chefs:${decision.restId}`).emit("chef:chat-message", { ...data, timestamp: Date.now() });
   });
 
-  socket.on("table-force-closed", (data={}) => {
-    const restId = socket.restId || null;
+  socket.on("table-force-closed", async (data={}) => {
+    const decision = await requireLegacyStaffOp("table-force-closed");
+    if (!decision.ok) return;
+    const restId = decision.restId;
     const payload = { table: data.table, reason: data.reason||"Admin closed the table", timestamp: Date.now() };
     emitToTable(data.table, "table-force-closed", payload, restId);
-    if (restId) {
-      io.to(`chefs:${restId}`).emit("table-closed", payload);
-      io.to(`chefs:${restId}`).emit("chef:table-update", { ...payload, status:"closed" });
-    }
-    rooms.tables.delete(restId ? `${restId}-${String(data.table||"")}` : String(data.table||""));
+    io.to(`chefs:${restId}`).emit("table-closed", payload);
+    io.to(`chefs:${restId}`).emit("chef:table-update", { ...payload, status:"closed" });
+    rooms.tables.delete(`${restId}-${String(data.table||"")}`);
   });
 
-  socket.on("session-reset", (data={}) => {
+  socket.on("session-reset", async (data={}) => {
+    const decision = await requireLegacyStaffOp("session-reset");
+    if (!decision.ok) return;
     for (const [orderId, od] of rooms.orders.entries()) {
       if (od.clientId === data.clientId) rooms.orders.delete(orderId);
     }
   });
 
-  socket.on("menu-updated", () => {
-    const restId = socket.restId || socket.nestaRestId;
-    if (restId) io.to(`rest-${restId}`).emit("menu-updated", { timestamp: Date.now(), restId });
+  socket.on("menu-updated", async () => {
+    const decision = await requireLegacyStaffOp("menu-updated");
+    if (!decision.ok) return;
+    io.to(`rest-${decision.restId}`).emit("menu-updated", { timestamp: Date.now(), restId: decision.restId });
   });
 
   socket.on("disconnect", () => {
+    clearInterval(legacyAuthorityTimer);
+    leaveOperationalRooms(socket);
     if (socket.role === "client" && socket.clientId) rooms.clients.delete(socket.clientId);
-    if (socket.role === "chef"   && socket.chefId)   rooms.chefs.delete(socket.chefId);
+    if (socket.chefId) rooms.chefs.delete(socket.chefId);
     const tableKey = socket.restId ? `${socket.restId}-${String(socket.table||"")}` : String(socket.table||"");
     if (socket.table && rooms.tables.has(tableKey)) {
       rooms.tables.get(tableKey).delete(socket.id);
@@ -1450,7 +1539,15 @@ app.use((err, req, res, _next) => {
 });
 
 const PORT = Number(process.env.PORT || 4000);
-connectDB();
+if (!usePostgres()) connectDB();
+
+try {
+  assertQrSigningConfigured();
+  assertIsolatedAuthEnvironment();
+} catch (err) {
+  console.error("[startup] configuration failed:", err.message);
+  process.exit(1);
+}
 
 server.listen(PORT, "0.0.0.0", () => {
   const ifaces = os.networkInterfaces();
@@ -1466,6 +1563,7 @@ server.listen(PORT, "0.0.0.0", () => {
   console.log(`📱 QR: http://${localIp}:${PORT}/table/1`);
   console.log(`❤️  Health: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Data backend: ${getDataBackend()}${pgCfg ? ` (postgres ${pgCfg.user}@${pgCfg.host}:${pgCfg.port}/${pgCfg.database})` : ""}`);
+  logAuthEnvironment();
 });
 
 // P2 fix (PRODUCTION-AUDIT.md #17): no SIGTERM/SIGINT handler existed, so a

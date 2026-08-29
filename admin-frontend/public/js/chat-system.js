@@ -120,7 +120,7 @@ window.injectChatHTML = function () {
 window.initChatSystem = async function (config) {
   window._chatSystemLastConfig = config;
 
-  const { ref, get, push, update, onChildAdded, onValue, off } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js");
+  const { ref, push, update, onChildAdded, onValue } = await import("./pgRtdb.js");
 
   const { currentRestaurantId, currentUserId, currentRole, db, getChatOptions, getChatId } = config;
 

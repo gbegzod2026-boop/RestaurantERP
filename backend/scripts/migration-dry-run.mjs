@@ -69,7 +69,7 @@ if (!isAdminAvailable()) {
 }
 
 const auth = getAdminAuth();
-const db = getAdminDb();
+const db = getAdminDb({ purpose: "migration" });
 
 // ────────────────────────────────────────────────────────────────────────
 // READ-ONLY: RTDB restaurant users

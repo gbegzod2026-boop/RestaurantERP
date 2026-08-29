@@ -15,9 +15,14 @@
 // it's what turns "an anonymous browser" into "a real, Firebase-Auth-backed
 // anonymous customer session" so the rules layer has something to check.
 import express from "express";
+import crypto from "crypto";
 import { signQrParams, verifyQrParams } from "../security/qrSign.js";
 import { isSafeId } from "../security/sanitize.js";
 import { isAdminAvailable, getAdminAuth } from "../firebaseAdmin.js";
+import { assertAuthMintAllowed } from "../firebaseEnv.js";
+import { resolveIdentity, resolveRequestPermissions } from "../rbac.js";
+import { canonicalizeRestId } from "../pg/restId.js";
+import { customerSessionUid, evaluateQrSessionMint } from "../pg/qrSession.js";
 
 const router = express.Router();
 
@@ -25,21 +30,31 @@ function getRestId(req) {
   return req.query.restId || req.body?.restId || req.headers["x-rest-id"] || null;
 }
 
-// Table/tableId only ever end up in a Firebase Auth uid and custom claim
-// here, never interpolated into a DB path — still worth capping length/
-// charset so a malformed value can't produce a garbage uid.
-const SAFE_TABLE_RE = /^[A-Za-z0-9_-]{0,64}$/;
-
 // Called by admin.js when staff generate/print/download a table's QR code —
 // see downloadSingleQR / downloadAllTablesQR.
-router.get("/qr/sign", (req, res) => {
+router.get("/qr/sign", async (req, res) => {
+  const identity = await resolveIdentity(req);
+  if (!identity.verified) {
+    return res.status(401).json({ error: "Authentication required", code: identity.tokenError || "token_missing" });
+  }
+  if (identity.isCustomer === true) {
+    return res.status(403).json({ error: "Access Denied", code: "role_denied" });
+  }
   const restId = getRestId(req);
   if (!restId || !isSafeId(String(restId))) {
-    return res.status(400).json({ error: "Invalid restId" });
+    return res.status(400).json({ error: "Invalid restId", code: "restId_invalid" });
+  }
+  const canonical = canonicalizeRestId(restId);
+  if (identity.platformSuperAdmin !== true) {
+    if (!identity.restId || canonicalizeRestId(identity.restId) !== canonical) {
+      return res.status(403).json({ error: "Access Denied", code: "restId_mismatch" });
+    }
+    const perms = await resolveRequestPermissions(canonical, identity.userId);
+    if (!perms) return res.status(403).json({ error: "Access Denied", code: "role_denied" });
   }
   const table = req.query.table != null ? String(req.query.table) : "";
   const tableId = req.query.tableId != null ? String(req.query.tableId) : "";
-  const { sig, exp } = signQrParams({ restId, table, tableId });
+  const { sig, exp } = signQrParams({ restId: canonical, table, tableId });
   res.json({ sig, exp });
 });
 
@@ -100,57 +115,35 @@ async function ensureAuthUserExists(auth, uid) {
 // Called by client.js on EVERY page load (every QR scan) before it touches
 // Firebase at all. Mints the customer's Firebase Auth session.
 router.post("/qr/session", async (req, res) => {
-  const restId = req.body?.restId;
-  const table = req.body?.table != null ? String(req.body.table) : "";
-  const tableId = req.body?.tableId != null ? String(req.body.tableId) : "";
-  if (!restId || !isSafeId(String(restId))) {
-    return res.status(400).json({ error: "Invalid restId" });
-  }
-  if (!SAFE_TABLE_RE.test(table) || !SAFE_TABLE_RE.test(tableId)) {
-    return res.status(400).json({ error: "Invalid table" });
-  }
-
-  // If the link carries a signature (see security/qrSign.js — only links
-  // generated/downloaded since Phase 2's QR-security fix have one), verify
-  // it and reject a tampered rest/table/tableId combination outright. Links
-  // with NO signature at all — every QR code printed before that fix
-  // shipped — skip this check entirely, same "legacy stays legacy" carve-out
-  // as /qr/verify; this endpoint mints a session for them exactly as it
-  // does for a signed link.
-  const { sig, exp } = req.body || {};
-  if (sig || exp) {
-    const result = verifyQrParams({ restId, table, tableId, sig, exp });
-    if (!result.valid) return res.status(403).json({ error: "Invalid or expired QR link", reason: result.reason });
+  const decision = evaluateQrSessionMint({
+    restId: req.body?.restId,
+    table: req.body?.table,
+    tableId: req.body?.tableId,
+    sig: req.body?.sig,
+    exp: req.body?.exp,
+  });
+  if (!decision.ok) {
+    return res.status(decision.status).json({ error: decision.error, code: decision.code });
   }
 
   if (!isAdminAvailable()) {
-    // No Firebase Admin service account configured yet — degrade exactly
-    // like routes/auth.js does: no session token, client.js falls back to
-    // its pre-existing (unauthenticated) behavior, nothing breaks.
-    return res.json({ token: null });
+    return res.status(503).json({ error: "Session verification unavailable", token: null, code: "token_invalid" });
+  }
+  try {
+    assertAuthMintAllowed();
+  } catch (err) {
+    console.error("[qr/session] mint refused:", err.message);
+    return res.status(503).json({ token: null, error: "Session mint unavailable", code: "token_invalid" });
   }
 
   try {
     const auth = getAdminAuth();
-    // Stable per (restaurant, table) — not per visitor. This is an
-    // anonymous SESSION identity, not a personal account: every diner who
-    // scans the same table's QR code shares it, exactly as they already
-    // share that table's unauthenticated access today. Already globally
-    // unique (restId-prefixed) — no per-restaurant collision risk, unlike
-    // the bare-uid scheme mintSessionToken() (routes/auth.js) used to have.
-    // First-QR-scan-token-bug fix: ensureAuthUserExists() above explicitly
-    // creates the underlying Firebase Auth user record on first scan now —
-    // it was NOT created automatically by setCustomUserClaims() the way
-    // this comment used to (incorrectly) say; see that function's header.
-    const uid = `client_${restId}_${table || tableId || "na"}`.slice(0, 128);
-    // `table`/`role` are the names database.rules.json and rbac.js could
-    // consume if they ever need to (currently neither does — only
-    // auth.token.restId is checked for QR sessions). `tableId`/`type`/
-    // `restaurantId` are additive aliases satisfying the fuller claim-name
-    // contract without removing the originals or touching the rules file.
+    const uid = customerSessionUid(decision, crypto.randomUUID());
     const claims = {
-      restId, restaurantId: restId,
-      table: table || null, tableId: table || tableId || null,
+      restId: decision.restId,
+      restaurantId: decision.restId,
+      table: decision.dineIn ? (decision.table || null) : null,
+      tableId: decision.dineIn ? (decision.tableId || decision.table || null) : null,
       type: "customer",
       role: "client",
     };
@@ -159,10 +152,8 @@ router.post("/qr/session", async (req, res) => {
     const token = await auth.createCustomToken(uid, claims);
     res.json({ token });
   } catch (err) {
-    // err.code only (e.g. "auth/..."), never a raw message that could echo
-    // request data — no password/hash/token is ever part of this error either way.
     console.error("[qr/session] mint failed:", err.code || err.message);
-    res.json({ token: null }); // best-effort — see comment above, never blocks page load
+    res.status(503).json({ token: null, error: "Session mint failed", code: "token_invalid" });
   }
 });
 

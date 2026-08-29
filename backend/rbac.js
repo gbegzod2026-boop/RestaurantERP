@@ -22,6 +22,8 @@
 import { isSafeId } from "./security/sanitize.js";
 import { logSecurityEvent } from "./security/auditLog.js";
 import { isAdminAvailable, getAdminAuth } from "./firebaseAdmin.js";
+import { isCanonicalPlatformSuperAdmin } from "./security/requireSuperAdmin.js";
+import { canonicalizeRestId, parseCompositeUid, parseRestId } from "./pg/restId.js";
 // Architecture Fix Pass: database.rules.json now requires `auth != null` on
 // restaurants/$restId, so this file's own reads (the permission check every
 // requirePermission()-gated route depends on) must go through the Admin SDK
@@ -30,6 +32,7 @@ import { isAdminAvailable, getAdminAuth } from "./firebaseAdmin.js";
 // permissions ahead of. See systemDb.js for the admin-or-client fallback.
 import { systemGet } from "./systemDb.js";
 import { usePostgres } from "./pg/config.js";
+import { customerTableClaims, isCanonicalCustomerClaims } from "./pg/customerIdentity.js";
 import { getPool, withTenantContext } from "./db/postgres.js";
 
 /**
@@ -53,33 +56,46 @@ import { getPool, withTenantContext } from "./db/postgres.js";
  */
 export async function resolveIdentity(req) {
   const authHeader = req.headers.authorization || "";
-  if (authHeader.startsWith("Bearer ") && isAdminAvailable()) {
-    const idToken = authHeader.slice(7).trim();
-    if (idToken) {
-      try {
-        const decoded = await getAdminAuth().verifyIdToken(idToken);
-        return {
-          userId: decoded.rtdbUserId || decoded.uid,
-          restId: decoded.restId || decoded.restaurantId || null,
-          role: decoded.role || null,
-          verified: true,
-        };
-      } catch (err) {
-        // Expired/malformed token is not a verified identity. Do not trust
-        // x-user-id as a substitute — that header is not a credential.
-        logSecurityEvent({ type: "id_token_invalid", ip: req.ip, path: req.originalUrl, details: { reason: err.code || "invalid_token" } });
-        return {
-          userId: null,
-          restId: null,
-          role: null,
-          verified: false,
-          tokenError: err.code || "invalid_token",
-        };
-      }
-    }
+  if (!authHeader.startsWith("Bearer ") || !authHeader.slice(7).trim()) {
+    const headerUserId = req.headers["x-user-id"];
+    return { userId: headerUserId || null, restId: null, role: null, verified: false, tokenError: "token_missing" };
   }
-  const headerUserId = req.headers["x-user-id"];
-  return { userId: headerUserId || null, restId: null, role: null, verified: false };
+  if (!isAdminAvailable()) {
+    return { userId: null, restId: null, role: null, verified: false, tokenError: "token_invalid" };
+  }
+  const idToken = authHeader.slice(7).trim();
+  try {
+    const decoded = await getAdminAuth().verifyIdToken(idToken);
+    const composite = parseCompositeUid(decoded.uid);
+    const platformSuperAdmin = isCanonicalPlatformSuperAdmin(decoded);
+    const restId = platformSuperAdmin
+      ? null
+      : canonicalizeRestId(decoded.restId || decoded.restaurantId || composite?.restId || null);
+    const tables = customerTableClaims(decoded);
+    return {
+      userId: decoded.rtdbUserId || composite?.userId || decoded.uid,
+      uid: decoded.uid,
+      restId,
+      role: decoded.role || null,
+      verified: true,
+      platformSuperAdmin,
+      tokenType: decoded.type || null,
+      isCustomer: isCanonicalCustomerClaims(decoded) === true,
+      table: tables.table,
+      tableId: tables.tableId,
+    };
+  } catch (err) {
+    // Expired/malformed token is not a verified identity. Do not trust
+    // x-user-id as a substitute — that header is not a credential.
+    logSecurityEvent({ type: "id_token_invalid", ip: req.ip, path: req.originalUrl, details: { reason: err.code || "invalid_token" } });
+    return {
+      userId: null,
+      restId: null,
+      role: null,
+      verified: false,
+      tokenError: err.code || "token_invalid",
+    };
+  }
 }
 
 const ROLE_TEMPLATES = {
@@ -193,7 +209,9 @@ async function resolveRequestPermissionsFromPg(restId, userId) {
     );
     if (!rows[0]) return null;
     const user = rows[0];
+    if (user.active === false) return null;
     const extra = user.extra && typeof user.extra === "object" ? user.extra : {};
+    if (extra.blocked === true || extra.status === "blocked" || extra.deleted === true || extra.revoked === true) return null;
     const role = user.role || "waiter";
     const isSubAdmin = extra.isSubAdmin === true;
     if (role === "owner" || (role === "admin" && isSubAdmin !== true)) {
@@ -262,8 +280,18 @@ export async function resolveRequestPermissions(restId, userId) {
 /** Tenant routes require a verified, explicitly tenant-scoped claim. */
 export function tenantAuthorityDecision(identity, requestedRestId) {
   if (!identity?.verified) return { status: 401 };
-  if (!identity.restId || identity.restId !== requestedRestId) return { status: 403 };
-  return { restId: identity.restId };
+  if (requestedRestId != null && requestedRestId !== "") {
+    const parsed = parseRestId(requestedRestId);
+    if (!parsed.ok) return { status: 400, code: "restId_invalid" };
+  }
+  const requested = canonicalizeRestId(requestedRestId);
+  if (identity.platformSuperAdmin === true) {
+    if (!requested) return { status: 403 };
+    return { restId: requested };
+  }
+  const restId = canonicalizeRestId(identity.restId);
+  if (!restId || restId !== requested) return { status: 403 };
+  return { restId };
 }
 
 /**
@@ -287,6 +315,14 @@ export function tenantAuthorityDecision(identity, requestedRestId) {
  * own record?") can reuse this already-verified value instead of ever
  * reading req.headers["x-user-id"] themselves — see routes/delivery.js.
  */
+export function permissionAllows(perms, moduleId, action) {
+  if (!perms) return false;
+  if (perms.modules === null) return true;
+  const allowedModules = perms.modules || [];
+  const allowedActions = (perms.actions && perms.actions[moduleId]) || [];
+  return allowedModules.includes(moduleId) && allowedActions.includes(action);
+}
+
 export function requirePermission(moduleId, action, getRestId) {
   return async function (req, res, next) {
     try {
@@ -309,7 +345,12 @@ export function requirePermission(moduleId, action, getRestId) {
       // e.g. an employee of restaurant A presenting a valid session while
       // restId=B is in the request. Deny outright rather than falling
       // through to a lookup that would legitimately fail anyway.
-      if (tenantAuthorityDecision(identity, restId).status === 403) {
+      const authority = tenantAuthorityDecision(identity, restId);
+      if (authority.status === 400) {
+        logSecurityEvent({ type: "authz_denied", restId, userId, ip: req.ip, path: req.originalUrl, details: { reason: "restId_invalid", moduleId, action } });
+        return res.status(400).json({ error: "Invalid restaurant id", code: "restId_invalid" });
+      }
+      if (authority.status === 403) {
         logSecurityEvent({ type: "authz_denied", restId, userId, ip: req.ip, path: req.originalUrl, details: { reason: "restId_missing_or_mismatch", moduleId, action, tokenRestId: identity.restId || null } });
         return res.status(403).json({ error: "Access Denied" });
       }
@@ -322,11 +363,7 @@ export function requirePermission(moduleId, action, getRestId) {
 
       req.nestaAuth = { userId, restId, role: perms.role, verified: true };
 
-      if (perms.modules === null) return next(); // owner — unrestricted
-
-      const allowedModules = perms.modules || [];
-      const allowedActions = (perms.actions && perms.actions[moduleId]) || [];
-      if (!allowedModules.includes(moduleId) || !allowedActions.includes(action)) {
+      if (!permissionAllows(perms, moduleId, action)) {
         logSecurityEvent({ type: "authz_denied", restId, userId, ip: req.ip, path: req.originalUrl, details: { reason: "insufficient_permission", moduleId, action, role: perms.role } });
         return res.status(403).json({ error: "Access Denied" });
       }
