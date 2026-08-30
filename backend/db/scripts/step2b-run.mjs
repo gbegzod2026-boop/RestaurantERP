@@ -3,7 +3,6 @@ import { fileURLToPath } from "url";
 import { spawn } from "child_process";
 import dotenv from "dotenv";
 import {
-  MIGRATION_TARGET_DB,
   readLocalPgParts,
   migrationChildEnv,
 } from "./lib/migrationTargetGuard.mjs";
@@ -27,12 +26,18 @@ function targetEnv() {
   delete process.env.PORT;
   const parts = readLocalPgParts();
   if (!parts.host || !parts.user) throw new Error("PostgreSQL host/user not configured");
-  return migrationChildEnv({ ...process.env, PORT: undefined }, parts);
+  const env = migrationChildEnv({ ...process.env, PORT: undefined }, parts);
+  // Local runner never inherits a production apply confirmation.
+  delete env.NESTA_MIGRATE_TARGET;
+  delete env.NESTA_PRODUCTION_MIGRATE_CONFIRM;
+  delete env.NESTA_PRODUCTION_MIGRATE_TAG;
+  delete env.NESTA_PRODUCTION_ALLOW_RESUME;
+  return env;
 }
 
-function run(args) {
+function run(args, env) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { cwd: BACKEND, env: targetEnv(), stdio: "inherit" });
+    const child = spawn(process.execPath, args, { cwd: BACKEND, env, stdio: "inherit" });
     child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${args.join(" ")} exit ${code}`))));
   });
 }
@@ -57,14 +62,27 @@ const map = {
   "fee-reclass": ["db/scripts/step2c-fee-probe.mjs", "--write-reclass"],
   "source-snapshot": ["db/scripts/step2d-source-snapshot.mjs"],
   "pg-precheck": ["db/scripts/step2d-pg-precheck.mjs"],
+  "prod-preflight": ["db/scripts/step2d2-prod-pg-preflight.mjs"],
+  rehearsal: ["db/scripts/step2d2-rehearsal.mjs"],
+  "backup-verify": ["db/scripts/step2d2-backup-verify.mjs"],
 };
 
+const AS_CONFIGURED = new Set(["prod-preflight", "backup-verify"]);
+
 if (!map[step]) {
-  console.error("usage: step2b-run.mjs <wave1|wave1-dry|credentials|fb-apply|fb-resume|fb-limit3|fb-idempotent|fb-dry|discover|roots|issues|reconcile|counts|promocodes|fee-probe|fee-reclass|source-snapshot|pg-precheck>");
+  console.error("usage: step2b-run.mjs <wave1|wave1-dry|credentials|fb-apply|fb-resume|fb-limit3|fb-idempotent|fb-dry|discover|roots|issues|reconcile|counts|promocodes|fee-probe|fee-reclass|source-snapshot|pg-precheck|prod-preflight|rehearsal|backup-verify>");
   process.exit(2);
 }
 
-run(map[step]).catch((err) => {
+const childEnv = AS_CONFIGURED.has(step)
+  ? (() => {
+    cleanFirebaseOverlay();
+    delete process.env.PORT;
+    return { ...process.env };
+  })()
+  : targetEnv();
+
+run(map[step], childEnv).catch((err) => {
   console.error(err.message);
   process.exit(1);
 });

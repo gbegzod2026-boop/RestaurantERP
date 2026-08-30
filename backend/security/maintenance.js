@@ -62,6 +62,7 @@ export function maintenanceBody() {
     error: MAINTENANCE_CODE,
     code: MAINTENANCE_CODE,
     retryable: true,
+    retry_guaranteed: false,
     message: "Service is in cutover maintenance. Tenant writes are paused.",
   };
 }
@@ -71,6 +72,7 @@ export function clickMaintenanceBody() {
     error: -7,
     error_note: "MAINTENANCE",
     retryable: true,
+    retry_guaranteed: false,
     code: MAINTENANCE_CODE,
   };
 }
@@ -81,6 +83,7 @@ export function paymeMaintenanceBody(id = null) {
     id,
     error: { code: -32400, message: "MAINTENANCE" },
     retryable: true,
+    retry_guaranteed: false,
     code: MAINTENANCE_CODE,
   };
 }
@@ -90,6 +93,7 @@ export function uzumMaintenanceBody() {
     error: MAINTENANCE_CODE,
     code: MAINTENANCE_CODE,
     retryable: true,
+    retry_guaranteed: false,
   };
 }
 

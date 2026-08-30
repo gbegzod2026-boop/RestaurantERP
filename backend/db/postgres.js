@@ -23,6 +23,7 @@
 // pairs with, and db/tests/rls.test.mjs for the DENY/ALLOW proof.
 import pg from "pg";
 import dotenv from "dotenv";
+import { withPgSsl } from "./pgSsl.js";
 
 dotenv.config();
 
@@ -34,23 +35,30 @@ let _warned = false;
 function readConfig() {
   const url = process.env.POSTGRES_URL || "";
   if (url) {
-    return { connectionString: url };
+    let host = "";
+    try { host = new URL(url).hostname; } catch { host = ""; }
+    const { config } = withPgSsl({
+      connectionString: url,
+      max: Number(process.env.POSTGRES_POOL_MAX || 10),
+      idleTimeoutMillis: 30_000,
+    }, host);
+    return config;
   }
   const host = process.env.POSTGRES_HOST || "";
   const database = process.env.POSTGRES_DB || "";
   const user = process.env.POSTGRES_USER || "";
   const password = process.env.POSTGRES_PASSWORD || "";
   if (!host || !database || !user) return null;
-  return {
+  const { config } = withPgSsl({
     host,
     port: Number(process.env.POSTGRES_PORT || 5432),
     database,
     user,
     password,
-    ssl: process.env.POSTGRES_SSL === "true" ? { rejectUnauthorized: process.env.POSTGRES_SSL_REJECT_UNAUTHORIZED !== "false" } : false,
     max: Number(process.env.POSTGRES_POOL_MAX || 10),
     idleTimeoutMillis: 30_000,
-  };
+  }, host);
+  return config;
 }
 
 /** Host/db/user only — safe for a startup log line. Never includes the

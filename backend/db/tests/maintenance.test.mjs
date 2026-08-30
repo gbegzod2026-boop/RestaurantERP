@@ -85,6 +85,7 @@ test("middleware blocks tenant writes and never 200s payment webhooks", async ()
     assert.equal(click.status, 503);
     assert.equal(clickBody.error, -7);
     assert.equal(clickBody.retryable, true);
+    assert.equal(clickBody.retry_guaranteed, false);
 
     const payme = await fetch(`http://127.0.0.1:${port}/api/payme/webhook`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: 9 }) });
     const paymeBody = await payme.json();

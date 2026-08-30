@@ -1,22 +1,35 @@
 # NESTA Production Status
 
-Status: **Step 1 Codex-review remediations implemented and live-probed; real-browser admin still NOT VERIFIED — not production-ready**
-
-## Confirmed risks
-
-- Local PostgreSQL 16.15 is reachable on loopback `5432`, but the restored cluster is **empty** (`restaurantCount=0`); prior Firebase→PG row data was not re-applied. Real admin.html acceptance cannot complete until restaurant rows exist (user-approved migrate) or a dedicated local tenant is seeded.
-- C: was at 0 GB free (blocker for the previous install). Cache cleanup recovered ~2.4 GB; the instance lives on D: as a user-space cluster, not a Windows service, so it will not auto-start after reboot.
-- Historical tokens may contain legacy `isSuperAdmin=true`; patched tenant authorization ignores it and rejects mismatches unconditionally.
-- Firebase RTDB canonical-authority rules are patched locally but intentionally undeployed.
+Status: **Step 2D.5A cutover-artifact freeze in progress — production data migration NOT authorized**
 
 ## Current controls
 
-- Production deployment, data migration, rules deployment, session revocation, and live credential changes are prohibited without user approval.
-- Canonical platform authorization and generic PostgreSQL error semantics are implemented with focused regressions passing.
-- Postgres mode fail-closed: unmapped tenant application-data paths return `unmapped_path` and do not fall back to native Firebase.
-- `REQUIRE_DB=1 npm run db:test` 190/190; live probe REAL VERIFIED 0 failures after backend restart. 74/74 tenant tables have RLS + FORCE RLS.
-- Git secret hygiene: `.env` and service-account files are ignored; no matching secret filenames are tracked. Only coordination docs are dirty.
+- Production Firebase→PostgreSQL data `--apply` is prohibited without explicit human approval after a GO operator preflight.
+- `DATA_BACKEND` must remain unswitched in this step.
+- Platform vs tenant authority unchanged. RLS/FORCE RLS required on tenant tables.
+- `POSTGRES_POOL_MAX` production recommendation remains **10**.
+
+## Step 2D.3 Railway PostgreSQL (operator-verified)
+
+- PUBLIC MANAGED, PostgreSQL 18.6, TLS on
+- migrations 0001–0017, latest **0017**
+- pgcrypto, required roles, tenant catalog RLS/FORCE RLS 74/74
+- restaurants 0, fixture rows 0
+- production PG preflight **GO**
+- production Firebase data migrated **NO**
+
+## Step 2D.4 remaining gates
+
+- Firebase RTDB backup: see `cutover-backups/` (gitignored) and Step 2D.4 report
+- Click / Payme / Uzum: **BLOCKED**. `NESTA_PAYMENT_PAUSE_CONFIRM` unset. HTTP 503 is not a guaranteed retry; durable queue is not implemented.
+- App/config rollback copies: gitignored `cutover-backups/app-config-*`
+- Railway PG dump restore drill: disposable **local** database only; never overwrite `railway`
+
+## Cutover artifacts
+
+- Step 2C historical: tag `nesta-step2c-cutover` / `38f5a80681ebd431c9952e83e043ceb23fed6454` (do not reset to this).
+- Current production cutover candidate: tag `nesta-step2-cutover-ready`. Deploy freeze requires a clean tree and HEAD equal to that tag.
 
 ## Release gate
 
-All rows in `ACCEPTANCE_MATRIX.md` must have non-skipped PASS evidence and Git must contain no secrets.
+Do not migrate production data. Do not enable maintenance from an agent. Do not start Step 3. All `ACCEPTANCE_MATRIX.md` rows and secret hygiene still apply.

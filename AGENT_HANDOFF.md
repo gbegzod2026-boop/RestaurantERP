@@ -132,6 +132,94 @@
 - Tests: `REQUIRE_DB=1 npm run db:test` **262 pass / 0 fail / 0 skip** with isolated Auth overlay (`nesta-staging`). Frontend `npm test` **35 pass / 0 fail / 0 skip**. One earlier `db:test` without overlay logged Admin SDK `production=true` from `.env`; no Auth mutation; re-run used overlay only.
 - Verdict: STEP 1 RUNTIME **PASS**; STEP 1 COMPLETE **PASS**; Step 2 **GO**. Step 2 was not started.
 
+## Step 1 checkpoint + Step 2A readiness (Cursor, 2026-08-29)
+
+- Step 1 checkpoint commit created: `2ab3e4fb03ba2d8dea7817c825b6c9010e6615ef` (not pushed). `tools/` left untracked. No secrets staged.
+- Step 2A is inventory/plan only. Production Firebase REST GET only (667 discover + 57 legacy-roots + 191 issue re-check). Writes: 0. Auth not mutated. Production migrate not run. Step 3 not started.
+- Live source (2026-08-29): 46 restaurants, 56 tenant collections, 59 orders, 85 users, 44/46 credential trees, restaurants_meta 47 with 1 orphan, root promocodes 68,751, discountClaims absent. Local PG currently holds only the 2 Step 1 fixture tenants.
+- Step 2A readiness: **PARTIAL**. Safe for local/read-only dry-run on a dedicated database. **Not** safe to migrate production.
+
+## Step 2D.2 cutover verification tooling (Cursor, 2026-08-29)
+
+- Tooling only. Production data was not migrated. `DATA_BACKEND` was not switched. Production Firebase was not written. Step 3 was not started.
+- Added read-only `step2d2-prod-pg-preflight.mjs` (SSL, non-loopback, forbidden DBs, schema 0017, roles, FORCE RLS, empty restaurants, pool recommendation). Local loopback is expected **NO-GO**.
+- Production `--apply` requires exact `NESTA_MIGRATE_TARGET=production` plus two confirmation strings; `yes`/`true`/`1` are refused. Default remains loopback `nesta_migration_dryrun`.
+- Operator checklist: `docs/CUTOVER_OPERATOR_CHECKLIST.md`. Backups and payment pause remain **NOT VERIFIED** until the operator supplies artifacts/confirmation.
+- Webhooks: Click/Payme/Uzum **BLOCKED**. HTTP 503 is not a guaranteed retry. `DURABLE_QUEUE` is not implemented.
+- Local rehearsal: `node db/scripts/step2b-run.mjs rehearsal` against `nesta_migration_dryrun` only.
+
+## Step 2D.3 Railway schema-only (Cursor, 2026-08-30)
+
+- Schema-only attempt. Production Firebase was not read for migrate-apply. `migrate-firebase --apply` was not run. `DATA_BACKEND` was not switched. Step 3 was not started.
+- Identity probe (`step2d3-railway-schema.mjs identify`) **STOP**: process env has no `POSTGRES_URL` / `DATABASE_URL`; `backend/.env` is still loopback `localhost` / database `postgres` (local fixture). Railway CLI / `RAILWAY_TOKEN` not present. No remote connection was opened.
+- Schema 0001–0017 was **not** applied. Local PostgreSQL was not used.
+- Re-run after the operator sets a non-loopback public URL in the environment (do not commit it): `node db/scripts/step2d3-railway-schema.mjs identify` then `apply`, then `step2d2-prod-pg-preflight.mjs`.
+
+## Railway TLS fix (Cursor, 2026-08-30)
+
+- `self-signed certificate in certificate chain` on `*.proxy.rlwy.net` is the stock Railway Postgres cert (CN=localhost, unpublished per-instance CA). `step2d3` previously set `rejectUnauthorized: true` against the public CA store.
+- Fix: `backend/db/pgSsl.js` — Railway hosts use libpq `sslmode=require` equivalent (encrypt, no global `NODE_TLS_REJECT_UNAUTHORIZED`). Other remote hosts stay verify-full. Optional `POSTGRES_SSL_CA` / `POSTGRES_SSL_CA_FILE` enables verify-ca.
+- Schema was not applied. `DATA_BACKEND` was not switched.
+
+## Step 2D.3 schema apply session fix (Cursor, 2026-08-30)
+
+- Root cause: `identifyLive` ran `SET default_transaction_read_only = on` on the same client later used for `apply`. That GUC is session-level and survives `ROLLBACK`, so `CREATE TABLE` failed with "read-only transaction".
+- Fix: identify/tls-probe use `BEGIN READ ONLY` + `SET LOCAL`. Apply closes that client and opens a dedicated session with `default_transaction_read_only = off`. Invariants still require empty `railway` / PUBLIC MANAGED / SSL on.
+- This agent session still has no `DATABASE_PUBLIC_URL`; apply was not executed here. Re-run `node db/scripts/step2d3-railway-schema.mjs apply` in the shell that already passed identify. No Firebase migrate. `DATA_BACKEND` unchanged.
+
+## Step 2D.4 operator preflight (Cursor, 2026-08-30)
+
+- Production Firebase `--apply` was not run. `DATA_BACKEND` was not switched. Auth was not mutated. Step 3 was not started.
+- Firebase RTDB backup: read-only GET; 46 restaurants; 54 nested order payments; structural parse **PASS**. Live RTDB restore **not** performed. Artifact under gitignored `cutover-backups/firebase-*`.
+- App/config copies: **PASS** (`.env` + service-account copied to gitignored `cutover-backups/app-config-*`; secret **names** only in inventory). Reverse proxy config **NOT VERIFIED**.
+- Railway PG dump/restore drill: **FAIL then fixed source-vs-target mix-up**. Root cause: the script copied `DATABASE_PUBLIC_URL` onto `POSTGRES_URL`, so restore used Railway and the loopback guard stopped. Fix: independent resolvers (`resolveDumpSource` / `resolveRestoreTarget`); restore uses `STEP2D4_RESTORE_DATABASE_URL` or isolated `backend/.env` loopback; never `DATABASE_PUBLIC_URL`. Disposable DB `nesta_step2d4_restore` only. Cursor still has no `DATABASE_PUBLIC_URL` — dump **NOT RUN** here. Operator re-run in the Railway shell. Production data not migrated. `DATA_BACKEND` unchanged.
+- Click/Payme/Uzum **BLOCKED**. HTTP 503 is not a guaranteed retry. Durable queue not implemented. Pause confirm phrase not set.
+- `POSTGRES_POOL_MAX` remains **10**.
+
+## Step 2D.4 PG backup/restore connection separation (Cursor, 2026-08-30)
+
+- Do not dump Railway from this session if `DATABASE_PUBLIC_URL` is unset. Do not substitute localhost as dump source.
+- Source resolver: `DATABASE_PUBLIC_URL` (Railway `railway` only). Restore resolver: `STEP2D4_RESTORE_DATABASE_URL` or isolated `backend/.env` loopback. Disposable DB: `nesta_step2d4_restore`.
+- Operator command (shell that already has the public URL): `$env:POSTGRES_SSL = "true"; node db/scripts/step2d4-pg-backup-restore.mjs`
+- Tests: `node --test db/tests/step2d4-pg-backup-restore.test.mjs`
+
+## Step 2D.4 pg_dump client version guard (Cursor, 2026-08-30)
+
+- Railway server is PostgreSQL 18.6. A PATH `pg_dump` 16.x cannot dump it. Guard requires pg_dump/pg_restore major >= server major and stops with `PG_DUMP_VERSION_INCOMPATIBLE` before creating a dump.
+- Set `PG_DUMP_BIN` / `PG_RESTORE_BIN` to PostgreSQL 18 client executables. Do not downgrade Railway. Dump source remains Railway read-only; restore remains loopback `nesta_step2d4_restore`.
+- Operator (shell with `DATABASE_PUBLIC_URL`): `$env:POSTGRES_SSL = "true"; $env:PG_DUMP_BIN = "...\PostgreSQL\18\bin\pg_dump.exe"; $env:PG_RESTORE_BIN = "...\PostgreSQL\18\bin\pg_restore.exe"; node db/scripts/step2d4-pg-backup-restore.mjs`
+
+## Step 2D.4 local restore role bootstrap (Cursor, 2026-08-30)
+
+- `pg_restore` failed with exit 1 because cluster-global `nesta_app` is not in a database dump. Schema 0017 / RLS 74/74 still restored.
+- Fix: before local restore, CREATE missing `nesta_*` roles on loopback `postgres` only (NOSUPERUSER / NOCREATEDB / NOCREATEROLE / NOREPLICATION / NOBYPASSRLS / NOLOGIN). Never CREATE ROLE on Railway. Drop only roles this drill created.
+- Re-run operator drill with the same PG 18 clients. Do not migrate Firebase. `DATA_BACKEND` unchanged.
+
+## Step 2D final payment cutover confirmation (Cursor, 2026-08-30)
+
+- `NESTA_PAYMENT_PAUSE_CONFIRM` is **UNSET** in process env and `backend/.env`. `NESTA_PAYMENT_CUTOVER_MODE` unset. Go-live **false**. Click/Payme/Uzum **BLOCKED**.
+- Confirm guard **PASS**: exact phrase required; `yes`/`true`/`1` refused. `webhookRetryGuaranteed=false`. Durable queue unimplemented. Maintenance middleware tests: Click/Payme/Uzum webhooks HTTP 503, `retry_guaranteed: false`.
+- Artifacts present under gitignored `cutover-backups/` (firebase 1, pg 6, app-config 1). Production `--apply` not run. `DATA_BACKEND` not switched. Step 3 not started.
+- Final preflight **PARTIAL**. Not safe to request human approval.
+
+## Step 2D final gate diagnosis (Cursor, 2026-08-30)
+
+- Root cause of PASS + `safeToRequestHumanApproval=false`: the approval flags were **hardcoded false** and were not derived from the PASS label.
+- After fix: PASS = PREFLIGHT READY only. `safeToRequestHumanApproval` requires CUTOVER WINDOW ARMED (maintenance on, write-stop verified, deploy freeze, git freeze, freeze-time snapshot, Railway live GO). `safeToMigrateProductionData` remains false until explicit human approval (never granted by this script).
+- Payment pause evidence is **OPERATOR ATTESTATION**. Do not enable maintenance from this agent. Do not migrate. `DATA_BACKEND` unchanged.
+
+## Step 2D.5 cutover window arming (Cursor, 2026-08-30)
+
+- Tooling added: `step2d5-deploy-freeze.mjs`, `step2d5-write-stop-probe.mjs` (GET health first; no write POSTs if maintenance off), `step2d5-freeze-snapshot.mjs --freeze-window` (READ-ONLY, `restoran-30d51`), `step2d5-cutover-window.mjs`.
+- Prior run: working tree dirty (FAIL). Maintenance OFF; write-stop NOT VERIFIED; freeze snapshot NOT RUN; Railway live GO NOT RUN. Phase **not** CUTOVER_WINDOW_ARMED. `safeToMigrateProductionData` false.
+- Do not enable maintenance from this agent. Do not migrate. `DATA_BACKEND` unchanged.
+
+## Step 2D.5A current cutover candidate freeze (Cursor, 2026-08-30)
+
+- Historical Step 2C tag `nesta-step2c-cutover` / `38f5a80681ebd431c9952e83e043ceb23fed6454` is preserved and is **not** the deploy-freeze target.
+- Current production cutover candidate tag: `nesta-step2-cutover-ready`. Deploy freeze requires a clean working tree and HEAD equal to that tag.
+- Cutover window was not armed. Production migrate was not run. `DATA_BACKEND` unchanged. Maintenance was not enabled. No push.
+
 ## Shared protocol
 
 - Re-read this file before editing and merge rather than overwrite another agent's evidence.

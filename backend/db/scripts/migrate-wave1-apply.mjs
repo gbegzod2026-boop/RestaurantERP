@@ -55,7 +55,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
-import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
+import { enforceConnectedApplyTarget } from "./lib/migrationTargetGuard.mjs";
 import { getPool, isPgAvailable, maskedConfig, closePool } from "../postgres.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -694,10 +694,17 @@ async function main() {
   console.log(`=== Wave 1 REAL Migration — mode: ${MODE_APPLY ? "APPLY (writes committed)" : "DRY-RUN (transactions rolled back, nothing persists)"} ===`);
   if (!isPgAvailable()) { console.error("❌ PostgreSQL not configured."); process.exit(1); }
   const cfg = maskedConfig();
-  assertMigrationTarget(cfg);
-  console.log(`[target] ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
-
   const pool = getPool();
+  const live = await pool.connect();
+  try {
+    const applyMode = await enforceConnectedApplyTarget(live, cfg, process.env, {
+      writesCommitted: MODE_APPLY,
+      resume: !FRESH,
+    });
+    console.log(`[target] ${applyMode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+  } finally {
+    live.release();
+  }
   const { batchId, completed } = batchIdFromCheckpointOrNew();
   console.log(`[batch] ${batchId}${completed.size ? ` (resuming — ${completed.size} restaurant(s) already checkpointed done)` : ""}`);
 

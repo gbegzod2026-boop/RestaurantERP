@@ -43,7 +43,7 @@ import {
 } from "./lib/normalize.mjs";
 import * as w35 from "./lib/transforms-wave35.mjs";
 import { accept, runWaves35, WAVE2_CONFLICT, drop, postgresCounts } from "./lib/run-engine.mjs";
-import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
+import { enforceConnectedApplyTarget } from "./lib/migrationTargetGuard.mjs";
 import { classifyOrderFinancials } from "./lib/orderFinancials.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -651,9 +651,17 @@ async function main() {
   const pg = await loadPg();
   const transformOnly = !pg;
   if (pg) {
-    assertMigrationTarget(pg.maskedConfig());
     const cfg = pg.maskedConfig();
-    console.log(`[target] ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+    const live = await pg.getPool().connect();
+    try {
+      const applyMode = await enforceConnectedApplyTarget(live, cfg, process.env, {
+        writesCommitted: MODE === "apply",
+        resume: RESUME,
+      });
+      console.log(`[target] ${applyMode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+    } finally {
+      live.release();
+    }
   }
 
   console.log("=".repeat(78));

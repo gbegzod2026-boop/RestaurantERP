@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { writeFileSync, mkdirSync } from "fs";
 import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
-import { assertMigrationTarget } from "./lib/migrationTargetGuard.mjs";
+import { enforceConnectedApplyTarget } from "./lib/migrationTargetGuard.mjs";
 import { getPool, maskedConfig, closePool, isPgAvailable } from "../postgres.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -13,10 +13,14 @@ const AUDIT_DIR = path.join(__dirname, "../../../docs/migration-reports");
 
 async function main() {
   if (!isPgAvailable()) throw new Error("PostgreSQL not configured");
-  assertMigrationTarget(maskedConfig());
+  const cfg = maskedConfig();
   initFirebase();
   const pool = getPool();
   const client = await pool.connect();
+  await enforceConnectedApplyTarget(client, cfg, process.env, {
+    writesCommitted: true,
+    allowTenantRows: true,
+  });
   await client.query("SELECT set_config('app.current_restaurant_id', '', true)");
 
   const credRests = await shallowKeys("credentials");

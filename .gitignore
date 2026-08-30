@@ -69,3 +69,11 @@ node_modules/
 .claude/settings.local.json
 backend/db/migration-audit/*.json
 docs/migration-reports/*.json
+
+# Operator cutover backups — never commit dumps or Firebase exports
+**/cutover-backups/**
+*.pgdump
+*.dump
+
+# Unrelated local tooling — not part of the production cutover artifact
+/tools/
