@@ -41,7 +41,7 @@ export function evaluateStep2dFinalGates({
   reverseProxyVerified = false,
   dnsRollbackVerified = false,
   productionWriteStopVerified = false,
-  railwayLivePreflight = "NOT RE-RUN",
+  railwayLivePreflight = "NOT RUN",
   humanApprovalPresent = false,
 } = {}) {
   const payments = paymentCutoverReport(env);
@@ -65,7 +65,7 @@ export function evaluateStep2dFinalGates({
       railwayLivePreflight === "PASS" || railwayLivePreflight === "GO"
         ? "PASS"
         : railwayLivePreflight === "FAIL" ? "FAIL" : "NOT VERIFIED",
-      "live step2d2-prod-pg-preflight this process; prior operator GO is not re-used as a silent PASS",
+      "live step2d2-prod-pg-preflight gitignored PREFLIGHT.json; DATABASE_PUBLIC_URL alone is never PASS",
       {
         blocksApproval: !(railwayLivePreflight === "PASS" || railwayLivePreflight === "GO"),
         blocksPreflight: railwayLivePreflight === "FAIL",
@@ -83,7 +83,7 @@ export function evaluateStep2dFinalGates({
     gate("workingTreeFreeze", freeze.workingTreeClean, "PASS (clean tree)", freeze.workingTreeClean === "PASS" ? "PASS" : "FAIL", "git status --porcelain empty", { blocksApproval: true }),
     gate("deployFreeze", freeze.deployFreeze, "PASS (clean tree + HEAD + tag nesta-step2-cutover-ready = current cutover candidate)", freeze.deployFreeze === "PASS" ? "PASS" : "FAIL", "git rev-parse HEAD and nesta-step2-cutover-ready; historical nesta-step2c-cutover is not the freeze target", { blocksApproval: true }),
     gate("finalFirebaseSnapshot", freezeSnapshotVerified ? "freeze-time verified" : (snapshotPresent ? "prior report present" : "absent"), "read-only source snapshot/count at freeze", freezeSnapshotVerified ? "PASS" : "NOT VERIFIED", "prior step2d-source-snapshot.json is not freeze-time evidence", { blocksApproval: true }),
-    gate("railwayLivePreflightThisRun", railwayLivePreflight, "GO", railwayLivePreflight === "PASS" || railwayLivePreflight === "GO" ? "PASS" : "NOT VERIFIED", "DATABASE_PUBLIC_URL live identify; not run unless URL present", { blocksApproval: false }),
+    gate("railwayLivePreflightThisRun", railwayLivePreflight, "GO", railwayLivePreflight === "PASS" || railwayLivePreflight === "GO" ? "PASS" : "NOT VERIFIED", "gitignored railway-preflight-*/PREFLIGHT.json; DATABASE_PUBLIC_URL is not evidence", { blocksApproval: false }),
     gate("reverseProxyRollback", reverseProxyVerified ? "verified" : "NOT VERIFIED", "nginx/caddy/cloudflare rollback config", reverseProxyVerified ? "PASS" : "NOT VERIFIED", "app-config backup reverseProxy field; no proxy config in workspace", { blocksApproval: false }),
     gate("dnsRollback", dnsRollbackVerified ? "verified" : "NOT VERIFIED", "DNS rollback procedure recorded", dnsRollbackVerified ? "PASS" : "NOT VERIFIED", "not encoded in repo", { blocksApproval: false }),
     gate("humanApproval", humanApprovalPresent ? "present" : "absent", "named approver + timestamp (checklist step 8)", "FAIL", "this script never authorizes migrate-firebase --apply", { blocksApproval: false }),

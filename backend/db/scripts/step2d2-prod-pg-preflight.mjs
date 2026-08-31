@@ -16,8 +16,10 @@ import {
   pgClientConfig,
 } from "./lib/migrationTargetGuard.mjs";
 import { withPgSsl } from "../pgSsl.js";
+import { redactPreflightText, writeRailwayLivePreflightEvidence } from "./lib/railwayLivePreflightEvidence.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(__dirname, "../../..");
 if (/:59999\b/.test(process.env.POSTGRES_URL || "")) delete process.env.POSTGRES_URL;
 delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
 delete process.env.NESTA_REQUIRE_ISOLATED_AUTH;
@@ -50,13 +52,15 @@ async function main() {
   const failures = [];
   const parts = readLocalPgParts();
   if (!parts.host || !parts.user || !parts.database) {
-    console.log("NO-GO");
-    console.log(JSON.stringify({
+    const missing = {
       ok: false,
       verdict: "NO-GO",
       mode: "READ-ONLY",
       failures: ["PostgreSQL is not configured"],
-    }, null, 2));
+    };
+    writeRailwayLivePreflightEvidence(REPO, missing);
+    console.log("NO-GO");
+    console.log(JSON.stringify(missing, null, 2));
     process.exit(1);
   }
 
@@ -179,15 +183,24 @@ async function main() {
     await c.end();
   }
 
-  out.ok = failures.length === 0;
+  out.failures = failures.map((f) => redactPreflightText(f));
+  out.ok = out.failures.length === 0;
   out.verdict = out.ok ? "GO" : "NO-GO";
+  writeRailwayLivePreflightEvidence(REPO, out);
   console.log(out.verdict);
   console.log(JSON.stringify(out, null, 2));
   if (!out.ok) process.exit(1);
 }
 
 main().catch((err) => {
+  const failed = {
+    ok: false,
+    verdict: "NO-GO",
+    mode: "READ-ONLY",
+    failures: [redactPreflightText(err.message)],
+  };
+  try { writeRailwayLivePreflightEvidence(REPO, failed); } catch { /* keep fail-closed */ }
   console.log("NO-GO");
-  console.error("PREFLIGHT FAILED:", err.message);
+  console.error("PREFLIGHT FAILED:", redactPreflightText(err.message));
   process.exit(1);
 });

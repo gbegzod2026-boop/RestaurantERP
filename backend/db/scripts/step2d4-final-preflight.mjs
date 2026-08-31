@@ -13,6 +13,10 @@ import {
 } from "./lib/step2dFinalGate.mjs";
 import { freezeSnapshotComplete } from "./lib/freezeSnapshot.mjs";
 import { candidateFreezeInput, CUTOVER_CANDIDATE_TAG } from "./lib/deployFreeze.mjs";
+import {
+  evaluateRailwayLivePreflightEvidence,
+  loadLatestRailwayLivePreflightEvidence,
+} from "./lib/railwayLivePreflightEvidence.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.join(__dirname, "../..");
@@ -105,7 +109,10 @@ async function main() {
     reverseProxyVerified: false,
     dnsRollbackVerified: false,
     productionWriteStopVerified: writeStopDoc?.productionWriteStop === "PASS",
-    railwayLivePreflight: process.env.DATABASE_PUBLIC_URL ? "NOT RE-RUN" : "NOT RUN",
+    railwayLivePreflight: evaluateRailwayLivePreflightEvidence(
+      loadLatestRailwayLivePreflightEvidence(REPO),
+      { env: process.env, notBefore: freezeDoc?.generatedAt },
+    ).railwayLivePreflight,
     humanApprovalPresent: false,
   });
 

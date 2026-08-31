@@ -9,6 +9,10 @@ import { isMaintenanceMode } from "../../security/maintenance.js";
 import { evaluateStep2dFinalGates, confirmStatus, EXPECTED_PAUSE_CONFIRM } from "./lib/step2dFinalGate.mjs";
 import { candidateFreezeInput, CUTOVER_CANDIDATE_TAG, evaluateDeployFreeze } from "./lib/deployFreeze.mjs";
 import { freezeSnapshotComplete } from "./lib/freezeSnapshot.mjs";
+import {
+  evaluateRailwayLivePreflightEvidence,
+  loadLatestRailwayLivePreflightEvidence,
+} from "./lib/railwayLivePreflightEvidence.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.join(__dirname, "../..");
@@ -79,7 +83,11 @@ async function main() {
   const freezeDoc = latestJson("freeze-snapshot-", "FREEZE.json");
   const writeStopDoc = latestJson("write-stop-", "WRITE_STOP.json");
   const backups = scanBackups();
-  const railwayLivePreflight = process.env.DATABASE_PUBLIC_URL ? "NOT RE-RUN" : "NOT RUN";
+  const railwayEvidence = evaluateRailwayLivePreflightEvidence(
+    loadLatestRailwayLivePreflightEvidence(REPO),
+    { env: process.env, notBefore: freezeDoc?.generatedAt },
+  );
+  const railwayLivePreflight = railwayEvidence.railwayLivePreflight;
 
   const evaluated = evaluateStep2dFinalGates({
     env,
@@ -104,6 +112,7 @@ async function main() {
     paymentPause: evaluated.confirm === "MATCH" && evaluated.mode === "OPERATOR_PAUSED" ? "PASS" : "FAIL",
     freezeFirebaseSnapshot: freezeSnapshotComplete(freezeDoc) ? "PASS" : "NOT RUN",
     railwayLivePreflight,
+    railwayLivePreflightReason: railwayEvidence.reason,
     remainingApprovalBlockers: evaluated.approvalBlockers,
     safeToRequestHumanApproval: evaluated.safeToRequestHumanApproval,
     safeToMigrateProductionData: false,

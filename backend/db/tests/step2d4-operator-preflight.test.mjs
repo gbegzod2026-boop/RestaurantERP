@@ -45,7 +45,7 @@ const operatorPreflightPass = {
   backups: { firebase: 1, pg: 1, appConfig: 1 },
   git: { head: null, tag: null, dirty: true },
   snapshotPresent: true,
-  railwayLivePreflight: "NOT RE-RUN",
+  railwayLivePreflight: "NOT RUN",
 };
 
 test("PASS preflight does not imply cutover window armed", () => {
