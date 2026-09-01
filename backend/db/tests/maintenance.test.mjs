@@ -21,6 +21,7 @@ test("maintenance mode is opt-in from env only", () => {
 
 test("tenant writes are blocked; login/health/pg reads are allowed", () => {
   assert.equal(isMaintenanceAllowed("GET", "/api/health"), true);
+  assert.equal(isMaintenanceAllowed("GET", "/api/deployment"), true);
   assert.equal(isMaintenanceAllowed("GET", "/api/pg/meta"), true);
   assert.equal(isMaintenanceAllowed("POST", "/api/pg/rtdb/get"), true);
   assert.equal(isMaintenanceAllowed("POST", "/api/auth/staff-login"), true);

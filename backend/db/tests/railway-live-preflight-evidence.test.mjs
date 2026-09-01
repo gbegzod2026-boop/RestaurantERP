@@ -4,33 +4,29 @@ import { mkdtempSync, rmSync, readFileSync } from "fs";
 import os from "os";
 import path from "path";
 import {
-  evaluateRailwayLivePreflightEvidence,
-  sanitizeRailwayLivePreflightEvidence,
-  writeRailwayLivePreflightEvidence,
-  loadLatestRailwayLivePreflightEvidence,
-  REQUIRED_PREFLIGHT_RLS_TABLES,
+  writeRailwayLivePreflightAudit,
+  buildRailwayLivePreflightAudit,
+  resolveRailwayLivePreflightEvidence,
+  RAILWAY_PREFLIGHT_FILE,
 } from "../scripts/lib/railwayLivePreflightEvidence.mjs";
-import { evaluateStep2dFinalGates, EXPECTED_PAUSE_CONFIRM } from "../scripts/lib/step2dFinalGate.mjs";
+import { canonicalRlsCatalogRows } from "../scripts/lib/tenantCatalog.mjs";
+import {
+  sanitizeLiveRailwayPreflightResult,
+  evaluateLiveRailwayPreflight,
+  REQUIRED_PREFLIGHT_ROLES,
+  REQUIRED_PREFLIGHT_UNIQUES,
+  EXPECTED_TENANT_CATALOG_COUNT,
+  isCanonicalIsoUtc,
+} from "../scripts/lib/runRailwayLivePreflight.mjs";
+import { freezeSnapshotValidForCutoverWindow, isCanonicalIsoUtc as freezeCanonical } from "../scripts/lib/freezeSnapshot.mjs";
+import { computeCutoverWindowIdentity, buildFreezeEvidence, canonicalFreezeCounts } from "../scripts/lib/cutoverWindow.mjs";
 
-function rlsRows() {
-  return REQUIRED_PREFLIGHT_RLS_TABLES.map((table) => ({ table, rls: true, force_rls: true }));
-}
-
-function uniqueRows() {
-  return [
-    { table: "restaurants", cols: ["legacy_rtdb_id"], ok: true },
-    { table: "employees", cols: ["restaurant_id", "legacy_rtdb_id"], ok: true },
-    { table: "orders", cols: ["restaurant_id", "legacy_rtdb_id"], ok: true },
-    { table: "custom_roles", cols: ["restaurant_id", "legacy_rtdb_id"], ok: true },
-  ];
-}
-
-function validGo(overrides = {}) {
-  return {
-    generatedAt: "2026-08-31T10:00:00.000Z",
-    mode: "READ-ONLY",
-    readOnly: true,
+function liveGo() {
+  const rows = canonicalRlsCatalogRows();
+  return sanitizeLiveRailwayPreflightResult({
+    ok: true,
     verdict: "GO",
+    executed: true,
     hostClass: "*.proxy.rlwy.net",
     database: "railway",
     sslLive: "on",
@@ -38,151 +34,80 @@ function validGo(overrides = {}) {
     latestMigration: { version: "0017" },
     restaurants: 0,
     fixtureLike: 0,
-    rls: rlsRows(),
-    requiredUniques: uniqueRows(),
+    configuredPoolMax: 10,
+    rolesPresent: [...REQUIRED_PREFLIGHT_ROLES],
+    requiredUniques: REQUIRED_PREFLIGHT_UNIQUES.map((spec) => ({ table: spec.table, cols: [...spec.cols], ok: true })),
+    rls: rows,
+    rlsCatalogCount: EXPECTED_TENANT_CATALOG_COUNT,
     failures: [],
-    ...overrides,
-  };
+  });
 }
 
-const now = Date.parse("2026-08-31T10:30:00.000Z");
-
-test("no evidence is NOT RUN and blocks approval", () => {
-  const ev = evaluateRailwayLivePreflightEvidence(null, { now });
-  assert.equal(ev.railwayLivePreflight, "NOT RUN");
-  const gated = evaluateStep2dFinalGates({
-    env: {
-      NESTA_PAYMENT_CUTOVER_MODE: "OPERATOR_PAUSED",
-      NESTA_PAYMENT_PAUSE_CONFIRM: EXPECTED_PAUSE_CONFIRM,
-      NESTA_MAINTENANCE_MODE: "1",
-    },
-    backups: { firebase: 1, pg: 1, appConfig: 1 },
-    git: {
-      head: "cccccccccccccccccccccccccccccccccccccccc",
-      tag: "cccccccccccccccccccccccccccccccccccccccc",
-      expectedCommit: "cccccccccccccccccccccccccccccccccccccccc",
-      dirty: false,
-    },
-    freezeSnapshotVerified: true,
-    productionWriteStopVerified: true,
-    railwayLivePreflight: ev.railwayLivePreflight,
-  });
-  assert.equal(gated.safeToRequestHumanApproval, false);
-  assert.equal(gated.safeToMigrateProductionData, false);
-  assert.equal(gated.approvalBlockers.includes("railwayPgSchema"), true);
-});
-
-test("DATABASE_PUBLIC_URL alone is never PASS", () => {
-  const ev = evaluateRailwayLivePreflightEvidence(null, {
-    now,
-    env: { DATABASE_PUBLIC_URL: "postgres://u:p@altaria.proxy.rlwy.net:1/railway" },
-  });
-  assert.equal(ev.railwayLivePreflight, "NOT RUN");
-  assert.match(ev.reason, /DATABASE_PUBLIC_URL/);
-  assert.notEqual(ev.railwayLivePreflight, "GO");
-  assert.notEqual(ev.railwayLivePreflight, "PASS");
-});
-
-test("failed NO-GO evidence is FAIL and blocks approval", () => {
-  const ev = evaluateRailwayLivePreflightEvidence(validGo({ verdict: "NO-GO", restaurants: 3 }), { now });
-  assert.equal(ev.railwayLivePreflight, "FAIL");
-  const gated = evaluateStep2dFinalGates({
-    backups: { firebase: 1, pg: 1, appConfig: 1 },
-    railwayLivePreflight: ev.railwayLivePreflight,
-  });
-  assert.equal(gated.approvalBlockers.includes("railwayPgSchema"), true);
-  assert.equal(gated.preflightBlockers.includes("railwayPgSchema"), true);
-  assert.equal(gated.safeToMigrateProductionData, false);
-});
-
-test("malformed evidence is FAIL", () => {
-  assert.equal(evaluateRailwayLivePreflightEvidence([], { now }).railwayLivePreflight, "FAIL");
-  assert.equal(evaluateRailwayLivePreflightEvidence({ __malformed: true }, { now }).railwayLivePreflight, "FAIL");
-  assert.equal(evaluateRailwayLivePreflightEvidence(validGo({ generatedAt: "not-a-date" }), { now }).railwayLivePreflight, "FAIL");
-  assert.equal(evaluateRailwayLivePreflightEvidence(validGo({ mode: "READ-WRITE" }), { now }).railwayLivePreflight, "FAIL");
-  assert.equal(evaluateRailwayLivePreflightEvidence(validGo({ latestMigration: { version: "0016" } }), { now }).railwayLivePreflight, "FAIL");
-  assert.equal(evaluateRailwayLivePreflightEvidence(validGo({ sslLive: "off" }), { now }).railwayLivePreflight, "FAIL");
-});
-
-test("stale evidence is NOT VERIFIED and blocks approval", () => {
-  const ev = evaluateRailwayLivePreflightEvidence(validGo({
-    generatedAt: "2026-08-31T00:00:00.000Z",
-  }), { now: Date.parse("2026-08-31T10:30:00.000Z") });
-  assert.equal(ev.railwayLivePreflight, "NOT VERIFIED");
-  const gated = evaluateStep2dFinalGates({
-    backups: { firebase: 1, pg: 1, appConfig: 1 },
-    railwayLivePreflight: ev.railwayLivePreflight,
-  });
-  assert.equal(gated.approvalBlockers.includes("railwayPgSchema"), true);
-  assert.equal(gated.safeToMigrateProductionData, false);
-});
-
-test("fresh valid GO evidence is railwayLivePreflight GO/PASS", () => {
-  const ev = evaluateRailwayLivePreflightEvidence(validGo(), { now });
-  assert.equal(ev.railwayLivePreflight, "GO");
-  const gated = evaluateStep2dFinalGates({
-    env: {
-      NESTA_PAYMENT_CUTOVER_MODE: "OPERATOR_PAUSED",
-      NESTA_PAYMENT_PAUSE_CONFIRM: EXPECTED_PAUSE_CONFIRM,
-      NESTA_MAINTENANCE_MODE: "1",
-    },
-    backups: { firebase: 1, pg: 1, appConfig: 1 },
-    git: {
-      head: "cccccccccccccccccccccccccccccccccccccccc",
-      tag: "cccccccccccccccccccccccccccccccccccccccc",
-      expectedCommit: "cccccccccccccccccccccccccccccccccccccccc",
-      dirty: false,
-    },
-    freezeSnapshotVerified: true,
-    productionWriteStopVerified: true,
-    railwayLivePreflight: ev.railwayLivePreflight,
-  });
-  assert.equal(gated.cutoverWindowArmed, true);
-  assert.equal(gated.safeToRequestHumanApproval, true);
-  assert.equal(gated.safeToMigrateProductionData, false);
-  assert.equal(gated.gates.find((g) => g.name === "railwayPgSchema").result, "PASS");
-});
-
-test("sanitize strips connection secrets from failures", () => {
-  const doc = sanitizeRailwayLivePreflightEvidence({
-    verdict: "NO-GO",
-    mode: "READ-ONLY",
-    failures: ["connect postgres://u:supersecret@altaria.proxy.rlwy.net:1/railway PGPASSWORD=supersecret"],
-    latestMigration: { version: "0017", name: "wave" },
-    rls: rlsRows(),
-    requiredUniques: uniqueRows().map((u) => ({ ...u, error: "postgres://u:supersecret@h/db" })),
-  });
-  const blob = JSON.stringify(doc);
-  assert.equal(blob.includes("supersecret"), false);
-  assert.equal(/postgres:\/\/[^:]+:[^@]+@/.test(blob), false);
-  assert.equal(doc.latestMigration.version, "0017");
-  assert.equal(doc.requiredUniques[0].error, undefined);
-});
-
-test("write/load roundtrip stays gitignored-class and fail-closed on secrets", () => {
-  const tmp = mkdtempSync(path.join(os.tmpdir(), "nesta-preflight-"));
+test("audit artifact is labeled AUDIT_ONLY and never authorizes", () => {
+  const tmp = mkdtempSync(path.join(os.tmpdir(), "nesta-audit-"));
   try {
-    writeRailwayLivePreflightEvidence(tmp, {
-      verdict: "GO",
-      mode: "READ-ONLY",
-      hostClass: "*.proxy.rlwy.net",
-      database: "railway",
-      sslLive: "on",
-      latestMigration: { version: "0017" },
-      restaurants: 0,
-      fixtureLike: 0,
-      rls: rlsRows(),
-      requiredUniques: uniqueRows(),
-      failures: [],
-    }, { generatedAt: "2026-08-31T10:00:00.000Z" });
-    const loaded = loadLatestRailwayLivePreflightEvidence(tmp);
-    const ev = evaluateRailwayLivePreflightEvidence(loaded, { now });
-    assert.equal(ev.railwayLivePreflight, "GO");
-    const file = path.join(tmp, "cutover-backups", "railway-preflight-2026-08-31T10-00-00-000Z", "PREFLIGHT.json");
-    const onDisk = readFileSync(file, "utf8");
-    assert.equal(onDisk.includes("PASSWORD"), false);
-    assert.equal(onDisk.includes("postgres://u:"), false);
+    const written = writeRailwayLivePreflightAudit(tmp, liveGo(), {
+      generatedAt: "2026-08-31T10:00:00.000Z",
+      completedAt: "2026-08-31T10:01:00.000Z",
+    });
+    const doc = JSON.parse(readFileSync(path.join(written.dir, RAILWAY_PREFLIGHT_FILE), "utf8"));
+    assert.equal(doc.evidenceKind, "AUDIT_ONLY");
+    assert.equal(doc.usableForApproval, false);
+    assert.equal(doc.live.password, undefined);
+    assert.equal(JSON.stringify(doc).includes("postgres://"), false);
+    assert.equal(evaluateLiveRailwayPreflight(null, { auditArtifact: doc }).railwayLivePreflight, "NOT RUN");
+    assert.equal(resolveRailwayLivePreflightEvidence().railwayLivePreflight, "NOT RUN");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+test("audit builder refuses noncanonical timestamps", () => {
+  assert.throws(() => buildRailwayLivePreflightAudit(liveGo(), {
+    generatedAt: "2026-08-31T10:00:00Z",
+    completedAt: "2026-08-31T10:00:00.000Z",
+  }));
+});
+
+test("canonical freeze generatedAt is required; Date.parse-able noncanonical fails", () => {
+  const now = Date.parse("2026-08-31T10:30:00.000Z");
+  const identity = computeCutoverWindowIdentity({
+    candidateCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    remoteMain: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    deployedRevision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  });
+  const bound = buildFreezeEvidence({
+    generatedAt: "2026-08-31T10:20:00.000Z",
+    firebaseProject: "restoran-30d51",
+    counts: canonicalFreezeCounts({
+      restaurants: 1,
+      users: 1,
+      employees: 1,
+      orders: 1,
+      orderItems: 1,
+      payments: 1,
+      menu: 1,
+      tables: 1,
+      customers: 1,
+      credentialTrees: 1,
+      customRoles: 1,
+      platformPromoCodes: 1,
+    }),
+    candidateCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    cutoverWindowIdentity: identity,
+  });
+  assert.equal(isCanonicalIsoUtc("2026-08-31T09:00:00.000Z"), true);
+  assert.equal(freezeCanonical("2026-08-31T09:00:00Z"), false);
+  assert.equal(freezeSnapshotValidForCutoverWindow(bound, {
+    now,
+    expectedIdentity: identity,
+    expectedCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    writeStopGeneratedAt: "2026-08-31T10:10:00.000Z",
+  }), true);
+  assert.equal(freezeSnapshotValidForCutoverWindow({ ...bound, generatedAt: "2026-08-31T09:00:00Z" }, {
+    now,
+    expectedIdentity: identity,
+    expectedCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    writeStopGeneratedAt: "2026-08-31T10:10:00.000Z",
+  }), false);
 });

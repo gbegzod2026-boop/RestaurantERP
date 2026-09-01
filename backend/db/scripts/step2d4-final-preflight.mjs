@@ -11,12 +11,13 @@ import {
   confirmStatus,
   EXPECTED_PAUSE_CONFIRM,
 } from "./lib/step2dFinalGate.mjs";
-import { freezeSnapshotComplete } from "./lib/freezeSnapshot.mjs";
-import { candidateFreezeInput, CUTOVER_CANDIDATE_TAG } from "./lib/deployFreeze.mjs";
-import {
-  evaluateRailwayLivePreflightEvidence,
-  loadLatestRailwayLivePreflightEvidence,
-} from "./lib/railwayLivePreflightEvidence.mjs";
+import { currentFreezeBinding } from "./lib/freezeSnapshot.mjs";
+import { freezeGitFromResolved, inspectGitTag, readOperatorGitFacts } from "./lib/deployFreeze.mjs";
+import { runRailwayLivePreflight, evaluateLiveRailwayPreflight, classifyOperatorCliFailure } from "./lib/runRailwayLivePreflight.mjs";
+import { writeRailwayLivePreflightAudit } from "./lib/railwayLivePreflightEvidence.mjs";
+import { probeRuntimeRevision, REQUIRED_PRODUCTION_PROBE_ORIGIN } from "./lib/deployedRevision.mjs";
+import { probeLiveGithubMain, makeGitLsRemoteImpl, LS_REMOTE_TIMEOUT_MS } from "./lib/githubRemote.mjs";
+import { computeCutoverWindowIdentity, currentWriteStopBinding } from "./lib/cutoverWindow.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.join(__dirname, "../..");
@@ -87,33 +88,85 @@ function gitValue(args) {
   }
 }
 
+function gitRaw(args) {
+  try {
+    return execFileSync("git", ["-c", `safe.directory=${REPO}`, ...args], {
+      cwd: REPO,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   const fileEnv = loadIsolatedEnv();
   const env = mergeEnv(fileEnv);
   const backups = scanCutoverBackups();
-  const porcelain = gitValue(["status", "--porcelain"]);
+  const facts = readOperatorGitFacts(gitValue);
   const snapshotPresent = existsSync(path.join(REPO, "docs", "migration-reports", "step2d-source-snapshot.json"));
-  const freezeDoc = latestJson("freeze-snapshot-", "FREEZE.json");
-  const writeStopDoc = latestJson("write-stop-", "WRITE_STOP.json");
+  const git = freezeGitFromResolved({
+    env,
+    head: facts.head,
+    dirty: facts.dirty,
+    branch: facts.branch,
+    originMain: facts.originMain,
+    inspectTag: (tag) => inspectGitTag(tag, gitValue, gitRaw),
+  });
+  const live = await runRailwayLivePreflight({ env: process.env, requireDatabasePublicUrl: true });
+  try {
+    writeRailwayLivePreflightAudit(REPO, live);
+  } catch { /* audit-only */ }
+  const revisionProbe = await probeRuntimeRevision({
+    baseUrl: process.env.NESTA_CUTOVER_PROBE_BASE_URL || REQUIRED_PRODUCTION_PROBE_ORIGIN,
+    fetchImpl: fetch,
+  });
+  const originUrl = gitValue(["remote", "get-url", "origin"]);
+  const liveGithub = probeLiveGithubMain({
+    originUrl,
+    head: facts.head,
+    lsRemoteImpl: makeGitLsRemoteImpl({
+      repo: REPO,
+      originUrl,
+      execFileSyncImpl: execFileSync,
+      timeoutMs: LS_REMOTE_TIMEOUT_MS,
+    }),
+  });
+  const expectedIdentity = computeCutoverWindowIdentity({
+    candidateCommit: git.head,
+    remoteMain: liveGithub.liveRemoteMain,
+    deployedRevision: revisionProbe.revision,
+  });
+  const now = Date.now();
+  const writeStopBinding = currentWriteStopBinding(REPO, {
+    expectedIdentity,
+    expectedCommit: git.head,
+    now,
+  });
+  const writeStopDoc = writeStopBinding.ok ? writeStopBinding.doc : null;
+  const freezeBinding = currentFreezeBinding(REPO, {
+    expectedIdentity,
+    expectedCommit: git.head,
+    writeStopGeneratedAt: writeStopDoc?.generatedAt,
+    now,
+  });
+  const freezeDoc = freezeBinding.ok ? freezeBinding.doc : latestJson("freeze-snapshot-", "FREEZE.json");
 
   const evaluated = evaluateStep2dFinalGates({
     env,
     backups,
-    git: candidateFreezeInput({
-      head: gitValue(["rev-parse", "HEAD"]),
-      candidateTagCommit: gitValue(["rev-parse", CUTOVER_CANDIDATE_TAG]),
-      dirty: porcelain == null ? null : porcelain.length > 0,
-    }),
+    git,
     snapshotPresent,
-    freezeSnapshotVerified: freezeSnapshotComplete(freezeDoc),
     reverseProxyVerified: false,
     dnsRollbackVerified: false,
-    productionWriteStopVerified: writeStopDoc?.productionWriteStop === "PASS",
-    railwayLivePreflight: evaluateRailwayLivePreflightEvidence(
-      loadLatestRailwayLivePreflightEvidence(REPO),
-      { env: process.env, notBefore: freezeDoc?.generatedAt },
-    ).railwayLivePreflight,
+    writeStopEvidence: writeStopDoc,
+    freezeEvidence: freezeDoc,
+    railwayLivePreflight: evaluateLiveRailwayPreflight(live).railwayLivePreflight,
     humanApprovalPresent: false,
+    runtimeRevision: revisionProbe.revision,
+    liveRemoteMain: liveGithub.liveRemoteMain,
+    now,
   });
 
   const report = {
@@ -161,6 +214,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("STEP 2D FINAL PREFLIGHT FAILED:", err.message);
+  console.error("STEP 2D FINAL PREFLIGHT FAILED:", classifyOperatorCliFailure(err));
   process.exit(1);
 });

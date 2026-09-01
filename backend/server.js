@@ -90,6 +90,7 @@ import {
 import { isSafeId } from "./security/sanitize.js";
 import { logAuditEvent, logSecurityEvent } from "./security/auditLog.js";
 import { isMaintenanceMode, maintenanceMiddleware } from "./security/maintenance.js";
+import { publicDeploymentIdentity } from "./security/deploymentRevision.js";
 
 dotenv.config();
 
@@ -517,10 +518,15 @@ app.get("/api/health", async (_req, res) => {
     postgres: isPgAvailable(),
     qrSigning: qr.qrSigning,
     maintenance: isMaintenanceMode(),
+    revision: publicDeploymentIdentity().revision,
     ...authEnvironmentDiagnostic(),
   };
   if (!qr.ok) return res.status(503).json(payload);
   res.json(payload);
+});
+
+app.get("/api/deployment", (_req, res) => {
+  res.json(publicDeploymentIdentity());
 });
 
 // ── Categories ────────────────────────────────────────────────────────────────

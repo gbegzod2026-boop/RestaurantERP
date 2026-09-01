@@ -8,6 +8,8 @@ import {
   durableQueueImplemented,
 } from "../../../payments/cutoverMode.js";
 import { evaluateDeployFreeze } from "./deployFreeze.mjs";
+import { evaluateCommitEqualityBinding } from "./deployedRevision.mjs";
+import { computeCutoverWindowIdentity, evaluateWriteStopEvidence, evaluateFreezeEvidence } from "./cutoverWindow.mjs";
 export {
   CUTOVER_CANDIDATE_TAG,
   FROZEN_TAG,
@@ -43,6 +45,12 @@ export function evaluateStep2dFinalGates({
   productionWriteStopVerified = false,
   railwayLivePreflight = "NOT RUN",
   humanApprovalPresent = false,
+  runtimeRevision = null,
+  liveRemoteMain = null,
+  writeStopEvidence = null,
+  freezeEvidence = null,
+  now = Date.now(),
+  livePreflightCompletedAt = null,
 } = {}) {
   const payments = paymentCutoverReport(env);
   const confirm = confirmStatus(env.NESTA_PAYMENT_PAUSE_CONFIRM);
@@ -56,16 +64,42 @@ export function evaluateStep2dFinalGates({
     && webhookRetryGuaranteed() === false
     && durableQueueImplemented() === false;
   const freeze = evaluateDeployFreeze(git);
+  const equality = evaluateCommitEqualityBinding({
+    head: git.head,
+    tag: git.tag,
+    originMain: git.originMain,
+    liveRemoteMain,
+    runtimeRevision,
+  });
+  const expectedIdentity = computeCutoverWindowIdentity({
+    candidateCommit: git.head,
+    remoteMain: liveRemoteMain,
+    deployedRevision: runtimeRevision,
+  });
+  const writeStopEval = evaluateWriteStopEvidence(writeStopEvidence, {
+    expectedIdentity,
+    expectedCommit: git.head,
+    now,
+  });
+  const freezeEval = evaluateFreezeEvidence(freezeEvidence, {
+    expectedIdentity,
+    expectedCommit: git.head,
+    writeStopGeneratedAt: writeStopEval.ok ? writeStopEval.generatedAt : null,
+    livePreflightCompletedAt,
+    now,
+  });
+  const writeStopOk = writeStopEval.ok === true;
+  const freezeOk = freezeEval.ok === true;
 
   const gates = [
     gate(
       "railwayPgSchema",
       railwayLivePreflight,
-      "GO",
+      "GO/PASS from in-process READ-ONLY runRailwayLivePreflight",
       railwayLivePreflight === "PASS" || railwayLivePreflight === "GO"
         ? "PASS"
         : railwayLivePreflight === "FAIL" ? "FAIL" : "NOT VERIFIED",
-      "live step2d2-prod-pg-preflight gitignored PREFLIGHT.json; DATABASE_PUBLIC_URL alone is never PASS",
+      "in-process runRailwayLivePreflight READ-ONLY result; PREFLIGHT.json is audit-only and never PASS",
       {
         blocksApproval: !(railwayLivePreflight === "PASS" || railwayLivePreflight === "GO"),
         blocksPreflight: railwayLivePreflight === "FAIL",
@@ -79,11 +113,13 @@ export function evaluateStep2dFinalGates({
     gate("retryGuaranteed", String(webhookRetryGuaranteed()), "false", webhookRetryGuaranteed() === false ? "PASS" : "FAIL", "webhookRetryGuaranteed() always false", { blocksApproval: true, blocksPreflight: true }),
     gate("durableQueueImplemented", String(durableQueueImplemented()), "false", durableQueueImplemented() === false ? "PASS" : "FAIL", "durable queue is not implemented", { blocksApproval: true, blocksPreflight: true }),
     gate("maintenanceMode", maintenanceOn ? "on" : "off", "on for cutover window (NESTA_MAINTENANCE_MODE=1 on production instances)", maintenanceOn ? "PASS" : "FAIL", "env only; this script never enables maintenance", { blocksApproval: true }),
-    gate("productionWriteStop", productionWriteStopVerified ? "verified" : "NOT VERIFIED", "tenant POST 503 MAINTENANCE on production; webhooks never HTTP 200", productionWriteStopVerified ? "PASS" : "NOT VERIFIED", "this script does not probe production HTTP; local middleware tests are not production write-stop", { blocksApproval: true }),
+    gate("productionWriteStop", writeStopOk ? "verified" : "NOT VERIFIED", "current-window WRITE_STOP.json: PASS + origin + identity + freshness", writeStopOk ? "PASS" : "NOT VERIFIED", "recomputed cutoverWindowIdentity; latest PASS file is not sufficient; unsigned JSON is not tamper-proof", { blocksApproval: true }),
     gate("workingTreeFreeze", freeze.workingTreeClean, "PASS (clean tree)", freeze.workingTreeClean === "PASS" ? "PASS" : "FAIL", "git status --porcelain empty", { blocksApproval: true }),
-    gate("deployFreeze", freeze.deployFreeze, "PASS (clean tree + HEAD + tag nesta-step2-cutover-ready = current cutover candidate)", freeze.deployFreeze === "PASS" ? "PASS" : "FAIL", "git rev-parse HEAD and nesta-step2-cutover-ready; historical nesta-step2c-cutover is not the freeze target", { blocksApproval: true }),
-    gate("finalFirebaseSnapshot", freezeSnapshotVerified ? "freeze-time verified" : (snapshotPresent ? "prior report present" : "absent"), "read-only source snapshot/count at freeze", freezeSnapshotVerified ? "PASS" : "NOT VERIFIED", "prior step2d-source-snapshot.json is not freeze-time evidence", { blocksApproval: true }),
-    gate("railwayLivePreflightThisRun", railwayLivePreflight, "GO", railwayLivePreflight === "PASS" || railwayLivePreflight === "GO" ? "PASS" : "NOT VERIFIED", "gitignored railway-preflight-*/PREFLIGHT.json; DATABASE_PUBLIC_URL is not evidence", { blocksApproval: false }),
+    gate("deployFreeze", freeze.deployFreeze, "PASS (main branch + clean tree + annotated reviewed-cutover tag target === HEAD)", freeze.deployFreeze === "PASS" ? "PASS" : "FAIL", "annotated Git tag approval outside the candidate commit; detached HEAD and non-main branches refused; NESTA_CUTOVER_CANDIDATE_TAG may select among policy tag names only; historical nesta-step2c-cutover and nesta-step2-cutover-ready refused", { blocksApproval: true }),
+    gate("originMainMatch", equality.originMainMatch, "PASS (LIVE GitHub main SHA === HEAD)", equality.originMainMatch, "git ls-remote --exit-code against gbegzod2026-boop/RestaurantERP refs/heads/main; cached refs/remotes/origin/main is diagnostic only and never authorizes", { blocksApproval: true }),
+    gate("deployedRevision", equality.deployedRevision, "PASS (Railway GET /api/deployment revision === HEAD === reviewed tag === LIVE GitHub main)", equality.deployedRevision, "HTTPS https://restauranterp-production-5c27.up.railway.app/api/deployment only; redirect=manual; 3xx fail closed; NESTA_CUTOVER_PROBE_BASE_URL cannot select another host", { blocksApproval: true }),
+    gate("finalFirebaseSnapshot", freezeOk ? "freeze-time verified" : (snapshotPresent ? "prior report present" : "absent"), "current-window FREEZE.json after current-window write-stop", freezeOk ? "PASS" : "NOT VERIFIED", "recomputed cutoverWindowIdentity + TTL + write-stop ordering; historical FREEZE.json never authorizes", { blocksApproval: true }),
+    gate("railwayLivePreflightThisRun", railwayLivePreflight, "PASS", railwayLivePreflight === "PASS" || railwayLivePreflight === "GO" ? "PASS" : "NOT VERIFIED", "in-process live preflight only; PREFLIGHT.json has zero authorization authority", { blocksApproval: false }),
     gate("reverseProxyRollback", reverseProxyVerified ? "verified" : "NOT VERIFIED", "nginx/caddy/cloudflare rollback config", reverseProxyVerified ? "PASS" : "NOT VERIFIED", "app-config backup reverseProxy field; no proxy config in workspace", { blocksApproval: false }),
     gate("dnsRollback", dnsRollbackVerified ? "verified" : "NOT VERIFIED", "DNS rollback procedure recorded", dnsRollbackVerified ? "PASS" : "NOT VERIFIED", "not encoded in repo", { blocksApproval: false }),
     gate("humanApproval", humanApprovalPresent ? "present" : "absent", "named approver + timestamp (checklist step 8)", "FAIL", "this script never authorizes migrate-firebase --apply", { blocksApproval: false }),
@@ -117,5 +153,11 @@ export function evaluateStep2dFinalGates({
     preflightBlockers: preflightBlockers.map((g) => g.name),
     approvalBlockers: approvalBlockers.map((g) => g.name),
     retryNote: payments.note,
+    remoteMainLive: equality.remoteMainLive,
+    deployedRevision: equality.deployedRevision,
+    cachedOriginMainAuthoritative: false,
+    cutoverWindowIdentity: expectedIdentity,
+    writeStopEvidenceOk: writeStopOk,
+    freezeEvidenceOk: freezeOk,
   };
 }

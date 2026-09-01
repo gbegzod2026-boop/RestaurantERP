@@ -44,7 +44,7 @@ export function isMaintenanceAllowed(method, pathname) {
   const m = String(method || "GET").toUpperCase();
   const p = String(pathname || "");
   if (m === "OPTIONS" || m === "HEAD") return true;
-  if (p === "/api/health" || p === "/api/pg/health" || p === "/api/pg/meta") return true;
+  if (p === "/api/health" || p === "/api/deployment" || p === "/api/pg/health" || p === "/api/pg/meta") return true;
   if (p.startsWith("/api/public")) return true;
   if (m === "GET" || m === "HEAD") {
     if (p.startsWith("/api/auth/login-as") || p.startsWith("/api/auth/staff-view-as")) return false;

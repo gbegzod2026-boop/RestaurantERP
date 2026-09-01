@@ -1,20 +1,33 @@
 // Step 2D.5 READ-ONLY freeze-time Firebase snapshot.
 // GET only via fbRead. No Auth mutation. Requires --freeze-window.
-import { writeFileSync, mkdirSync } from "fs";
-import path from "path";
 import { fileURLToPath } from "url";
-import { initFirebase, shallowKeys, getValue, requestCount } from "./lib/fbRead.mjs";
-import { freezeSnapshotComplete, EXPECTED_FIREBASE_PROJECT } from "./lib/freezeSnapshot.mjs";
+import path from "path";
+import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
+import { EXPECTED_FIREBASE_PROJECT } from "./lib/freezeSnapshot.mjs";
+import { computeCutoverWindowIdentity } from "./lib/cutoverWindow.mjs";
+import { produceFreezeSnapshot, FREEZE_READ_FAILED } from "./lib/freezeCollector.mjs";
+import { readOperatorGitFacts } from "./lib/deployFreeze.mjs";
+import {
+  probeRuntimeRevision,
+  REQUIRED_PRODUCTION_PROBE_ORIGIN,
+} from "./lib/deployedRevision.mjs";
+import { probeLiveGithubMain, makeGitLsRemoteImpl, LS_REMOTE_TIMEOUT_MS } from "./lib/githubRemote.mjs";
+import { execFileSync } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.join(__dirname, "../../..");
 
-const TENANT_COLS = [
-  "users", "tables", "menu", "customers", "orders", "inventory", "ingredients",
-  "suppliers", "expenses", "reservations", "couriers", "customRoles", "waiterCalls",
-  "notifications", "chats", "modules", "subscription", "kitchenStations",
-  "modifiers", "extras", "discounts", "audit_log", "attendance",
-];
+function gitValue(args) {
+  try {
+    return execFileSync("git", ["-c", `safe.directory=${REPO}`, ...args], {
+      cwd: REPO,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
 
 function projectFromUrl(dbUrl) {
   try {
@@ -35,6 +48,35 @@ async function main() {
     process.exit(2);
   }
 
+  const facts = readOperatorGitFacts(gitValue);
+  const originUrl = gitValue(["remote", "get-url", "origin"]);
+  const liveGithub = probeLiveGithubMain({
+    originUrl,
+    head: facts.head,
+    lsRemoteImpl: makeGitLsRemoteImpl({
+      repo: REPO,
+      originUrl,
+      execFileSyncImpl: execFileSync,
+      timeoutMs: LS_REMOTE_TIMEOUT_MS,
+    }),
+  });
+  const revisionProbe = await probeRuntimeRevision({
+    baseUrl: REQUIRED_PRODUCTION_PROBE_ORIGIN,
+    fetchImpl: fetch,
+  });
+  const cutoverWindowIdentity = computeCutoverWindowIdentity({
+    candidateCommit: facts.head,
+    remoteMain: liveGithub.liveRemoteMain,
+    deployedRevision: revisionProbe.revision,
+  });
+  if (!cutoverWindowIdentity) {
+    console.log(JSON.stringify({
+      freezeFirebaseSnapshot: "NOT RUN",
+      reason: "current-window identity incomplete; refusing freeze snapshot",
+    }, null, 2));
+    process.exit(2);
+  }
+
   initFirebase();
   const dbUrl = process.env.FIREBASE_DATABASE_URL || "";
   const project = process.env.FIREBASE_PROJECT_ID || projectFromUrl(dbUrl);
@@ -49,66 +91,40 @@ async function main() {
     process.exit(2);
   }
 
-  const restIds = await shallowKeys("restaurants");
-  const credTrees = await shallowKeys("credentials").catch(() => []);
-  const systemPromo = await shallowKeys("systemData/promoCodes").catch(() => []);
-  const counts = Object.fromEntries(TENANT_COLS.map((c) => [c, 0]));
-  let orderItems = 0;
-  let payments = 0;
-
-  for (const rid of restIds) {
-    for (const col of TENANT_COLS) {
-      const keys = await shallowKeys(`restaurants/${rid}/${col}`).catch(() => []);
-      counts[col] += keys.length;
-    }
-    const orders = await getValue(`restaurants/${rid}/orders`).catch(() => null);
-    if (!orders || typeof orders !== "object") continue;
-    for (const rec of Object.values(orders)) {
-      if (!rec || typeof rec !== "object") continue;
-      if (rec.items && typeof rec.items === "object") orderItems += Object.keys(rec.items).length;
-      if (rec.payment && typeof rec.payment === "object") payments++;
-    }
-  }
-
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const generatedAt = new Date().toISOString();
-  const doc = {
-    freezeWindow: true,
-    mode: "READ-ONLY",
+  const result = await produceFreezeSnapshot({
+    shallowKeys,
+    getValue,
+    outDir: path.join(REPO, "cutover-backups", `freeze-snapshot-${stamp}`),
     generatedAt,
+    candidateCommit: facts.head,
+    cutoverWindowIdentity,
     firebaseProject: EXPECTED_FIREBASE_PROJECT,
-    rtdbHostClass: host.replace(/^[^.]+/, "*"),
-    firebaseRequests: requestCount(),
-    counts: {
-      restaurants: restIds.length,
-      users: counts.users,
-      employees: counts.users,
-      orders: counts.orders,
-      orderItems,
-      payments,
-      menu: counts.menu,
-      tables: counts.tables,
-      customers: counts.customers,
-      credentialTrees: credTrees.length,
-      customRoles: counts.customRoles,
-      platformPromoCodes: systemPromo.length,
-    },
-    sourceRoots: ["restaurants", "credentials", "systemData/promoCodes"],
-  };
+  });
 
-  const outDir = path.join(REPO, "cutover-backups", `freeze-snapshot-${stamp}`);
-  mkdirSync(outDir, { recursive: true });
-  writeFileSync(path.join(outDir, "FREEZE.json"), JSON.stringify(doc, null, 2));
+  if (!result.ok) {
+    console.log(JSON.stringify({
+      freezeFirebaseSnapshot: "FAIL",
+      code: result.code || FREEZE_READ_FAILED,
+      dimension: result.dimension || null,
+      artifactClass: "none",
+    }, null, 2));
+    process.exit(2);
+  }
+
   console.log(JSON.stringify({
-    freezeFirebaseSnapshot: freezeSnapshotComplete(doc) ? "PASS" : "FAIL",
+    freezeFirebaseSnapshot: "PASS",
     generatedAt,
     firebaseProject: EXPECTED_FIREBASE_PROJECT,
-    counts: doc.counts,
+    counts: result.counts,
+    candidateCommit: facts.head,
+    cutoverWindowIdentity,
     artifactClass: "cutover-backups/freeze-snapshot-*/FREEZE.json",
   }, null, 2));
 }
 
-main().catch((err) => {
-  console.error("FREEZE SNAPSHOT FAILED:", err.message);
+main().catch(() => {
+  console.error("FREEZE SNAPSHOT FAILED");
   process.exit(1);
 });

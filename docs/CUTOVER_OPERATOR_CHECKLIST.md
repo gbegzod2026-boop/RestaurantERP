@@ -89,3 +89,6 @@ node db/scripts/step2d5-deploy-freeze.mjs
 # node db/scripts/step2d2-prod-pg-preflight.mjs
 node db/scripts/step2d5-cutover-window.mjs
 ```
+
+WRITE_STOP.json and FREEZE.json expire after 60 minutes. TTL does not auto-extend.
+After expiry the operator must rerun write-stop, then freeze snapshot, then the final gate.
