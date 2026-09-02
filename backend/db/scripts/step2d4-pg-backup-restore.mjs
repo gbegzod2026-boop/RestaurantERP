@@ -25,6 +25,8 @@ import {
   resolvePgClientBins,
   probePgToolVersion,
   clientToolsReport,
+  runPgRestoreList,
+  verifyPgRestoreListResult,
 } from "./lib/pgDumpClientGuard.mjs";
 import {
   assertLocalRoleBootstrapTarget,
@@ -333,10 +335,15 @@ async function main() {
   const dumpStat = statSync(dumpFile);
   if (!dumpStat.size) throw new Error("pg_dump produced an empty artifact");
 
-  const dumpList = runTool(bins.pgRestore.path, ["--list", dumpFile], {}, { maxText: 200000 });
+  const dumpListRaw = runPgRestoreList(bins.pgRestore.path, dumpFile);
+  const dumpListCheck = verifyPgRestoreListResult(dumpListRaw);
+  if (!dumpListCheck.ok || dumpListCheck.authorizing !== true) {
+    throw new Error(dumpListCheck.reason || "pg_restore --list did not authorize the dump");
+  }
+  const dumpListText = `${dumpListRaw.stdout || ""}\n${dumpListRaw.stderr || ""}`;
   const migrationRoles = deriveRolesFromMigrationDir(path.join(BACKEND, "db", "migrations"));
   const rolesNeeded = requiredRestoreRoles({
-    dumpListText: dumpList.text || "",
+    dumpListText,
     migrationRoles,
   });
 

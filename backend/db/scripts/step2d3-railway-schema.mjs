@@ -1,11 +1,10 @@
 // Step 2D.3 — Railway production PostgreSQL SCHEMA-ONLY identity + provision.
+// Fresh empty railway DB, or in-place upgrade from exact predecessor 0017 to 0018.
 // Never prints passwords, URLs, or secrets. Never imports Firebase.
 // Never switches DATA_BACKEND. Does not run migrate-firebase.
 import pg from "pg";
 import path from "path";
 import { fileURLToPath } from "url";
-import { readdirSync, readFileSync } from "fs";
-import crypto from "crypto";
 import dotenv from "dotenv";
 import {
   FORBIDDEN_DB,
@@ -22,7 +21,12 @@ import {
   APPLY_WRITABLE_SQL,
   assertSchemaApplyInvariants,
   schemaOnlyAppPasswordReport,
+  SCHEMA_APPLY_MODE,
+  collectSchemaApplyLive,
+  applyMissingMigrations,
+  revalidateThenEnterWritable,
 } from "./lib/schemaApplySession.mjs";
+import { loadRepoMigrations } from "./lib/schemaMigrationCatalog.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.join(__dirname, "../..");
@@ -176,30 +180,8 @@ function clientConfig(source) {
   return withPgSsl(base, parts.host, env);
 }
 
-function sha256(text) {
-  return crypto.createHash("sha256").update(text, "utf8").digest("hex");
-}
-
-function stripTxWrappers(sql) {
-  return sql.replace(/\bBEGIN\s*;/gi, "").replace(/\bCOMMIT\s*;\s*$/i, "");
-}
-
 function loadMigrations() {
-  return readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".up.sql"))
-    .map((upFile) => {
-      const m = upFile.match(/^(\d{4,})_(.+)\.up\.sql$/);
-      if (!m) throw new Error(`bad migration name ${upFile}`);
-      const sql = readFileSync(path.join(MIGRATIONS_DIR, upFile), "utf8");
-      return {
-        version: m[1],
-        name: m[2],
-        file: upFile,
-        sql: stripTxWrappers(sql),
-        checksum: sha256(sql),
-      };
-    })
-    .sort((a, b) => a.version.localeCompare(b.version));
+  return loadRepoMigrations(MIGRATIONS_DIR);
 }
 
 const TENANT_CATALOG_SQL = `
@@ -261,52 +243,7 @@ async function enterSchemaApplyWritable(client) {
 async function identifyLive(client) {
   await enterReadOnly(client);
   try {
-    const ident = await client.query(`
-      SELECT current_user AS current_user,
-             current_database() AS current_database,
-             inet_server_addr()::text AS server_addr,
-             current_setting('ssl') AS ssl,
-             version() AS version
-    `);
-    const tables = await client.query(`
-      SELECT c.relname
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'public' AND c.relkind = 'r'
-      ORDER BY 1
-    `);
-    const restExists = tables.rows.some((r) => r.relname === "restaurants");
-    let restaurants = null;
-    let fixtureLike = null;
-    if (restExists) {
-      restaurants = Number((await client.query("SELECT count(*)::int AS n FROM restaurants")).rows[0].n);
-      fixtureLike = Number((await client.query(
-        "SELECT count(*)::int AS n FROM restaurants WHERE legacy_rtdb_id LIKE 'rest_1999%'"
-      )).rows[0].n);
-    }
-    const mig = await client.query(
-      "SELECT version, name FROM schema_migrations ORDER BY version"
-    ).catch(() => ({ rows: [] }));
-    const row = ident.rows[0];
-    const serverAddr = String(row.server_addr || "");
-    const serverAddrClass = !serverAddr
-      ? "(unavailable)"
-      : /^127\.|^::1$/.test(serverAddr)
-        ? "loopback"
-        : serverAddr.replace(/\d+/g, "*");
-    return {
-      currentUser: row.current_user,
-      currentDatabase: row.current_database,
-      sslLive: row.ssl,
-      serverVersion: String(row.version).split(",")[0],
-      serverAddrClass,
-      publicTables: tables.rows.map((r) => r.relname),
-      restaurantsTableExists: restExists,
-      restaurants,
-      fixtureLike,
-      schemaMigrations: mig.rows.map((r) => `${r.version}:${r.name}`),
-      latestMigration: mig.rows.at(-1) || null,
-    };
+    return await collectSchemaApplyLive(client);
   } finally {
     await leaveReadOnly(client);
   }
@@ -319,45 +256,7 @@ function unexpectedData(live) {
 }
 
 async function applySchema(client) {
-  const HISTORY = `
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version      text PRIMARY KEY,
-      name         text NOT NULL,
-      checksum     text NOT NULL,
-      applied_at   timestamptz NOT NULL DEFAULT now()
-    );
-  `;
-  await client.query(HISTORY);
-  const applied = (await client.query(
-    "SELECT version, name, checksum FROM schema_migrations ORDER BY version"
-  )).rows;
-  const appliedMap = new Map(applied.map((r) => [r.version, r]));
-  const all = loadMigrations();
-  const results = [];
-  for (const m of all) {
-    const rec = appliedMap.get(m.version);
-    if (rec) {
-      if (rec.checksum !== m.checksum) {
-        throw new Error(`DRIFT ${m.version}_${m.name}: applied checksum differs from file`);
-      }
-      results.push({ version: m.version, name: m.name, status: "already-applied" });
-      continue;
-    }
-    await client.query("BEGIN");
-    try {
-      await client.query(m.sql);
-      await client.query(
-        "INSERT INTO schema_migrations (version, name, checksum) VALUES ($1, $2, $3)",
-        [m.version, m.name, m.checksum]
-      );
-      await client.query("COMMIT");
-      results.push({ version: m.version, name: m.name, status: "applied" });
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw new Error(`${m.version}_${m.name} failed: ${err.message}`);
-    }
-  }
-  return results;
+  return applyMissingMigrations(client, loadMigrations());
 }
 
 async function postVerify(client) {
@@ -536,6 +435,7 @@ async function main() {
       fixtureLike: live.fixtureLike,
       schemaMigrations: live.schemaMigrations,
       latestMigration: live.latestMigration,
+      schemaMigrationRowCount: live.schemaMigrationRows.length,
     };
     if (choice.snap.loopback || live.serverAddrClass === "loopback") {
       report.verdict = "STOP";
@@ -558,41 +458,50 @@ async function main() {
     }
     if (ACTION === "identify") {
       report.verdict = "IDENTITY_OK";
-      report.next = "re-run with action=apply to apply schema-only migrations through the required version";
+      report.next = "re-run with action=apply for schema-only fresh provision or in-place upgrade from the exact predecessor to the required version";
       console.log(JSON.stringify(report, null, 2));
       return;
     }
     if (!isSchemaApplyAction(ACTION)) {
       throw new Error(`unknown action ${ACTION}`);
     }
+    const repoMigrations = loadMigrations();
+    let decision;
     try {
-      assertSchemaApplyInvariants({ snap: choice.snap, live });
+      decision = assertSchemaApplyInvariants({ snap: choice.snap, live, repoMigrations });
     } catch (err) {
       report.verdict = "STOP";
       report.reason = err.message;
       console.log(JSON.stringify(report, null, 2));
       process.exit(2);
     }
-    await c.end();
-    identifyOpen = false;
-    const applyClient = new pg.Client(resolved.config);
-    await applyClient.connect();
-    try {
-      const writable = await enterSchemaApplyWritable(applyClient);
-      report.applySession = { ...writable, dedicatedConnection: true, schemaOnly: true };
-      const applied = await applySchema(applyClient);
-      report.migrations = applied;
-      const pwd = schemaOnlyAppPasswordReport(envForClient);
-      report.appPassword = {
-        attempted: pwd.attempted,
-        rotated: false,
-        credentialMutations: pwd.credentialMutations,
-        reason: pwd.reason,
-      };
-      report.verify = await postVerify(applyClient);
+    report.schemaApply = {
+      mode: decision.mode,
+      predecessor: decision.predecessor,
+      requiredVersion: decision.requiredVersion,
+      writableOpened: decision.allowWritable === true,
+    };
+    const pwd = schemaOnlyAppPasswordReport(envForClient);
+    const appPassword = {
+      attempted: pwd.attempted,
+      rotated: false,
+      credentialMutations: pwd.credentialMutations,
+      reason: pwd.reason,
+    };
+
+    async function finishVerify(client, { migrations, writableOpened, verdictIfOk }) {
+      report.migrations = migrations;
+      report.appPassword = appPassword;
+      report.verify = await postVerify(client);
       report.firebaseWrites = 0;
       report.dataMigrated = false;
       report.dataBackendSwitched = false;
+      report.applySession = {
+        ...(report.applySession || {}),
+        dedicatedConnection: writableOpened,
+        schemaOnly: true,
+        writableOpened,
+      };
       const v = report.verify;
       const ok = v.latestMigration === REQUIRED_SCHEMA_VERSION
         && v.pgcrypto
@@ -607,9 +516,46 @@ async function main() {
         && v.customRolesLegacyUnique
         && v.customRolesNameUniqueDropped
         && String(v.sslLive).toLowerCase() === "on";
-      report.verdict = ok ? "PASS" : "PARTIAL";
+      report.verdict = ok ? verdictIfOk : "PARTIAL";
       console.log(JSON.stringify(report, null, 2));
       if (!ok) process.exit(1);
+    }
+
+    if (decision.mode === SCHEMA_APPLY_MODE.ALREADY_CURRENT) {
+      await finishVerify(c, {
+        migrations: repoMigrations.map((m) => ({
+          version: m.version,
+          name: m.name,
+          status: "already-applied",
+        })),
+        writableOpened: false,
+        verdictIfOk: "ALREADY_CURRENT",
+      });
+      return;
+    }
+
+    await c.end();
+    identifyOpen = false;
+    const applyClient = new pg.Client(resolved.config);
+    await applyClient.connect();
+    try {
+      const writable = await revalidateThenEnterWritable({
+        client: applyClient,
+        snap: choice.snap,
+        previousLive: live,
+        previousDecision: decision,
+        repoMigrations,
+        identifyLiveImpl: identifyLive,
+        enterWritableImpl: enterSchemaApplyWritable,
+      });
+      report.applySession = { ...writable, dedicatedConnection: true, schemaOnly: true, writableOpened: true };
+      const applied = await applySchema(applyClient);
+      const newlyApplied = applied.some((m) => m.status === "applied");
+      await finishVerify(applyClient, {
+        migrations: applied,
+        writableOpened: true,
+        verdictIfOk: newlyApplied ? "PASS" : "ALREADY_CURRENT",
+      });
     } finally {
       await applyClient.end();
     }

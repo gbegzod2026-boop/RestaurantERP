@@ -10,6 +10,7 @@ import {
   pgClientConfig,
   isLoopbackHost,
 } from "./lib/migrationTargetGuard.mjs";
+import { PRODUCTION_SCHEMA_PROVISIONING_REQUIREMENTS } from "./lib/schemaApplySession.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 if (/:59999\b/.test(process.env.POSTGRES_URL || "")) delete process.env.POSTGRES_URL;
@@ -107,12 +108,10 @@ async function main() {
     report.productionTarget = "NOT PROVISIONED";
     report.provisioningRequirements = [
       "Provision a dedicated production PostgreSQL instance (not loopback Step 1 fixture, not nesta_migration_dryrun).",
-      "Create empty database (suggested name: nesta_prod) owned by a migration role.",
+      ...PRODUCTION_SCHEMA_PROVISIONING_REQUIREMENTS,
       "Create runtime role nesta_app with RLS; do not use superuser for the app pool.",
-      "Apply schema migrations through the required production schema version on the empty database before data load.",
       "Set POSTGRES_SSL=true on managed hosts.",
       "Size: local dry-run of this dataset is small; provision ≥20 GB SSD and connection limit ≥50 to start.",
-      "Do not reuse database name postgres (Step 1 fixture) or nesta_migration_dryrun.",
     ];
     console.log(JSON.stringify(report, null, 2));
     return;
@@ -123,7 +122,8 @@ async function main() {
     report.note = "Configured host is not loopback. Step 2D will not open a remote production session from this preflight without explicit approval.";
     report.provisioningRequirements = [
       "Confirm the remote host/database identity in a reviewed change window.",
-      "Then re-run inspect-only checks: schema_migrations through the required version, restaurants=0, no rest_1999*, FORCE RLS, nesta_app grants.",
+      "Then re-run inspect-only checks: schema_migrations through the required version or exact predecessor 0017, restaurants=0, no rest_1999*, FORCE RLS, nesta_app grants.",
+      ...PRODUCTION_SCHEMA_PROVISIONING_REQUIREMENTS,
     ];
     console.log(JSON.stringify(report, null, 2));
     return;
@@ -208,13 +208,9 @@ async function main() {
   report.productionTarget = "NOT PROVISIONED";
   report.reason = "Configured PostgreSQL is loopback. nesta_migration_dryrun is the Step 2 local target only. Production database is not present in this cluster's known names.";
   report.provisioningRequirements = [
-    "Create a new empty production database (not postgres, not nesta_migration_dryrun).",
-    "Apply migrations 0001_wave0_core through 0018_production_migration_attempts with the same checksums as this working tree.",
-    "Confirm pgcrypto, FORCE RLS on tenant tables, roles nesta_app / nesta_login_reader / nesta_credential_revealer.",
-    "Set nesta_app password via db:set-app-password; never embed it in SQL.",
+    ...PRODUCTION_SCHEMA_PROVISIONING_REQUIREMENTS,
     "App pool connects as nesta_app (POSTGRES_POOL_MAX known; default 10 in .env.example — raise for cutover).",
-    "Pre-load restaurant count must be 0 and rest_1999* count must be 0.",
-    "Take a verified empty-schema dump before --apply.",
+    "Take a verified schema dump before data --apply.",
     "Do not point production DATA_BACKEND at this loopback cluster.",
   ];
   console.log(JSON.stringify(report, null, 2));

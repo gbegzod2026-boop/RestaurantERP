@@ -13,6 +13,8 @@ import {
   assertPgDumpCompatible,
   resolvePgClientBins,
   probePgToolVersion,
+  verifyPgRestoreListResult,
+  describeLegacyBrokenPipePgRestoreList,
 } from "../scripts/lib/pgDumpClientGuard.mjs";
 import {
   MINIMUM_RESTORE_ROLES,
@@ -328,6 +330,87 @@ test("temporary roles can be cleaned up safely", async () => {
   });
   assert.deepEqual(cleanup.dropped.sort(), [...MINIMUM_RESTORE_ROLES].sort());
   assert.equal(cleanup.skipped.length, 0);
+});
+
+test("production pg_restore --list verifier is fail-closed", () => {
+  const valid = `;
+; Archive created at 2026-09-02 12:00:00 UTC
+;     dbname: railway
+;     TOC Entries: 2
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;
+;
+; Selected TOC Entries:
+;
+221; 1259 16384 TABLE public restaurants nesta_migrator
+222; 1259 16385 TABLE public employees nesta_migrator
+`;
+  const pass = verifyPgRestoreListResult({ status: 0, stdout: valid });
+  assert.equal(pass.ok, true);
+  assert.equal(pass.authorizing, true);
+  assert.equal(pass.verified, true);
+  const passAgain = verifyPgRestoreListResult({ status: 0, stdout: valid });
+  assert.equal(passAgain.ok, true, "global TOC regex must not fail-open or fail a second valid listing");
+
+  const partial = `;
+; Archive created at 2026-09-02 12:00:00 UTC
+;     TOC Entries: 12
+;     Format: CUSTOM
+;
+; Selected TOC Entries:
+;
+221; 1259 16384 TABLE public restaurants nesta_migrator
+`;
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+    assert.equal(result.verified, false, msg);
+  };
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: valid,
+    stderr: "pg_restore: error: could not read from input file",
+  }), "status 0 + pg_restore: error:");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: `${valid}\npg_restore: fatal: corrupt custom-format dump`,
+  }), "status 0 + pg_restore: fatal:");
+  failClosed(verifyPgRestoreListResult({ status: -1, stdout: valid }), "status -1 + full TOC");
+  failClosed(verifyPgRestoreListResult({ status: -1, stdout: partial }), "status -1 + partial TOC");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: valid, signal: "SIGPIPE" }), "SIGPIPE");
+  failClosed(verifyPgRestoreListResult({
+    status: -1,
+    stdout: partial,
+    signal: "SIGPIPE",
+  }), "SIGPIPE + partial TOC");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: valid,
+    error: new Error("spawn failed"),
+  }), "spawn error");
+  failClosed(verifyPgRestoreListResult({ status: 1, stdout: valid }), "status 1");
+  failClosed(verifyPgRestoreListResult({
+    status: 1,
+    stdout: "",
+    stderr: "pg_restore: error: unsupported version (1.16) in file header",
+  }), "corrupt custom-format dump");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: "" }), "empty output");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: "; Archive created at 2026-09-02 12:00:00 UTC\n",
+  }), "only Archive created at");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: "; TOC Entries: 2\n",
+  }), "only TOC Entries");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: partial }), "truncated/partial TOC");
+  const legacy = describeLegacyBrokenPipePgRestoreList({ status: -1, stdout: valid, signal: "SIGPIPE" });
+  failClosed(legacy, "legacy broken-pipe helper");
+  assert.equal(legacy.legacyObservationOnly, true);
 });
 
 test("pg_restore role-reference failure is not classified harmless", () => {
