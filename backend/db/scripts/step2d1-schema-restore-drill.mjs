@@ -1,6 +1,7 @@
 // Local schema-only backup + restore drill. Loopback only. Never production.
-// Creates a disposable empty database, applies 0001–0017, dumps schema,
-// restores into a second disposable DB, verifies restaurants=0 and 0017.
+// Creates a disposable empty database, applies schema through the required
+// version, dumps schema, restores into a second disposable DB, verifies
+// restaurants=0 and the required schema version.
 import { spawnSync } from "child_process";
 import { mkdtempSync, writeFileSync, rmSync } from "fs";
 import path from "path";
@@ -12,6 +13,7 @@ import {
   readLocalPgParts,
   pgClientConfig,
   isLoopbackHost,
+  REQUIRED_SCHEMA_VERSION,
 } from "./lib/migrationTargetGuard.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -106,7 +108,7 @@ async function main() {
     } finally {
       await restored.end();
     }
-    report.ok = report.restaurants === 0 && report.fixtureLike === 0 && report.latest?.version === "0017";
+    report.ok = report.restaurants === 0 && report.fixtureLike === 0 && report.latest?.version === REQUIRED_SCHEMA_VERSION;
   } finally {
     for (const name of [SOURCE_DB, RESTORE_DB]) {
       await admin.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()", [name]).catch(() => {});

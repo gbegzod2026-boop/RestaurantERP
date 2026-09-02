@@ -28,7 +28,7 @@
 // it stopped (rule #11).
 import path from "path";
 import { fileURLToPath } from "url";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, mkdirSync } from "fs";
 import { initFirebase, shallowKeys, getValue, requestCount } from "./lib/fbRead.mjs";
 import { MigrationReport, OUTCOME, SEVERITY } from "./lib/report.mjs";
 import { upsertRow, resolveRestaurantUuid, countTable } from "./lib/upsert.mjs";
@@ -43,7 +43,16 @@ import {
 } from "./lib/normalize.mjs";
 import * as w35 from "./lib/transforms-wave35.mjs";
 import { accept, runWaves35, WAVE2_CONFLICT, drop, postgresCounts } from "./lib/run-engine.mjs";
-import { enforceConnectedApplyTarget } from "./lib/migrationTargetGuard.mjs";
+import { enforceProductionApplyGate, MIGRATION_PHASE } from "./lib/productionMigrateAuthorize.mjs";
+import {
+  assertCheckpointBinding,
+  checkpointBinding,
+  commitRestaurantThenCheckpoint,
+  emptyCheckpoint,
+  restaurantCompleted,
+  atomicWriteJsonFile,
+} from "./lib/migrationCheckpoint.mjs";
+import { createPgAttemptStore, ATTEMPT_STATUS, checkpointPhaseFamily, casAttempt } from "./lib/productionMigrationAttempt.mjs";
 import { classifyOrderFinancials } from "./lib/orderFinancials.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,14 +77,14 @@ function loadCheckpoint() {
   // Apply/verify start a new pass unless the caller asked to resume — otherwise
   // a just-finished dry-run checkpoint would skip every restaurant.
   if (RESET_CHECKPOINT || ((MODE === "apply" || MODE === "verify") && !RESUME) || !existsSync(CHECKPOINT)) {
-    return { completed: {}, startedAt: null };
+    return emptyCheckpoint();
   }
   try { return JSON.parse(readFileSync(CHECKPOINT, "utf8")); }
-  catch { return { completed: {}, startedAt: null }; }
+  catch { return emptyCheckpoint(); }
 }
 function saveCheckpoint(cp) {
   mkdirSync(REPORT_DIR, { recursive: true });
-  writeFileSync(CHECKPOINT, JSON.stringify(cp, null, 2), "utf8");
+  atomicWriteJsonFile(CHECKPOINT, cp);
 }
 
 // ── optional PostgreSQL ───────────────────────────────────────────────────
@@ -650,15 +659,28 @@ async function buildReferenceMaps(restId, pg, client) {
 async function main() {
   const pg = await loadPg();
   const transformOnly = !pg;
+  const productionPhase = (RESET_CHECKPOINT || !RESUME)
+    ? MIGRATION_PHASE.FULL_AFTER_WAVE1
+    : MIGRATION_PHASE.RESUME_FULL;
+  let productionAuth = null;
   if (pg) {
     const cfg = pg.maskedConfig();
     const live = await pg.getPool().connect();
     try {
-      const applyMode = await enforceConnectedApplyTarget(live, cfg, process.env, {
+      productionAuth = await enforceProductionApplyGate({
+        repoRoot: REPO_ROOT,
+        env: process.env,
+        argv,
+        client: live,
+        masked: cfg,
         writesCommitted: MODE === "apply",
         resume: RESUME,
+        phase: productionPhase,
       });
-      console.log(`[target] ${applyMode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+      console.log(`[target] ${productionAuth.mode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+      if (productionAuth.attempt?.attempt_id) {
+        console.log(`[attempt] ${productionAuth.attempt.attempt_id} status=${productionAuth.attempt.status} phase=${productionPhase}`);
+      }
     } finally {
       live.release();
     }
@@ -683,8 +705,29 @@ async function main() {
   });
 
   const checkpoint = loadCheckpoint();
-  if (RESUME && Object.keys(checkpoint.completed).length) {
-    console.log(`Resuming — ${Object.keys(checkpoint.completed).length} restaurant/entity pairs already done.`);
+  const fullBinding = productionAuth?.attempt
+    ? checkpointBinding({
+      attemptId: productionAuth.attempt.attempt_id,
+      targetFingerprint: productionAuth.targetFingerprint,
+      candidateCommit: productionAuth.attempt.candidate_commit,
+      cutoverWindowIdentity: productionAuth.cutoverWindowIdentity,
+      phase: checkpointPhaseFamily(productionPhase),
+      freezeIdentity: productionAuth.freezeIdentity,
+      batchId: `full-${productionAuth.attempt.attempt_id}`,
+    })
+    : null;
+  if (fullBinding) {
+    const hasWork = Object.keys(checkpoint.completedRestaurants || {}).length > 0;
+    if (RESUME && (hasWork || checkpoint.binding)) {
+      assertCheckpointBinding(checkpoint, fullBinding);
+    } else {
+      checkpoint.binding = fullBinding;
+      checkpoint.version = fullBinding.checkpointVersion;
+      checkpoint.completedRestaurants = checkpoint.completedRestaurants || {};
+    }
+  }
+  if (RESUME && Object.keys(checkpoint.completedRestaurants || checkpoint.completed || {}).length) {
+    console.log(`Resuming — already-completed restaurants will be skipped.`);
   }
 
   let restIds = ONLY_RESTAURANT ? [ONLY_RESTAURANT] : await shallowKeys("restaurants");
@@ -697,13 +740,20 @@ async function main() {
 
   const pool = pg ? pg.getPool() : null;
   const willWrite = !!pg && (MODE === "apply" || MODE === "dry-run");
+  let applyFailed = false;
 
   for (let i = 0; i < restIds.length; i++) {
     const restId = restIds[i];
     process.stdout.write(`[${i + 1}/${restIds.length}] ${restId} … `);
 
+    if (RESUME && restaurantCompleted(checkpoint, restId)) {
+      console.log("already checkpointed");
+      continue;
+    }
+
     let client = null;
     let restaurantUuid = null;
+    let restaurantOk = true;
     if (willWrite) {
       client = await pool.connect();
       await client.query("BEGIN");
@@ -720,6 +770,7 @@ async function main() {
           outcome: OUTCOME.SKIPPED,
         });
         console.log("SKIPPED (restaurant not in PostgreSQL — run wave1 apply first)");
+        applyFailed = true;
         continue;
       }
     }
@@ -731,6 +782,7 @@ async function main() {
       if (client) { await client.query("ROLLBACK").catch(() => {}); client.release(); }
       report.fatalError(`referenceMaps:${restId}`, err);
       console.log("FAILED (reference maps)");
+      applyFailed = true;
       continue;
     }
     const ctx = { restaurantId: restId, restaurantUuid, maps };
@@ -738,17 +790,16 @@ async function main() {
     let touched = 0;
 
     for (const ent of ENTITIES) {
-      const ckKey = `${restId}:${ent.name}`;
-      if (RESUME && checkpoint.completed[ckKey]) continue;
-
       let node;
       try {
         node = await getValue(`restaurants/${restId}/${ent.collection}`);
       } catch (err) {
+        restaurantOk = false;
         report.fatalError(`read:${restId}/${ent.collection}`, err);
+        applyFailed = true;
         continue;
       }
-      if (!node || typeof node !== "object") { checkpoint.completed[ckKey] = true; continue; }
+      if (!node || typeof node !== "object") continue;
 
       const entries = Object.entries(node);
       report.seen(restId, ent.name, entries.length);
@@ -862,22 +913,32 @@ async function main() {
           }
         }
       }
-
-      checkpoint.completed[ckKey] = true;
-      saveCheckpoint(checkpoint);
     }
 
     try {
       touched += await runWaves35(restId, ctx, report, writer);
     } catch (err) {
+      restaurantOk = false;
+      applyFailed = true;
       report.fatalError(`waves35:${restId}`, err);
     }
 
     if (client) {
       try {
-        if (MODE === "apply") await client.query("COMMIT");
-        else await client.query("ROLLBACK");
+        if (!restaurantOk) {
+          applyFailed = true;
+          await client.query("ROLLBACK").catch(() => {});
+        } else {
+          await commitRestaurantThenCheckpoint({
+            client,
+            mode: MODE,
+            checkpoint,
+            restId,
+            persist: saveCheckpoint,
+          });
+        }
       } catch (err) {
+        applyFailed = true;
         report.fatalError(`tx:${restId}`, err);
         await client.query("ROLLBACK").catch(() => {});
       }
@@ -937,6 +998,22 @@ async function main() {
   console.log(`Firebase was NOT modified.`);
 
   const unbalanced = Object.values(report.reconciliation).some((r) => !r.balanced);
+  if (MODE === "apply" && productionAuth?.attempt) {
+    const statusClient = await pg.getPool().connect();
+    try {
+      await casAttempt(createPgAttemptStore(statusClient), productionAuth.attempt, {
+        nextStatus: (applyFailed || report.fatal.length || unbalanced)
+          ? ATTEMPT_STATUS.FAILED
+          : ATTEMPT_STATUS.FULL_COMPLETE,
+        nextPhase: (applyFailed || report.fatal.length || unbalanced)
+          ? productionAuth.attempt.phase
+          : MIGRATION_PHASE.FULL_AFTER_WAVE1,
+        full_checkpoint_id: fullBinding?.batchId || null,
+      });
+    } finally {
+      statusClient.release();
+    }
+  }
   process.exit(report.fatal.length || unbalanced ? 1 : 0);
 }
 

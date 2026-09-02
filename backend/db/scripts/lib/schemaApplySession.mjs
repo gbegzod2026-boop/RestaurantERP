@@ -12,6 +12,19 @@ export function isSchemaApplyAction(action) {
   return action === "apply";
 }
 
+export const SCHEMA_ONLY_NO_CREDENTIAL_ROTATION = "schema-only action does not rotate credentials";
+
+/** Schema apply never rotates nesta_app. Use db/set-app-role-password.js. */
+export function schemaOnlyAppPasswordReport(env = {}) {
+  void env;
+  return {
+    attempted: false,
+    rotated: false,
+    credentialMutations: 0,
+    reason: SCHEMA_ONLY_NO_CREDENTIAL_ROTATION,
+  };
+}
+
 export const READ_ONLY_BEGIN_SQL = "BEGIN READ ONLY";
 export const READ_ONLY_LOCAL_SQL = "SET LOCAL default_transaction_read_only = on";
 export const APPLY_WRITABLE_SQL = [

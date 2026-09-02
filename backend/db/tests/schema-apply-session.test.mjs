@@ -1,5 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import {
   isReadOnlyAction,
   isSchemaApplyAction,
@@ -8,6 +11,8 @@ import {
   APPLY_WRITABLE_SQL,
   assertSchemaApplyInvariants,
   SCHEMA_APPLY_REQUIRED_DB,
+  schemaOnlyAppPasswordReport,
+  SCHEMA_ONLY_NO_CREDENTIAL_ROTATION,
 } from "../scripts/lib/schemaApplySession.mjs";
 import { assertApplyTarget, assertMigrationTarget } from "../scripts/lib/migrationTargetGuard.mjs";
 
@@ -77,3 +82,26 @@ test("production target guard is still enforced (no easy bypass)", () => {
     { NESTA_MIGRATE_TARGET: "production", NESTA_PRODUCTION_MIGRATE_CONFIRM: "yes" }
   ));
 });
+
+test("schema-only apply never rotates nesta_app even when POSTGRES_APP_PASSWORD is set", () => {
+  const report = schemaOnlyAppPasswordReport({ POSTGRES_APP_PASSWORD: "would-have-rotated" });
+  assert.equal(report.attempted, false);
+  assert.equal(report.rotated, false);
+  assert.equal(report.credentialMutations, 0);
+  assert.equal(report.reason, SCHEMA_ONLY_NO_CREDENTIAL_ROTATION);
+
+  const step2d3 = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../scripts/step2d3-railway-schema.mjs"),
+    "utf8",
+  );
+  assert.doesNotMatch(step2d3, /ALTER\s+ROLE/i);
+  assert.doesNotMatch(step2d3, /maybeSetAppPassword/);
+  assert.match(step2d3, /schemaOnlyAppPasswordReport/);
+
+  const sql0018 = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../migrations/0018_production_migration_attempts.up.sql"),
+    "utf8",
+  );
+  assert.doesNotMatch(sql0018, /ALTER\s+ROLE/i);
+});
+

@@ -55,10 +55,23 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { initFirebase, shallowKeys, getValue } from "./lib/fbRead.mjs";
-import { enforceConnectedApplyTarget } from "./lib/migrationTargetGuard.mjs";
+import { enforceProductionApplyGate, MIGRATION_PHASE } from "./lib/productionMigrateAuthorize.mjs";
+import {
+  CHECKPOINT_VERSION,
+  assertCheckpointBinding,
+  checkpointBinding,
+  atomicWriteJsonFile,
+} from "./lib/migrationCheckpoint.mjs";
+import {
+  createPgAttemptStore,
+  ATTEMPT_STATUS,
+  checkpointPhaseFamily,
+  casAttempt,
+} from "./lib/productionMigrationAttempt.mjs";
 import { getPool, isPgAvailable, maskedConfig, closePool } from "../postgres.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.join(__dirname, "../../..");
 const AUDIT_DIR = path.join(__dirname, "..", "migration-audit");
 const CHECKPOINT_PATH = path.join(AUDIT_DIR, "wave1-checkpoint.json");
 
@@ -97,19 +110,27 @@ function batchIdFromCheckpointOrNew() {
   if (!FRESH && existsSync(CHECKPOINT_PATH)) {
     try {
       const cp = JSON.parse(readFileSync(CHECKPOINT_PATH, "utf8"));
-      if (cp.batchId) return { batchId: cp.batchId, completed: new Set(cp.completedRestaurants || []) };
+      if (cp.batchId) {
+        return {
+          batchId: cp.batchId,
+          completed: new Set(cp.completedRestaurants || []),
+          checkpoint: cp,
+        };
+      }
     } catch { /* fall through to a fresh batch */ }
   }
-  return { batchId: `wave1-${Date.now()}`, completed: new Set() };
+  return { batchId: `wave1-${Date.now()}`, completed: new Set(), checkpoint: null };
 }
 
-function saveCheckpoint(batchId, completed) {
+function saveCheckpoint(batchId, completed, binding) {
   mkdirSync(AUDIT_DIR, { recursive: true });
-  writeFileSync(
-    CHECKPOINT_PATH,
-    JSON.stringify({ batchId, completedRestaurants: [...completed], lastUpdatedAt: new Date().toISOString() }, null, 2),
-    "utf8"
-  );
+  atomicWriteJsonFile(CHECKPOINT_PATH, {
+    version: CHECKPOINT_VERSION,
+    batchId,
+    completedRestaurants: [...completed],
+    lastUpdatedAt: new Date().toISOString(),
+    binding: binding || null,
+  });
 }
 
 // ── One transaction per restaurant. Always the same code path for dry-run
@@ -696,16 +717,64 @@ async function main() {
   const cfg = maskedConfig();
   const pool = getPool();
   const live = await pool.connect();
+  let productionAuth = null;
+  const productionPhase = process.env.NESTA_PRODUCTION_MIGRATE_ATTEMPT_ID
+    ? MIGRATION_PHASE.RESUME_WAVE1
+    : MIGRATION_PHASE.WAVE1_INITIAL;
   try {
-    const applyMode = await enforceConnectedApplyTarget(live, cfg, process.env, {
+    productionAuth = await enforceProductionApplyGate({
+      repoRoot: REPO_ROOT,
+      env: process.env,
+      argv,
+      client: live,
+      masked: cfg,
       writesCommitted: MODE_APPLY,
       resume: !FRESH,
+      phase: productionPhase,
     });
-    console.log(`[target] ${applyMode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+    console.log(`[target] ${productionAuth.mode} ${cfg.user}@${cfg.host}:${cfg.port}/${cfg.database}`);
+    if (productionAuth.attempt?.attempt_id) {
+      console.log(`[attempt] ${productionAuth.attempt.attempt_id} status=${productionAuth.attempt.status} phase=${productionPhase}`);
+    }
   } finally {
     live.release();
   }
-  const { batchId, completed } = batchIdFromCheckpointOrNew();
+  const { batchId, completed, checkpoint: loadedCheckpoint } = batchIdFromCheckpointOrNew();
+  const wave1Binding = productionAuth?.attempt
+    ? checkpointBinding({
+      attemptId: productionAuth.attempt.attempt_id,
+      targetFingerprint: productionAuth.targetFingerprint,
+      candidateCommit: productionAuth.attempt.candidate_commit,
+      cutoverWindowIdentity: productionAuth.cutoverWindowIdentity,
+      phase: checkpointPhaseFamily(productionPhase),
+      freezeIdentity: productionAuth.freezeIdentity,
+      batchId,
+    })
+    : null;
+  if (wave1Binding && !FRESH && loadedCheckpoint && (completed.size > 0 || loadedCheckpoint.binding)) {
+    assertCheckpointBinding(
+      { version: loadedCheckpoint.version || CHECKPOINT_VERSION, binding: loadedCheckpoint.binding },
+      wave1Binding,
+    );
+  }
+  if (productionAuth?.attempt && loadedCheckpoint && !loadedCheckpoint.binding && completed.size > 0) {
+    throw new Error("NO-GO: legacy unbound checkpoint cannot authorize production resume");
+  }
+  let attemptRow = productionAuth?.attempt || null;
+  if (attemptRow) {
+    const statusClient = await pool.connect();
+    try {
+      attemptRow = await casAttempt(createPgAttemptStore(statusClient), attemptRow, {
+        nextStatus: ATTEMPT_STATUS.WAVE1_IN_PROGRESS,
+        nextPhase: productionPhase === MIGRATION_PHASE.RESUME_WAVE1
+          ? MIGRATION_PHASE.RESUME_WAVE1
+          : attemptRow.phase,
+        wave1_batch_id: batchId,
+      });
+    } finally {
+      statusClient.release();
+    }
+  }
   console.log(`[batch] ${batchId}${completed.size ? ` (resuming — ${completed.size} restaurant(s) already checkpointed done)` : ""}`);
 
   console.log("\nReading restaurants/ from Firebase REST (fbRead, read-only)...");
@@ -737,7 +806,7 @@ async function main() {
         totals.migrated++;
         for (const k of ["employees", "tables", "categories", "categoriesReal", "categoriesStatic", "kitchenStations", "menuItems", "comboItems", "settings", "moduleKeys", "modulesEnabled", "subscription"]) totals[k] += result.counts[k];
         if (result.comboMetaLog?.length) comboMetaAudit.push({ restaurantLegacyId: rid, combos: result.comboMetaLog });
-        if (MODE_APPLY) { completed.add(rid); saveCheckpoint(batchId, completed); }
+        if (MODE_APPLY) { completed.add(rid); saveCheckpoint(batchId, completed, wave1Binding); }
       }
       perRestaurant.push({ legacyId: rid, ...result });
     } catch (err) {
@@ -792,6 +861,19 @@ async function main() {
   console.log(`\nAudit file: ${auditPath}`);
   console.log(`Checkpoint: ${CHECKPOINT_PATH}`);
   console.log(MODE_APPLY ? "\n✅ APPLY complete." : "\n✅ DRY-RUN complete — no data was committed (every restaurant transaction was rolled back).");
+
+  if (MODE_APPLY && attemptRow) {
+    const statusClient = await pool.connect();
+    try {
+      await casAttempt(createPgAttemptStore(statusClient), attemptRow, {
+        nextStatus: totals.failed > 0 ? ATTEMPT_STATUS.FAILED : ATTEMPT_STATUS.WAVE1_COMPLETE,
+        nextPhase: totals.failed > 0 ? attemptRow.phase : MIGRATION_PHASE.FULL_AFTER_WAVE1,
+        wave1_batch_id: batchId,
+      });
+    } finally {
+      statusClient.release();
+    }
+  }
 
   await closePool();
   process.exit(totals.failed > 0 ? 1 : 0);

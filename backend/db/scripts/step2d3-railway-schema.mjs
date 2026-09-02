@@ -21,6 +21,7 @@ import {
   READ_ONLY_LOCAL_SQL,
   APPLY_WRITABLE_SQL,
   assertSchemaApplyInvariants,
+  schemaOnlyAppPasswordReport,
 } from "./lib/schemaApplySession.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -456,14 +457,6 @@ async function postVerify(client) {
   };
 }
 
-async function maybeSetAppPassword(client, env) {
-  const password = env.POSTGRES_APP_PASSWORD;
-  if (!password) return { attempted: false, reason: "POSTGRES_APP_PASSWORD unset — nesta_app LOGIN exists without a password rotation this run" };
-  const quoted = client.escapeLiteral(password);
-  await client.query(`ALTER ROLE nesta_app WITH PASSWORD ${quoted}`);
-  return { attempted: true, rotated: true };
-}
-
 async function main() {
   delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
   delete process.env.NESTA_REQUIRE_ISOLATED_AUTH;
@@ -565,7 +558,7 @@ async function main() {
     }
     if (ACTION === "identify") {
       report.verdict = "IDENTITY_OK";
-      report.next = "re-run with action=apply to apply 0001–0017 schema only";
+      report.next = "re-run with action=apply to apply schema-only migrations through the required version";
       console.log(JSON.stringify(report, null, 2));
       return;
     }
@@ -589,8 +582,13 @@ async function main() {
       report.applySession = { ...writable, dedicatedConnection: true, schemaOnly: true };
       const applied = await applySchema(applyClient);
       report.migrations = applied;
-      const pwd = await maybeSetAppPassword(applyClient, envForClient);
-      report.appPassword = { attempted: pwd.attempted, rotated: Boolean(pwd.rotated), reason: pwd.reason || undefined };
+      const pwd = schemaOnlyAppPasswordReport(envForClient);
+      report.appPassword = {
+        attempted: pwd.attempted,
+        rotated: false,
+        credentialMutations: pwd.credentialMutations,
+        reason: pwd.reason,
+      };
       report.verify = await postVerify(applyClient);
       report.firebaseWrites = 0;
       report.dataMigrated = false;

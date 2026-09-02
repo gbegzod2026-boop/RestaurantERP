@@ -12,6 +12,12 @@ import {
   readLocalPgParts,
   pgClientConfig,
 } from "./migrationTargetGuard.mjs";
+import {
+  TARGET_IDENTITY_SQL,
+  isTargetFingerprint,
+  targetFactsFromIdentityRow,
+  targetFingerprintFromFacts,
+} from "./pgTargetFingerprint.mjs";
 import { withPgSsl } from "../../pgSsl.js";
 import { READ_ONLY_BEGIN_SQL, READ_ONLY_LOCAL_SQL } from "./schemaApplySession.mjs";
 import {
@@ -48,6 +54,7 @@ export const RESTAURANTS_COUNT_SQL = "SELECT count(*)::int AS n FROM restaurants
 export const FIXTURE_COUNT_SQL = "SELECT count(*)::int AS n FROM restaurants WHERE legacy_rtdb_id LIKE 'rest_1999%'";
 export const MAX_CONNECTIONS_SQL = "SHOW max_connections";
 export const ROLLBACK_SQL = "ROLLBACK";
+export { TARGET_IDENTITY_SQL };
 export const UNIQUE_INDEX_SQL = `
           SELECT 1
           FROM pg_index i
@@ -137,6 +144,7 @@ export const LIVE_RESULT_SCHEMA = Object.freeze({
       },
     },
     rlsCatalogCount: { type: "number" },
+    targetFingerprint: { type: "string" },
     failures: { type: "array", items: { type: "string" }, optional: true },
   }),
 });
@@ -168,6 +176,7 @@ export const PREFLIGHT_SQL = Object.freeze({
   fixtureCount: FIXTURE_COUNT_SQL,
   uniqueIndex: UNIQUE_INDEX_SQL,
   maxConnections: MAX_CONNECTIONS_SQL,
+  targetIdentity: TARGET_IDENTITY_SQL,
   rollback: ROLLBACK_SQL,
 });
 
@@ -381,6 +390,7 @@ function emptyLive({ status, failures, hostClass = "", database = "", configured
     requiredUniques: [],
     rls: [],
     rlsCatalogCount: 0,
+    targetFingerprint: "",
     failures: failures.map(asFailureCode),
   };
 }
@@ -422,11 +432,15 @@ export function sanitizeLiveRailwayPreflightResult(raw = {}) {
       }))
       : [],
     rlsCatalogCount: Number(raw.rlsCatalogCount),
+    targetFingerprint: isTargetFingerprint(raw.targetFingerprint) ? raw.targetFingerprint : "",
     failures,
   };
 }
 
-export function evaluateLiveRailwayPreflight(liveResult, { auditArtifact } = {}) {
+export function evaluateLiveRailwayPreflight(liveResult, {
+  auditArtifact,
+  requireZeroRestaurants = true,
+} = {}) {
   void auditArtifact;
   if (liveResult == null) {
     return {
@@ -468,8 +482,14 @@ export function evaluateLiveRailwayPreflight(liveResult, { auditArtifact } = {})
   if (liveResult.latestMigration?.version !== REQUIRED_SCHEMA_MIGRATION_VERSION) {
     return { railwayLivePreflight: "FAIL", reason: `latestMigration.version is not ${REQUIRED_SCHEMA_MIGRATION_VERSION}` };
   }
-  if (liveResult.restaurants !== 0) {
+  if (!isTargetFingerprint(liveResult.targetFingerprint)) {
+    return { railwayLivePreflight: "FAIL", reason: "targetFingerprint is missing or malformed" };
+  }
+  if (requireZeroRestaurants && liveResult.restaurants !== 0) {
     return { railwayLivePreflight: "FAIL", reason: "restaurants is not 0" };
+  }
+  if (!requireZeroRestaurants && !(Number.isFinite(liveResult.restaurants) && liveResult.restaurants >= 0)) {
+    return { railwayLivePreflight: "FAIL", reason: "restaurants count is unavailable" };
   }
   if (liveResult.fixtureLike !== 0) {
     return { railwayLivePreflight: "FAIL", reason: "fixtureLike is not 0" };
@@ -508,6 +528,7 @@ export async function runRailwayLivePreflight({
   env = process.env,
   clientFactory = null,
   requireDatabasePublicUrl = true,
+  requireZeroRestaurants = true,
 } = {}) {
   const poolMax = Number(env.POSTGRES_POOL_MAX || REQUIRED_CONFIGURED_POOL_MAX) || REQUIRED_CONFIGURED_POOL_MAX;
   if (requireDatabasePublicUrl && !databasePublicUrlPresent(env)) {
@@ -575,6 +596,7 @@ export async function runRailwayLivePreflight({
     requiredUniques: [],
     rls: [],
     rlsCatalogCount: 0,
+    targetFingerprint: "",
     failures,
   };
 
@@ -634,8 +656,21 @@ export async function runRailwayLivePreflight({
 
       out.restaurants = Number((await queryReadOnly(client, "restaurantsCount")).rows[0].n);
       out.fixtureLike = Number((await queryReadOnly(client, "fixtureCount")).rows[0].n);
-      if (out.restaurants !== 0) failures.push("PG_RESTAURANTS_NONEMPTY");
+      if (requireZeroRestaurants && out.restaurants !== 0) failures.push("PG_RESTAURANTS_NONEMPTY");
       if (out.fixtureLike !== 0) failures.push("PG_FIXTURE_ROWS_PRESENT");
+
+      try {
+        const identity = await queryReadOnly(client, "targetIdentity");
+        const fp = targetFingerprintFromFacts(targetFactsFromIdentityRow({
+          host: parts.host,
+          port: parts.port || "5432",
+          database: db,
+        }, identity.rows[0] || {}));
+        if (!isTargetFingerprint(fp)) failures.push("PG_TARGET_IDENTITY_UNAVAILABLE");
+        else out.targetFingerprint = fp;
+      } catch {
+        failures.push("PG_TARGET_IDENTITY_UNAVAILABLE");
+      }
 
       const uniques = [];
       for (const spec of REQUIRED_PREFLIGHT_UNIQUES) {

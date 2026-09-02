@@ -17,6 +17,12 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  ALLOWED_ATTEMPT_STATES,
+  ATTEMPT_STATUS,
+  MIGRATION_PHASE,
+  isAllowedAttemptState,
+} from "../scripts/lib/productionMigrationAttempt.mjs";
 
 const MIGRATIONS_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "../migrations");
 
@@ -76,7 +82,7 @@ for (const f of upFiles) {
 // tenant-owned, and tables whose rows are not migrated from Firebase.
 const NOT_TENANT_OWNED = new Set([
   "organizations", "restaurants", "platform_users", "two_factor_credentials",
-  "backup_codes", "schema_migrations", "custom_roles", "role_overrides",
+  "backup_codes", "schema_migrations", "production_migration_attempts", "custom_roles", "role_overrides",
   "employee_credentials", "combo_items", "recipe_items", "purchase_order_items",
   "order_chat_messages", "chat_messages", "customer_addresses",
 ]);
@@ -107,6 +113,7 @@ const NO_LEGACY_ID = new Set([
   "platform_users",        // keyed by Firebase AUTH uid (its own firebase_uid column), not an RTDB key
   "organizations",         // has no Firebase counterpart at all
   "schema_migrations",     // migration bookkeeping
+  "production_migration_attempts", // Step 2D.5 platform provenance; not a Firebase entity
   "combo_items",           // rows derived from a menu item's own combo array
   "order_status_history",  // derived from a status-keyed object, identified by (order, status, time)
   "reservation_slots",     // identified by (date, time, table)
@@ -211,6 +218,7 @@ describe("column typing rules", () => {
   test("every table has a uuid primary key, or is keyed by its parent", () => {
     for (const t of ALL_TABLES) {
       if (t.name === "schema_migrations") continue;
+      if (t.name === "production_migration_attempts") continue;
       if (t.name === "realtime_events") continue; // Phase 2 log: (restaurant_id, seq) identity, bigserial id
       assert.ok(hasSurrogatePk(t) || hasParentPk(t) || hasCompositePk(t),
         `${t.name} has no usable primary key (${t.file})`);
@@ -365,3 +373,54 @@ describe("date-keyed Firebase trees became real columns (#8)", () => {
     }
   });
 });
+
+describe("schema 0018 production_migration_attempts is platform-only and state-closed", () => {
+  const up = sqlOf("0018_production_migration_attempts.up.sql");
+  const down = sqlOf("0018_production_migration_attempts.down.sql");
+  const table = ALL_TABLES.find((t) => t.name === "production_migration_attempts");
+
+  test("table is platform-only: no restaurant_id, no RLS, no nesta_app grants, no secrets", () => {
+    assert.ok(table, "0018 must create production_migration_attempts");
+    assert.doesNotMatch(table.body, /\brestaurant_id\b/);
+    assert.doesNotMatch(up, /ENABLE\s+ROW\s+LEVEL\s+SECURITY/i);
+    assert.doesNotMatch(stripNoise(up), /GRANT\b[\s\S]{0,120}\bnesta_app\b/i);
+    assert.match(up, /REVOKE\s+ALL\s+ON\s+TABLE\s+production_migration_attempts\s+FROM\s+nesta_app/i);
+    assert.doesNotMatch(table.body, /\b(password|secret|token|cookie|credential)\b/i);
+    assert.match(up, /uq_production_migration_attempts_binding/);
+    assert.match(up, /production_migration_attempts_state_chk/);
+    assert.match(up, /transition_epoch/);
+    assert.match(down, /DROP\s+TABLE\s+IF\s+EXISTS\s+production_migration_attempts/i);
+  });
+
+  test("CHECK allows only the documented phase/status combinations", () => {
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.AUTHORIZED, MIGRATION_PHASE.WAVE1_INITIAL), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.WAVE1_IN_PROGRESS, MIGRATION_PHASE.WAVE1_INITIAL), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.WAVE1_IN_PROGRESS, MIGRATION_PHASE.RESUME_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.WAVE1_COMPLETE, MIGRATION_PHASE.FULL_AFTER_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FULL_IN_PROGRESS, MIGRATION_PHASE.FULL_AFTER_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FULL_IN_PROGRESS, MIGRATION_PHASE.RESUME_FULL), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FULL_COMPLETE, MIGRATION_PHASE.FULL_AFTER_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FAILED, MIGRATION_PHASE.WAVE1_INITIAL), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FAILED, MIGRATION_PHASE.RESUME_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FAILED, MIGRATION_PHASE.FULL_AFTER_WAVE1), true);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FAILED, MIGRATION_PHASE.RESUME_FULL), true);
+
+    for (const row of ALLOWED_ATTEMPT_STATES) {
+      assert.match(up, new RegExp(row.status));
+      assert.match(up, new RegExp(row.phase));
+    }
+
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FULL_COMPLETE, MIGRATION_PHASE.WAVE1_INITIAL), false);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.WAVE1_COMPLETE, MIGRATION_PHASE.RESUME_FULL), false);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.WAVE1_COMPLETE, MIGRATION_PHASE.WAVE1_INITIAL), false);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.AUTHORIZED, MIGRATION_PHASE.RESUME_FULL), false);
+    assert.equal(isAllowedAttemptState(ATTEMPT_STATUS.FULL_COMPLETE, MIGRATION_PHASE.RESUME_FULL), false);
+
+    assert.match(up, /status = 'AUTHORIZED' AND phase = 'wave1-initial'/);
+    assert.match(up, /status = 'WAVE1_COMPLETE' AND phase = 'full-after-wave1'/);
+    assert.match(up, /status = 'FULL_COMPLETE' AND phase = 'full-after-wave1'/);
+    assert.doesNotMatch(up, /FULL_COMPLETE[\s\S]{0,40}wave1-initial/);
+    assert.match(up, /FULL_COMPLETE cannot be overwritten/);
+  });
+});
+

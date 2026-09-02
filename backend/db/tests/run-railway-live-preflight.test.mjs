@@ -28,6 +28,8 @@ import {
   isCanonicalIsoUtc,
 } from "../scripts/lib/runRailwayLivePreflight.mjs";
 import { canonicalRlsCatalogRows } from "../scripts/lib/tenantCatalog.mjs";
+import { REQUIRED_SCHEMA_VERSION } from "../scripts/lib/migrationTargetGuard.mjs";
+import { exampleLiveTargetFingerprint } from "../scripts/lib/pgTargetFingerprint.mjs";
 import {
   writeRailwayLivePreflightAudit,
   buildRailwayLivePreflightAudit,
@@ -113,7 +115,7 @@ function validLive(overrides = {}) {
     database: "railway",
     sslLive: "on",
     pgcrypto: true,
-    latestMigration: { version: "0017" },
+    latestMigration: { version: REQUIRED_SCHEMA_VERSION },
     restaurants: 0,
     fixtureLike: 0,
     configuredPoolMax: REQUIRED_CONFIGURED_POOL_MAX,
@@ -121,6 +123,7 @@ function validLive(overrides = {}) {
     requiredUniques: uniqueRows(),
     rls: rlsCatalog(),
     rlsCatalogCount: EXPECTED_TENANT_CATALOG_COUNT,
+    targetFingerprint: exampleLiveTargetFingerprint(),
     failures: [],
     ...overrides,
   });
@@ -203,7 +206,7 @@ function mockClient(overrides = {}) {
   const uniques = overrides.uniques || uniqueRows();
   const ssl = overrides.ssl ?? "on";
   const pgcrypto = overrides.pgcrypto !== false;
-  const latest = overrides.latest ?? "0017";
+  const latest = overrides.latest ?? REQUIRED_SCHEMA_VERSION;
   const restaurants = overrides.restaurants ?? 0;
   const fixtureLike = overrides.fixtureLike ?? 0;
   const connectError = overrides.connectError || null;
@@ -242,6 +245,16 @@ function mockClient(overrides = {}) {
         const cols = params?.[1] || [];
         const ok = uniques.some((u) => u.table === table && u.ok && u.cols.join(",") === cols.join(","));
         return { rowCount: ok ? 1 : 0, rows: ok ? [{}] : [] };
+      }
+      if (/pg_control_system/i.test(s) || /current_database\(\)/i.test(s)) {
+        return {
+          rows: [{
+            current_database: overrides.currentDatabase ?? "railway",
+            inet_server_addr: overrides.inetServerAddr ?? "10.0.0.1",
+            inet_server_port: overrides.inetServerPort ?? 5432,
+            system_identifier: overrides.systemIdentifier ?? "1111111111111111111",
+          }],
+        };
       }
       if (/SHOW max_connections/i.test(s)) return { rows: [{ max_connections: "100" }] };
       return { rows: [], rowCount: 0 };
@@ -287,6 +300,48 @@ test("valid audit artifact + live NO-GO => FAIL", async () => {
   const gated = armedGates(ev.railwayLivePreflight);
   assert.equal(gated.approvalBlockers.includes("railwayPgSchema"), true);
   assert.equal(gated.safeToMigrateProductionData, false);
+});
+
+test("default live GO still requires restaurants = 0", () => {
+  assert.equal(evaluateLiveRailwayPreflight(validLive({ restaurants: 3 })).railwayLivePreflight, "FAIL");
+});
+
+test("structural live GO allows populated restaurants when requireZeroRestaurants is false", () => {
+  const live = validLive({ restaurants: 3 });
+  assert.equal(evaluateLiveRailwayPreflight(live, { requireZeroRestaurants: false }).railwayLivePreflight, "PASS");
+  assert.equal(evaluateLiveRailwayPreflight(live, { requireZeroRestaurants: true }).railwayLivePreflight, "FAIL");
+});
+
+test("missing targetFingerprint fails live GO", () => {
+  const live = validLive({ targetFingerprint: "" });
+  assert.equal(evaluateLiveRailwayPreflight(live).railwayLivePreflight, "FAIL");
+});
+
+test("live preflight fingerprint binds host, database, and cluster identity", async () => {
+  const live = await runRailwayLivePreflight({
+    env: PUBLIC_ENV,
+    clientFactory: async () => mockClient(),
+  });
+  assert.equal(live.targetFingerprint, exampleLiveTargetFingerprint());
+  assert.equal(evaluateLiveRailwayPreflight(live).railwayLivePreflight, "PASS");
+
+  const otherCluster = await runRailwayLivePreflight({
+    env: PUBLIC_ENV,
+    clientFactory: async () => mockClient({ systemIdentifier: "9999999999999999999" }),
+  });
+  assert.notEqual(otherCluster.targetFingerprint, live.targetFingerprint);
+
+  const otherDb = await runRailwayLivePreflight({
+    env: { ...PUBLIC_ENV, DATABASE_PUBLIC_URL: "postgres://nesta:placeholder@switchback.proxy.rlwy.net:12345/otherdb" },
+    clientFactory: async () => mockClient({ currentDatabase: "otherdb" }),
+  });
+  assert.notEqual(otherDb.targetFingerprint, live.targetFingerprint);
+
+  const otherInet = await runRailwayLivePreflight({
+    env: PUBLIC_ENV,
+    clientFactory: async () => mockClient({ inetServerAddr: "10.9.8.7", inetServerPort: 59999 }),
+  });
+  assert.equal(otherInet.targetFingerprint, live.targetFingerprint);
 });
 
 test("no artifact + genuine live GO => PASS", async () => {

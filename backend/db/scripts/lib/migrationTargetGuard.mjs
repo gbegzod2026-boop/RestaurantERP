@@ -1,3 +1,9 @@
+import {
+  CUTOVER_CANDIDATE_TAG,
+  HISTORICAL_FROZEN_TAG,
+  STEP2C_TAG,
+} from "./deployFreeze.mjs";
+
 // Migration target policy.
 // Default (unset NESTA_MIGRATE_TARGET): loopback + nesta_migration_dryrun only.
 // Production --apply requires NESTA_MIGRATE_TARGET=production plus two exact
@@ -6,9 +12,10 @@
 export const MIGRATION_TARGET_DB = "nesta_migration_dryrun";
 export const FORBIDDEN_DB = new Set(["postgres", "template0", "template1", "nesta_app", "nesta_migration_dryrun"]);
 export const PRODUCTION_CONFIRM_PHRASE = "I_CONFIRM_PRODUCTION_FIREBASE_TO_POSTGRES_CUTOVER";
-export const PRODUCTION_REQUIRED_TAG = "nesta-step2-cutover-ready";
-export const STEP2C_HISTORICAL_TAG = "nesta-step2c-cutover";
-export const REQUIRED_SCHEMA_VERSION = "0017";
+/** Step 2D.5 reviewed tag. Historical nesta-step2-cutover-ready never authorizes. */
+export const PRODUCTION_REQUIRED_TAG = CUTOVER_CANDIDATE_TAG;
+export const STEP2C_HISTORICAL_TAG = STEP2C_TAG;
+export const REQUIRED_SCHEMA_VERSION = "0018";
 const DRYRUN_FORBIDDEN_DB = new Set(["postgres", "template0", "template1", "nesta_app"]);
 const TENANT_RLS_TABLES = ["restaurants", "employees", "orders", "order_items", "payments", "custom_roles"];
 
@@ -60,8 +67,12 @@ export function sslConfigured(env = process.env) {
   return false;
 }
 
+/** Operator acknowledgement only. Never authorizes a populated target. */
 export function productionResumeAllowed(env = process.env) {
-  return String(env.NESTA_PRODUCTION_ALLOW_RESUME || "").trim() === PRODUCTION_REQUIRED_TAG;
+  const value = String(env.NESTA_PRODUCTION_ALLOW_RESUME || "").trim();
+  if (!value) return false;
+  if (value === HISTORICAL_FROZEN_TAG || value === STEP2C_TAG) return false;
+  return value === PRODUCTION_REQUIRED_TAG;
 }
 
 export function assertProductionStaticTarget(masked, env = process.env) {
@@ -80,7 +91,11 @@ export function assertProductionStaticTarget(masked, env = process.env) {
   if (String(env.NESTA_PRODUCTION_MIGRATE_CONFIRM || "") !== PRODUCTION_CONFIRM_PHRASE) {
     throw new Error("NO-GO: NESTA_PRODUCTION_MIGRATE_CONFIRM does not match the required phrase");
   }
-  if (String(env.NESTA_PRODUCTION_MIGRATE_TAG || "") !== PRODUCTION_REQUIRED_TAG) {
+  const tag = String(env.NESTA_PRODUCTION_MIGRATE_TAG || "").trim();
+  if (tag === HISTORICAL_FROZEN_TAG || tag === STEP2C_TAG) {
+    throw new Error("NO-GO: historical cutover tag cannot authorize Step 2D.5 production migration");
+  }
+  if (tag !== PRODUCTION_REQUIRED_TAG) {
     throw new Error(`NO-GO: NESTA_PRODUCTION_MIGRATE_TAG must be ${PRODUCTION_REQUIRED_TAG}`);
   }
 }
@@ -121,7 +136,7 @@ export async function assertLiveApplyInvariants(client, { production, allowTenan
   if (fixtures > 0) throw new Error("NO-GO: fixture rest_1999* rows present");
   const restaurants = Number((await client.query("SELECT count(*)::int AS n FROM restaurants")).rows[0].n);
   if (!allowTenantRows && restaurants > 0) {
-    throw new Error(`NO-GO: production database is not empty (restaurants > 0); resume requires NESTA_PRODUCTION_ALLOW_RESUME=${PRODUCTION_REQUIRED_TAG}`);
+    throw new Error("NO-GO: production database is not empty (restaurants > 0); populated target requires matching WAVE1_COMPLETE attempt provenance");
   }
 }
 
@@ -129,13 +144,15 @@ export async function enforceConnectedApplyTarget(client, masked, env = process.
   writesCommitted = false,
   resume = false,
   allowTenantRows = false,
+  allowPopulatedTarget = false,
 } = {}) {
+  void resume;
   const mode = assertApplyTarget(masked, env);
   if (mode !== "production") return mode;
-  const emptyRequired = writesCommitted && !allowTenantRows && !(resume && productionResumeAllowed(env));
+  const populated = allowPopulatedTarget === true || allowTenantRows === true;
   await assertLiveApplyInvariants(client, {
     production: true,
-    allowTenantRows: !emptyRequired,
+    allowTenantRows: writesCommitted && populated,
   });
   return mode;
 }

@@ -3,7 +3,7 @@
 // public tables that are restaurants, have restaurant_id, or are
 // employee_credentials / payment_credentials / combo_items.
 // Platform-only tables (organizations, platform_users, two_factor_credentials,
-// backup_codes, schema_migrations) are excluded.
+// backup_codes, schema_migrations, production_migration_attempts) are excluded.
 export const CANONICAL_TENANT_RLS_TABLES = Object.freeze([
   "activity_logs",
   "approvals",

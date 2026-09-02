@@ -18,6 +18,8 @@ import {
   EXPECTED_TENANT_CATALOG_COUNT,
   isCanonicalIsoUtc,
 } from "../scripts/lib/runRailwayLivePreflight.mjs";
+import { REQUIRED_SCHEMA_VERSION } from "../scripts/lib/migrationTargetGuard.mjs";
+import { exampleLiveTargetFingerprint } from "../scripts/lib/pgTargetFingerprint.mjs";
 import { freezeSnapshotValidForCutoverWindow, isCanonicalIsoUtc as freezeCanonical } from "../scripts/lib/freezeSnapshot.mjs";
 import { computeCutoverWindowIdentity, buildFreezeEvidence, canonicalFreezeCounts } from "../scripts/lib/cutoverWindow.mjs";
 
@@ -31,7 +33,7 @@ function liveGo() {
     database: "railway",
     sslLive: "on",
     pgcrypto: true,
-    latestMigration: { version: "0017" },
+    latestMigration: { version: REQUIRED_SCHEMA_VERSION },
     restaurants: 0,
     fixtureLike: 0,
     configuredPoolMax: 10,
@@ -39,6 +41,7 @@ function liveGo() {
     requiredUniques: REQUIRED_PREFLIGHT_UNIQUES.map((spec) => ({ table: spec.table, cols: [...spec.cols], ok: true })),
     rls: rows,
     rlsCatalogCount: EXPECTED_TENANT_CATALOG_COUNT,
+    targetFingerprint: exampleLiveTargetFingerprint(),
     failures: [],
   });
 }
