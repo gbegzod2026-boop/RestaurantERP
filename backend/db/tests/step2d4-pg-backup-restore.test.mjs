@@ -27,6 +27,23 @@ import {
   bootstrapRestoreRoles,
   dropTemporaryRestoreRoles,
 } from "../scripts/lib/pgRestoreRoleBootstrap.mjs";
+import { readFileSync } from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { SCHEMA_APPLY_MODE } from "../scripts/lib/schemaApplySession.mjs";
+import {
+  loadRepoMigrations,
+  expectedHistoryThrough,
+  expectedPublicTablesThrough,
+  predecessorVersion,
+} from "../scripts/lib/schemaMigrationCatalog.mjs";
+import { REQUIRED_SCHEMA_VERSION } from "../scripts/lib/migrationTargetGuard.mjs";
+import {
+  BACKUP_SOURCE_CLASS,
+  STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
+  evaluateBackupSourceContract,
+  evaluateRestoredSchemaContract,
+} from "../scripts/lib/pgBackupRestoreSchemaContract.mjs";
 
 const railwayUrl = "postgres://u:secret@altaria.proxy.rlwy.net:12345/railway";
 const localAdmin = {
@@ -432,4 +449,161 @@ test("dump/schema text derives nesta roles including policies", () => {
   assert.equal(required.includes("nesta_app"), true);
   assert.equal(required.includes("nesta_credential_revealer"), true);
   assert.equal(required.includes("nesta_payment_revealer"), true);
+});
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const repoMigrations = loadRepoMigrations(path.join(here, "../migrations"));
+const predecessor = predecessorVersion(repoMigrations, REQUIRED_SCHEMA_VERSION);
+const tables0017 = [...expectedPublicTablesThrough(repoMigrations, predecessor)].sort();
+const tables0018 = [...expectedPublicTablesThrough(repoMigrations, REQUIRED_SCHEMA_VERSION)].sort();
+const history0017 = expectedHistoryThrough(repoMigrations, predecessor);
+const history0018 = expectedHistoryThrough(repoMigrations, REQUIRED_SCHEMA_VERSION);
+const okSnap = { loopback: false, providerClass: "PUBLIC MANAGED", database: "railway" };
+
+function liveAtPredecessor(extra = {}) {
+  return {
+    currentDatabase: "railway",
+    sslLive: "on",
+    serverAddrClass: "*.*.*.*",
+    publicTables: tables0017,
+    restaurantsTableExists: true,
+    restaurants: 0,
+    fixtureLike: 0,
+    schemaMigrationRows: history0017,
+    latestMigration: { version: predecessor, name: history0017.at(-1).name },
+    ...extra,
+  };
+}
+
+function liveAtRequired(extra = {}) {
+  return {
+    currentDatabase: "railway",
+    sslLive: "on",
+    serverAddrClass: "*.*.*.*",
+    publicTables: tables0018,
+    restaurantsTableExists: true,
+    restaurants: 0,
+    fixtureLike: 0,
+    schemaMigrationRows: history0018,
+    latestMigration: { version: "0018", name: history0018.at(-1).name },
+    ...extra,
+  };
+}
+
+test("Step2D4 requires PRE-UPGRADE 0017, not current 0018", () => {
+  assert.equal(STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS, BACKUP_SOURCE_CLASS.PRE_UPGRADE);
+  assert.equal(predecessor, "0017");
+  assert.equal(REQUIRED_SCHEMA_VERSION, "0018");
+  assert.equal(tables0017.length, 79);
+  assert.equal(tables0018.length, 80);
+  const src = readFileSync(path.join(here, "../scripts/step2d4-pg-backup-restore.mjs"), "utf8");
+  assert.match(src, /PRE-0018 \/ PRE-UPGRADE/);
+  assert.match(src, /evaluateBackupSourceContract/);
+  assert.match(src, /evaluateRestoredSchemaContract/);
+  assert.doesNotMatch(src, /latestMigration !== REQUIRED_SCHEMA_VERSION/);
+  assert.doesNotMatch(src, /verified\.latestMigration === REQUIRED_SCHEMA_VERSION/);
+  assert.doesNotMatch(src, /applyMissingMigrations/);
+});
+
+test("exact canonical 0017 source allows PRE-UPGRADE backup gate", () => {
+  const r = evaluateBackupSourceContract({
+    snap: okSnap,
+    live: liveAtPredecessor(),
+    repoMigrations,
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.sourceClass, BACKUP_SOURCE_CLASS.PRE_UPGRADE);
+  assert.equal(r.expectedVersion, "0017");
+  assert.equal(r.mode, SCHEMA_APPLY_MODE.UPGRADE_FROM_PREDECESSOR);
+  assert.match(r.artifactClass, /PRE-0018 \/ PRE-UPGRADE/);
+});
+
+test("restored exact canonical 0017 PASSes PRE-UPGRADE restore validation", () => {
+  const r = evaluateRestoredSchemaContract({
+    live: liveAtPredecessor(),
+    repoMigrations,
+    restoreExtras: {
+      pgcrypto: true,
+      missingRls: [],
+      missingForce: [],
+      requiredUniques: [{ table: "restaurants", cols: ["legacy_rtdb_id"], ok: true }],
+    },
+  });
+  assert.equal(r.ok, true);
+  assert.equal(r.expectedVersion, "0017");
+  assert.equal(r.latest, "0017");
+});
+
+test("PRE-UPGRADE backup source FAILs closed on identity/catalog/history mismatches", () => {
+  const fail = (args, pattern) => {
+    const r = evaluateBackupSourceContract({
+      snap: okSnap,
+      repoMigrations,
+      sourceClass: BACKUP_SOURCE_CLASS.PRE_UPGRADE,
+      ...args,
+    });
+    assert.equal(r.ok, false, pattern);
+    assert.match(r.reason, pattern);
+  };
+  fail({ live: liveAtPredecessor({ latestMigration: { version: "0016", name: "x" }, schemaMigrationRows: expectedHistoryThrough(repoMigrations, "0016"), publicTables: [...expectedPublicTablesThrough(repoMigrations, "0016")] }) }, /0016/);
+  fail({ live: liveAtRequired() }, /already-current|PRE_UPGRADE_SOURCE|0018/);
+  fail({
+    live: liveAtPredecessor({
+      schemaMigrationRows: history0017.map((row, i) => (i === 0 ? { ...row, checksum: "deadbeef" } : row)),
+    }),
+  }, /checksum/);
+  fail({
+    live: liveAtPredecessor({
+      schemaMigrationRows: [...history0017, { version: "0099", name: "evil", checksum: "abc" }],
+      latestMigration: { version: "0099", name: "evil" },
+    }),
+  }, /unknown\/out-of-band/);
+  fail({
+    live: liveAtPredecessor({
+      schemaMigrationRows: history0017.filter((row) => row.version !== "0007"),
+    }),
+  }, /schema_migrations count/);
+  fail({ live: liveAtPredecessor({ publicTables: [...tables0017, "not_a_nesta_table"] }) }, /not_a_nesta_table/);
+  fail({ live: liveAtPredecessor({ publicTables: tables0017.slice(0, -1) }) }, /missing tables/);
+  fail({ live: liveAtPredecessor({ publicTables: tables0018 }) }, /production_migration_attempts|already present/);
+  fail({ live: liveAtPredecessor({ restaurants: 2 }) }, /restaurants=2/);
+  fail({ live: liveAtPredecessor({ fixtureLike: 1 }) }, /rest_1999/);
+  fail({ live: liveAtPredecessor({ sslLive: "off" }) }, /SSL live/);
+  fail({ live: liveAtPredecessor({ currentDatabase: "postgres" }) }, /postgres/);
+  fail({ snap: { ...okSnap, providerClass: "OTHER" }, live: liveAtPredecessor() }, /providerClass/);
+  fail({ snap: { ...okSnap, loopback: true }, live: liveAtPredecessor() }, /loopback/);
+});
+
+test("PRE-UPGRADE restore FAILs if restored latest is 0018 or catalog is malformed", () => {
+  const restored0018 = evaluateRestoredSchemaContract({
+    live: liveAtRequired(),
+    repoMigrations,
+    restoreExtras: { pgcrypto: true, missingRls: [], missingForce: [], requiredUniques: [{ ok: true }] },
+  });
+  assert.equal(restored0018.ok, false);
+  assert.match(restored0018.reason, /already-current|exact 0017|PRE_UPGRADE/);
+  const malformed = evaluateRestoredSchemaContract({
+    live: liveAtPredecessor({ publicTables: [...tables0017, "orphan_table"] }),
+    repoMigrations,
+  });
+  assert.equal(malformed.ok, false);
+  assert.match(malformed.reason, /orphan_table/);
+});
+
+test("POST_UPGRADE_SOURCE is distinct and does not authorize a 0017 pre-upgrade backup", () => {
+  const pre = evaluateBackupSourceContract({
+    snap: okSnap,
+    live: liveAtPredecessor(),
+    repoMigrations,
+    sourceClass: BACKUP_SOURCE_CLASS.POST_UPGRADE,
+  });
+  assert.equal(pre.ok, false);
+  const post = evaluateBackupSourceContract({
+    snap: okSnap,
+    live: liveAtRequired(),
+    repoMigrations,
+    sourceClass: BACKUP_SOURCE_CLASS.POST_UPGRADE,
+  });
+  assert.equal(post.ok, true);
+  assert.equal(post.expectedVersion, "0018");
 });

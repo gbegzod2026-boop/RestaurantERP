@@ -1,5 +1,7 @@
-// Step 2D.4 — Railway pg_dump (read) + restore into local nesta_step2d4_restore.
+// Step 2D.4 — PRE-0018 / PRE-UPGRADE backup: dump exact predecessor (0017)
+// from Railway (read-only), restore locally, verify exact 0017.
 // DATABASE_PUBLIC_URL is the dump source only. Restore never uses it.
+// This drill does not apply 0018.
 import { spawnSync } from "child_process";
 import { mkdirSync, statSync, writeFileSync } from "fs";
 import path from "path";
@@ -8,7 +10,15 @@ import { performance } from "perf_hooks";
 import pg from "pg";
 import dotenv from "dotenv";
 import { withPgSsl } from "../pgSsl.js";
-import { REQUIRED_SCHEMA_VERSION } from "./lib/migrationTargetGuard.mjs";
+import { isLoopbackHost } from "./lib/migrationTargetGuard.mjs";
+import { loadRepoMigrations } from "./lib/schemaMigrationCatalog.mjs";
+import { collectSchemaApplyLive } from "./lib/schemaApplySession.mjs";
+import {
+  STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
+  evaluateBackupSourceContract,
+  evaluateRestoredSchemaContract,
+  latestSchemaVersionOf,
+} from "./lib/pgBackupRestoreSchemaContract.mjs";
 import {
   STEP2D4_RESTORE_DB,
   resolveDumpSource,
@@ -131,30 +141,26 @@ async function inspectRequiredUniques(client) {
 
 async function inspectRestored(client) {
   await client.query("SELECT set_config('app.current_restaurant_id', '', true)");
-  const ver = await client.query(
-    "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1"
-  ).catch(() => ({ rows: [] }));
+  const live = await collectSchemaApplyLive(client);
   const ext = await client.query("SELECT 1 FROM pg_extension WHERE extname = 'pgcrypto'");
   const roles = await client.query(
     "SELECT rolname FROM pg_roles WHERE rolname = ANY($1)",
     [["nesta_app", "nesta_login_reader", "nesta_credential_revealer"]]
   );
-  const restaurants = Number((await client.query("SELECT count(*)::int AS n FROM restaurants")).rows[0].n);
-  const fixtures = Number((await client.query(
-    "SELECT count(*)::int AS n FROM restaurants WHERE legacy_rtdb_id LIKE 'rest_1999%'"
-  )).rows[0].n);
   const catalog = await client.query(TENANT_CATALOG_SQL);
   const missingRls = catalog.rows.filter((r) => r.relrowsecurity !== true).map((r) => r.table_name);
   const missingForce = catalog.rows.filter((r) => r.relforcerowsecurity !== true).map((r) => r.table_name);
   const uniques = await inspectRequiredUniques(client);
+  const latestMigration = latestSchemaVersionOf(live) || null;
   return {
-    latestMigration: ver.rows[0]?.version || null,
+    live,
+    latestMigration,
     pgcrypto: ext.rowCount > 0,
-    applicationSchemaPresent: Boolean(ver.rows[0]?.version) && catalog.rows.length > 0,
+    applicationSchemaPresent: Boolean(latestMigration) && catalog.rows.length > 0,
     rolesPresentOnCluster: roles.rows.map((r) => r.rolname).sort(),
     roleHandling: "cluster-global roles are bootstrapped on the local loopback cluster before pg_restore; dump/read of Railway never CREATE ROLE",
-    restaurants,
-    fixtures,
+    restaurants: live.restaurants,
+    fixtures: live.fixtureLike,
     tenantCatalog: catalog.rows.length,
     rls: catalog.rows.filter((r) => r.relrowsecurity).length,
     forceRls: catalog.rows.filter((r) => r.relforcerowsecurity).length,
@@ -178,11 +184,9 @@ async function inspectSourceReadOnly(source) {
   try {
     await c.query("BEGIN READ ONLY");
     await c.query("SET LOCAL default_transaction_read_only = on");
-    const ssl = await c.query("SHOW ssl");
+    const live = await collectSchemaApplyLive(c);
     const serverVer = await c.query("SHOW server_version");
     const serverNum = await c.query("SHOW server_version_num");
-    const ver = await c.query("SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1");
-    const restaurants = Number((await c.query("SELECT count(*)::int AS n FROM restaurants")).rows[0].n);
     const catalog = await c.query(TENANT_CATALOG_SQL);
     await c.query("ROLLBACK");
     const fromText = parsePgVersionString(serverVer.rows[0]?.server_version);
@@ -191,9 +195,12 @@ async function inspectSourceReadOnly(source) {
       ? fromText
       : (fromNum ? { ok: true, ...fromNum, raw: String(serverVer.rows[0]?.server_version || "") } : { ok: false });
     return {
-      sslLive: ssl.rows[0]?.ssl,
-      latestMigration: ver.rows[0]?.version || null,
-      restaurants,
+      live,
+      sslLive: live.sslLive,
+      latestMigration: latestSchemaVersionOf(live) || null,
+      restaurants: live.restaurants,
+      fixtureLike: live.fixtureLike,
+      publicTableCount: (live.publicTables || []).length,
       tenantCatalog: catalog.rows.length,
       rls: catalog.rows.filter((r) => r.relrowsecurity).length,
       forceRls: catalog.rows.filter((r) => r.relforcerowsecurity).length,
@@ -259,6 +266,13 @@ async function main() {
     process.exit(1);
   }
 
+  const repoMigrations = loadRepoMigrations(path.join(__dirname, "../migrations"));
+  const sourceSnap = {
+    loopback: isLoopbackHost(source.host),
+    providerClass: source.providerClass,
+    database: source.database,
+  };
+
   let sourceLive;
   try {
     sourceLive = await inspectSourceReadOnly(source);
@@ -268,22 +282,37 @@ async function main() {
       pgRestoreDrill: "NOT RUN",
       reason: redactSecrets(err.message),
       dumped: false,
+      artifactClass: "PRE-0018 / PRE-UPGRADE backup",
+      backupSourceClass: STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
       clientTools: tools(),
     }, null, 2));
     process.exit(1);
   }
-  if (String(sourceLive.sslLive).toLowerCase() !== "on"
-    || sourceLive.latestMigration !== REQUIRED_SCHEMA_VERSION
-    || sourceLive.restaurants !== 0) {
+  const sourceContract = evaluateBackupSourceContract({
+    snap: sourceSnap,
+    live: sourceLive.live,
+    repoMigrations,
+    sourceClass: STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
+  });
+  if (!sourceContract.ok) {
     console.log(JSON.stringify({
       pgBackup: "FAIL",
       pgRestoreDrill: "NOT RUN",
-      reason: "Railway source failed read-only pre-dump checks",
+      reason: sourceContract.reason || "Railway source failed read-only PRE-UPGRADE pre-dump checks",
       dumped: false,
+      artifactClass: sourceContract.artifactClass,
+      backupSourceClass: sourceContract.sourceClass,
+      expectedSourceVersion: sourceContract.expectedVersion,
+      expectedPredecessor: sourceContract.expectedPredecessor,
+      requiredSchemaVersion: sourceContract.requiredVersion,
+      sourceSchemaVersion: sourceLive.latestMigration,
+      versionVerdict: "FAIL",
       sourceLive: {
         sslLive: sourceLive.sslLive,
         latestMigration: sourceLive.latestMigration,
         restaurants: sourceLive.restaurants,
+        fixtureLike: sourceLive.fixtureLike,
+        publicTableCount: sourceLive.publicTableCount,
         serverVersion: sourceLive.serverVersion,
       },
       clientTools: clientToolsReport(bins, dumpProbe, restoreProbe, sourceLive),
@@ -450,25 +479,59 @@ async function main() {
   timings.validationMs = Math.round(performance.now() - tVal);
   timings.totalMs = Math.round(performance.now() - started);
 
-  const schemaOk = verified.latestMigration === REQUIRED_SCHEMA_VERSION;
-  const emptyOk = verified.restaurants === 0 && verified.fixtures === 0;
-  const rlsOk = verified.missingRls.length === 0 && verified.missingForce.length === 0
-    && verified.tenantCatalog === sourceLive.tenantCatalog;
-  const uniquesOk = verified.requiredUniques.every((u) => u.ok);
+  const { live: restoredLive, ...verifiedPublic } = verified;
+  const restoreContract = restoredLive
+    ? evaluateRestoredSchemaContract({
+      live: restoredLive,
+      repoMigrations,
+      sourceClass: STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
+      restoreExtras: {
+        pgcrypto: verified.pgcrypto,
+        missingRls: verified.missingRls,
+        missingForce: verified.missingForce,
+        requiredUniques: verified.requiredUniques,
+      },
+    })
+    : {
+      ok: false,
+      reason: verified.inspectError || "restored database could not be inspected",
+      artifactClass: sourceContract.artifactClass,
+      sourceClass: STEP2D4_REQUIRED_BACKUP_SOURCE_CLASS,
+      expectedVersion: sourceContract.expectedVersion,
+      expectedPredecessor: sourceContract.expectedPredecessor,
+      requiredVersion: sourceContract.requiredVersion,
+    };
+  const catalogMatchOk = verified.tenantCatalog === sourceLive.tenantCatalog;
   const restoreToolOk = restoreClassified.ok;
-  const ok = dumpStat.size > 0 && schemaOk && emptyOk && verified.pgcrypto && rlsOk
-    && uniquesOk && restoreToolOk;
+  const ok = dumpStat.size > 0 && restoreContract.ok && catalogMatchOk && restoreToolOk;
+  const versionVerdict = sourceContract.ok
+    && restoreContract.ok
+    && sourceLive.latestMigration === restoreContract.expectedVersion
+    && verified.latestMigration === restoreContract.expectedVersion
+    ? "PASS"
+    : "FAIL";
 
   const report = {
     pgBackup: dumpStat.size > 0 ? "PASS" : "FAIL",
     pgRestoreDrill: ok ? "PASS" : "FAIL",
     railwayModified: false,
+    artifactClass: sourceContract.artifactClass,
+    backupSourceClass: sourceContract.sourceClass,
+    expectedSourceVersion: sourceContract.expectedVersion,
+    expectedPredecessor: sourceContract.expectedPredecessor,
+    requiredSchemaVersion: sourceContract.requiredVersion,
+    sourceSchemaVersion: sourceLive.latestMigration,
+    restoredSchemaVersion: verified.latestMigration,
+    versionVerdict,
     source: {
       hostClass: source.hostClass,
       database: source.database,
       urlKey: source.urlKey,
       sslLive: sourceLive.sslLive,
       latestMigration: sourceLive.latestMigration,
+      publicTableCount: sourceLive.publicTableCount,
+      restaurants: sourceLive.restaurants,
+      fixtureLike: sourceLive.fixtureLike,
       serverVersion: sourceLive.serverVersion,
       serverMajor: sourceLive.serverMajor,
     },
@@ -481,16 +544,22 @@ async function main() {
     },
     dumpBytes: dumpStat.size,
     backupArtifactTimestamp: dumpStat.mtime.toISOString(),
-    dumpArtifactClass: "cutover-backups/pg-*/railway-schema.pgdump",
+    dumpArtifactClass: "PRE-0018 / PRE-UPGRADE cutover-backups/pg-*/railway-schema.pgdump",
     restoreTool: {
       exitCode: restoreTool.status,
       classifiedOk: restoreClassified.ok,
       harmful: restoreClassified.harmful,
       detail: restoreTool.status === 0 ? null : restoreTool.text,
     },
+    restoreContract: {
+      ok: restoreContract.ok,
+      reason: restoreContract.reason || null,
+      expectedRestoredVersion: restoreContract.expectedVersion,
+      restoredSchemaVersion: verified.latestMigration,
+    },
     roleBootstrap,
     timings,
-    verified,
+    verified: verifiedPublic,
     sourceCatalog: {
       tenantCatalog: sourceLive.tenantCatalog,
       rls: sourceLive.rls,
