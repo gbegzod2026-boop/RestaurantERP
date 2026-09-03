@@ -15,6 +15,13 @@ import {
   probePgToolVersion,
   verifyPgRestoreListResult,
   describeLegacyBrokenPipePgRestoreList,
+  runPgRestoreList,
+  PG_RESTORE_LIST_ARGS,
+  countPgRestoreTocItemLines,
+  parsePgRestoreVerboseToc,
+  LEGACY_PERMISSIVE_TOC_ITEM_LINE,
+  PG_DUMP_TOC_DESCRIPTIONS,
+  PG_DATABASE_RELATION_ID,
 } from "../scripts/lib/pgDumpClientGuard.mjs";
 import {
   MINIMUM_RESTORE_ROLES,
@@ -353,7 +360,7 @@ test("production pg_restore --list verifier is fail-closed", () => {
   const valid = `;
 ; Archive created at 2026-09-02 12:00:00 UTC
 ;     dbname: railway
-;     TOC Entries: 2
+;     TOC Entries: 6
 ;     Compression: gzip
 ;     Dump Version: 1.16-0
 ;     Format: CUSTOM
@@ -363,6 +370,10 @@ test("production pg_restore --list verifier is fail-closed", () => {
 ;
 ; Selected TOC Entries:
 ;
+1; 0 0 ENCODING - ENCODING
+2; 0 0 STDSTRINGS - STDSTRINGS
+3; 0 0 SEARCHPATH - SEARCHPATH
+4; 1262 16384 DATABASE - railway postgres
 221; 1259 16384 TABLE public restaurants nesta_migrator
 222; 1259 16385 TABLE public employees nesta_migrator
 `;
@@ -428,6 +439,446 @@ test("production pg_restore --list verifier is fail-closed", () => {
   const legacy = describeLegacyBrokenPipePgRestoreList({ status: -1, stdout: valid, signal: "SIGPIPE" });
   failClosed(legacy, "legacy broken-pipe helper");
   assert.equal(legacy.legacyObservationOnly, true);
+});
+
+function pg18ListHeader(declared) {
+  return `;
+; Archive created at 2026-09-03 00:00:00 UTC
+;     dbname: railway
+;     TOC Entries: ${declared}
+;     Compression: gzip
+;     Dump Version: 1.16-0
+;     Format: CUSTOM
+;     Integer: 4 bytes
+;     Offset: 8 bytes
+;
+;
+; Selected TOC Entries:
+;
+`;
+}
+
+const PG18_SPECIAL_TOC = [
+  "1; 0 0 ENCODING - ENCODING",
+  "2; 0 0 STDSTRINGS - STDSTRINGS",
+  "3; 0 0 SEARCHPATH - SEARCHPATH",
+  "4; 1262 16384 DATABASE - railway postgres",
+];
+
+function pg18TableLine(i) {
+  return `${5 + i}; 1259 ${16384 + i} TABLE public t_${i} nesta_migrator`;
+}
+
+function pg18VerboseList(tableCount) {
+  const items = [...PG18_SPECIAL_TOC, ...Array.from({ length: tableCount }, (_, i) => pg18TableLine(i))];
+  return `${pg18ListHeader(items.length)}${items.join("\n")}\n;\tdepends on: 1\n`;
+}
+
+test("production listing uses --list --verbose with no pipe", () => {
+  assert.deepEqual([...PG_RESTORE_LIST_ARGS], ["--list", "--verbose"]);
+  let args;
+  runPgRestoreList("pg_restore", "dump.pgdump", (_exe, received) => {
+    args = received;
+    return { status: 0, stdout: "", stderr: "", error: null, signal: null };
+  });
+  assert.deepEqual(args, ["--list", "--verbose", "dump.pgdump"]);
+});
+
+test("PostgreSQL 18.6 verbose TOC listing of 1148 entries PASSes; non-verbose 1144/1148 FAILs", () => {
+  const tableCount = 1144;
+  const verbose = pg18VerboseList(tableCount);
+  const declared = 4 + tableCount;
+  assert.equal(declared, 1148);
+  assert.equal(countPgRestoreTocItemLines(verbose), 1148);
+  const pass = verifyPgRestoreListResult({ status: 0, stdout: verbose });
+  assert.equal(pass.ok, true);
+  assert.equal(pass.authorizing, true);
+  assert.equal(pass.tocEntries, 1148);
+
+  const nonVerbose = `${pg18ListHeader(1148)}${Array.from({ length: tableCount }, (_, i) => pg18TableLine(i)).join("\n")}\n`;
+  assert.equal(countPgRestoreTocItemLines(nonVerbose), 1144, "previous non-verbose listing misses the 4 REQ_SPECIAL/DATABASE lines");
+  const miss = verifyPgRestoreListResult({ status: 0, stdout: nonVerbose });
+  assert.equal(miss.ok, false);
+  assert.equal(miss.authorizing, false);
+  assert.match(miss.reason, /listed 1144 unique TOC items, declared 1148/);
+
+  const compact = pg18VerboseList(2);
+  assert.equal(countPgRestoreTocItemLines(compact), 6);
+  assert.equal(verifyPgRestoreListResult({ status: 0, stdout: compact }).ok, true);
+});
+
+test("PostgreSQL 18.6 TOC completeness remains fail-closed", () => {
+  const verbose = pg18VerboseList(2);
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+  };
+  const missingOne = verbose.replace(/\n6; 1259 16385 TABLE public t_1 nesta_migrator\n/, "\n");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: missingOne }), "genuine missing 1 entry");
+  const truncatedLast = verbose.replace(
+    "6; 1259 16385 TABLE public t_1 nesta_migrator",
+    "6; 1259",
+  );
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: truncatedLast }), "truncated last entry");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: verbose,
+    stderr: "pg_restore: error: could not read from input file",
+  }), "diagnostic + valid-looking TOC");
+  const countForgedNoSpecials = `${pg18ListHeader(6)}${Array.from({ length: 6 }, (_, i) => pg18TableLine(i)).join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: countForgedNoSpecials }), "count match without REQ_SPECIAL/DATABASE");
+});
+
+test("verbose TOC parser rejects spoofed and malformed listings", () => {
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+    assert.equal(result.verified, false, msg);
+  };
+  const specials = [...PG18_SPECIAL_TOC];
+  const t0 = "5; 1259 16384 TABLE public t_0 nesta_migrator";
+  const t1 = "6; 1259 16385 TABLE public t_1 nesta_migrator";
+  const valid = `${pg18ListHeader(6)}${[...specials, t0, t1].join("\n")}\n`;
+  const pass = verifyPgRestoreListResult({ status: 0, stdout: valid });
+  assert.equal(pass.ok, true);
+  assert.equal(pass.uniqueDumpIds, 6);
+
+  const dupId = `${pg18ListHeader(6)}${[...specials, t0, "6; 1259 16385 TABLE public t_dup nesta_migrator".replace("6;", "5;")].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: dupId }), "duplicate dump ID");
+  const dupSpecial = `${pg18ListHeader(6)}${["1; 0 0 ENCODING - ENCODING", "1; 0 0 STDSTRINGS - STDSTRINGS", "3; 0 0 SEARCHPATH - SEARCHPATH", "4; 1262 16384 DATABASE - railway postgres", t0, t1].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: dupSpecial }), "duplicate special-entry dump ID");
+  const garbage = `${pg18ListHeader(6)}${[...specials, "5; 0 0 GARBAGE - x y", "6; 0 0 GARBAGE - x y"].join("\n")}\n`;
+  LEGACY_PERMISSIVE_TOC_ITEM_LINE.lastIndex = 0;
+  assert.equal((garbage.match(LEGACY_PERMISSIVE_TOC_ITEM_LINE) || []).length, 6, "legacy regex accepted GARBAGE");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: garbage }), "arbitrary GARBAGE descriptor");
+  const numericSpoof = `${pg18ListHeader(6)}${[...specials, "5; 0 0 99 88 77", "6; 1 2 3 4 5"].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: numericSpoof }), "numeric text matching old regex");
+  const badOid = `${pg18ListHeader(6)}${[...specials, t0, "6; x 16385 TABLE public t_1 nesta_migrator"].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: badOid }), "malformed OID fields");
+  const noSemi = `${pg18ListHeader(6)}${[...specials, t0, "6 1259 16385 TABLE public t_1 nesta_migrator"].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: noSemi }), "missing semicolon");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: valid.replace("6; 1259 16385 TABLE public t_1 nesta_migrator", "6; 1259"),
+  }), "truncated final item");
+  const dupOrdinary = `${pg18ListHeader(6)}${[...specials, t0, t0].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: dupOrdinary }), "duplicate ordinary line");
+  const replaced = `${pg18ListHeader(6)}${[...specials, t0, "6; 0 0 GARBAGE - x y"].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: replaced }), "count-preserving malformed replacement");
+  const fakeDesc = `${pg18ListHeader(6)}${[...specials, t0, "6; 1259 16385 TOCENTRY public t_1 nesta_migrator"].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: fakeDesc }), "unknown fake descriptor");
+  const uniqueSmaller = `${pg18ListHeader(6)}${[...specials, t0, t0].join("\n")}\n`;
+  const parsedDup = parsePgRestoreVerboseToc(uniqueSmaller);
+  assert.equal(parsedDup.uniqueDumpIds, 5);
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: uniqueSmaller }), "declared matches line count but unique IDs are smaller");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: valid,
+    stderr: "pg_restore: fatal: could not find block",
+  }), "diagnostics + valid-looking TOC");
+  failClosed(verifyPgRestoreListResult({ status: 1, stdout: valid }), "nonzero");
+  failClosed(verifyPgRestoreListResult({ status: -1, stdout: valid }), "-1");
+  failClosed(verifyPgRestoreListResult({ status: 0, stdout: valid, signal: "SIGPIPE" }), "signal");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: valid,
+    error: new Error("spawn failed"),
+  }), "spawn error");
+});
+
+test("descriptor-specific TOC tails reject fabricated two-token garbage", () => {
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+  };
+  const specials = [...PG18_SPECIAL_TOC];
+  const t0 = "5; 1259 16384 TABLE public t_0 nesta_migrator";
+  const t1 = "6; 1259 16385 TABLE public t_1 nesta_migrator";
+  const listing = (items) => `${pg18ListHeader(items.length)}${items.join("\n")}\n`;
+  const replaceAt = (index, line) => {
+    const items = [...specials, t0, t1];
+    items[index] = line;
+    return listing(items);
+  };
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(0, "1; 0 0 ENCODING 99 88"),
+  }), "ENCODING 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(1, "2; 0 0 STDSTRINGS 99 88"),
+  }), "STDSTRINGS 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(2, "3; 0 0 SEARCHPATH 99 88"),
+  }), "SEARCHPATH 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(3, "4; 1262 16384 DATABASE 99 88"),
+  }), "DATABASE 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 TABLE 99 88"),
+  }), "TABLE 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 INDEX 99 88"),
+  }), "INDEX 99 88");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 VIEW 99 88"),
+  }), "recognized descriptor + two fake tokens");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 TABLE public"),
+  }), "TABLE public missing name/owner");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 TABLE - -"),
+  }), "TABLE too few fields");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 1259 16385 TABLE public t_1"),
+  }), "missing owner where required");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(0, "1; 0 0 ENCODING - STDSTRINGS"),
+  }), "malformed special entry");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing([...specials, t0, "6; 1259 16385 TABLE 99 88"]),
+  }), "count-preserving replacement of real entry with fake recognized-descriptor entry");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: replaceAt(5, "6; 3079 24589 EXTENSION 99 88"),
+  }), "EXTENSION without namespace placeholder");
+});
+
+test("DATABASE catalog IDs and DATABASE PROPERTIES nilCatalogId are source-backed", () => {
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+  };
+  const pass = (stdout, msg) => {
+    const result = verifyPgRestoreListResult({ status: 0, stdout });
+    assert.equal(result.ok, true, msg);
+    assert.equal(result.authorizing, true, msg);
+  };
+  assert.equal(PG_DATABASE_RELATION_ID, 1262);
+  const listing = (items) => `${pg18ListHeader(items.length)}${items.join("\n")}\n`;
+  const withDb = (dbLine, extra = []) => listing([
+    "1; 0 0 ENCODING - ENCODING",
+    "2; 0 0 STDSTRINGS - STDSTRINGS",
+    "3; 0 0 SEARCHPATH - SEARCHPATH",
+    dbLine,
+    "5; 1259 16384 TABLE public t_0 nesta_migrator",
+    ...extra,
+  ]);
+  pass(withDb("4; 1262 16384 DATABASE - railway postgres"), "legitimate DATABASE");
+  pass(withDb("4; 1262 16384 DATABASE - my db nesta migrator"), "DATABASE name and owner containing spaces");
+  pass(listing([
+    "1; 0 0 ENCODING - ENCODING",
+    "2; 0 0 STDSTRINGS - STDSTRINGS",
+    "3; 0 0 SEARCHPATH - SEARCHPATH",
+    "4; 1262 16384 DATABASE - railway postgres",
+    "5; 0 0 DATABASE PROPERTIES - railway postgres",
+    "6; 1259 16384 TABLE public t_0 nesta_migrator",
+  ]), "legitimate DATABASE PROPERTIES 0 0");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: withDb("4; 0 16384 DATABASE - railway postgres"),
+  }), "fabricated DATABASE tableoid=0 oid=nonzero");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: withDb("4; 1262 0 DATABASE - railway postgres"),
+  }), "DATABASE object OID 0");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: withDb("4; 0 0 DATABASE - railway postgres"),
+  }), "DATABASE nilCatalogId");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing([
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+      "4; 1262 16384 DATABASE - railway postgres",
+      "5; 1262 16384 DATABASE PROPERTIES - railway postgres",
+      "6; 1259 16384 TABLE public t_0 nesta_migrator",
+    ]),
+  }), "DATABASE PROPERTIES with pg_database catalog ID");
+});
+
+test("TOC identifier fields are not rejected by character content", () => {
+  const listing = (items) => `${pg18ListHeader(items.length)}${items.join("\n")}\n`;
+  const specials = [...PG18_SPECIAL_TOC];
+  const pass = (line, msg) => {
+    const stdout = listing([...specials, "5; 1259 16384 TABLE public t_0 nesta_migrator", line]);
+    const result = verifyPgRestoreListResult({ status: 0, stdout });
+    assert.equal(result.ok, true, msg);
+    assert.equal(result.authorizing, true, msg);
+  };
+  pass("6; 1259 16385 TABLE 88 t_1 nesta_migrator", "numeric schema shape");
+  pass("6; 1259 16385 TABLE public t_1 +", "punctuation-only owner shape");
+  pass("6; 1259 16385 TABLE public my table nesta migrator", "names and owner containing spaces");
+  pass("6; 1259 16385 TABLE public кафе nesta_migrator", "UTF-8 name");
+});
+
+test("verbose TOC parser accepts legitimate PostgreSQL 18 description forms", () => {
+  const items = [
+    ...PG18_SPECIAL_TOC,
+    "5; 0 0 DATABASE PROPERTIES - railway postgres",
+    "6; 3079 24589 EXTENSION - pgcrypto",
+    "7; 1259 16384 TABLE public restaurants nesta_migrator",
+    "8; 1259 16384 TABLE DATA public restaurants nesta_migrator",
+    "9; 1255 16400 FUNCTION public foo(integer, text) nesta_migrator",
+    "10; 2606 16410 CONSTRAINT public restaurants restaurants_pkey nesta_migrator",
+    "11; 2606 16411 FK CONSTRAINT public orders orders_restaurant_id_fkey nesta_migrator",
+    "12; 2606 16412 CHECK CONSTRAINT public employees employees_email_check nesta_migrator",
+    "13; 1259 16420 SEQUENCE public orders_id_seq nesta_migrator",
+    "14; 0 0 SEQUENCE SET public orders_id_seq nesta_migrator",
+    "15; 1259 16430 INDEX public restaurants_legacy_rtdb_id_idx nesta_migrator",
+    "16; 2615 2200 SCHEMA - public postgres",
+    "17; 0 0 ACL - public postgres",
+    "18; 0 0 COMMENT - SCHEMA public postgres",
+    "19; 2612 16440 POLICY public restaurants_tenant nesta_migrator",
+    "20; 0 0 ROW SECURITY public restaurants nesta_migrator",
+    "21; 2279 16450 TRIGGER public restaurants restaurants_updated_at nesta_migrator",
+    "22; 1247 16460 TYPE public order_status nesta_migrator",
+    "23; 0 0 DEFAULT public restaurants id nesta_migrator",
+    "24; 2605 16470 CAST - CAST (integer AS integer)",
+    "25; 1259 16480 VIEW public open_orders nesta_migrator",
+    "26; 0 0 STATISTICS DATA public restaurants_stats",
+    "27; 1417 16490 OPERATOR public +(integer, integer) nesta_migrator",
+    "28; 2210 16510 STATISTICS public restaurants_stats nesta_migrator",
+  ];
+  const stdout = `${pg18ListHeader(items.length)}${items.join("\n")}\n;\tdepends on: 4 6\n`;
+  const parsed = parsePgRestoreVerboseToc(stdout);
+  assert.equal(parsed.malformed.length, 0);
+  assert.equal(parsed.unsupported.length, 0);
+  assert.equal(parsed.duplicates.length, 0);
+  assert.equal(parsed.uniqueDumpIds, items.length);
+  const result = verifyPgRestoreListResult({ status: 0, stdout });
+  assert.equal(result.ok, true);
+  assert.equal(result.authorizing, true);
+  assert.equal(result.tocEntries, items.length);
+});
+
+test("invented and non-ArchiveEntry descriptors are unsupported", () => {
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("LARGE OBJECT"), false);
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("LANGUAGE"), false);
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("EXTENDED STATISTICS DATA"), false);
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("PROPERTY GRAPH"), false);
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("STATISTICS"), true);
+  assert.equal(PG_DUMP_TOC_DESCRIPTIONS.includes("STATISTICS DATA"), true);
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+    assert.equal(result.unsupported > 0, true, msg);
+  };
+  const listing = (line) => `${pg18ListHeader(6)}${[...PG18_SPECIAL_TOC, "5; 1259 16384 TABLE public t_0 nesta_migrator", line].join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing("6; 1259 16385 TOCENTRY public t_1 nesta_migrator"),
+  }), "invented descriptor");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing("6; 1259 16385 LARGE OBJECT public blob nesta_migrator"),
+  }), "removed non-ArchiveEntry LARGE OBJECT");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing("6; 1259 16385 LANGUAGE - plpgsql postgres"),
+  }), "removed non-ArchiveEntry LANGUAGE");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing("6; 0 0 EXTENDED STATISTICS DATA public restaurants_stats nesta_migrator"),
+  }), "EXTENDED STATISTICS DATA is not a PostgreSQL 18 ArchiveEntry description");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing("6; 1259 16500 PROPERTY GRAPH public g nesta_migrator"),
+  }), "PROPERTY GRAPH is not a PostgreSQL 18 ArchiveEntry description");
+});
+
+test("mandatory special TOC entries are required regardless of declared count", () => {
+  const failClosed = (result, msg) => {
+    assert.equal(result.ok, false, msg);
+    assert.equal(result.authorizing, false, msg);
+  };
+  const listing = (declared, items) => `${pg18ListHeader(declared)}${items.join("\n")}\n`;
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(1, ["221; 1259 16384 TABLE public restaurants nesta_migrator"]),
+  }), "declared=1 valid TABLE only");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(3, [
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+    ]),
+  }), "declared=3 specials without DATABASE");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(5, [
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+      "4; 1262 16384 DATABASE - railway postgres",
+      "5; 1259 16384 TABLE public t_0 nesta_migrator",
+      "6; 1259 16385 TABLE public t_1 nesta_migrator",
+    ]),
+  }), "missing ENCODING");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(5, [
+      "1; 0 0 ENCODING - ENCODING",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+      "4; 1262 16384 DATABASE - railway postgres",
+      "5; 1259 16384 TABLE public t_0 nesta_migrator",
+      "6; 1259 16385 TABLE public t_1 nesta_migrator",
+    ]),
+  }), "missing STDSTRINGS");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(5, [
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "4; 1262 16384 DATABASE - railway postgres",
+      "5; 1259 16384 TABLE public t_0 nesta_migrator",
+      "6; 1259 16385 TABLE public t_1 nesta_migrator",
+    ]),
+  }), "missing SEARCHPATH");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(5, [
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+      "5; 1259 16384 TABLE public t_0 nesta_migrator",
+      "6; 1259 16385 TABLE public t_1 nesta_migrator",
+    ]),
+  }), "missing DATABASE");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(6, [
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 ENCODING - ENCODING",
+      "3; 0 0 STDSTRINGS - STDSTRINGS",
+      "4; 0 0 SEARCHPATH - SEARCHPATH",
+      "5; 1262 16384 DATABASE - railway postgres",
+      "6; 1259 16384 TABLE public t_0 nesta_migrator",
+    ]),
+  }), "duplicate ENCODING");
+  failClosed(verifyPgRestoreListResult({
+    status: 0,
+    stdout: listing(6, [
+      "1; 0 0 ENCODING - ENCODING",
+      "2; 0 0 STDSTRINGS - STDSTRINGS",
+      "3; 0 0 SEARCHPATH - SEARCHPATH",
+      "4; 1262 16384 DATABASE - railway postgres",
+      "5; 1262 16385 DATABASE - other postgres",
+      "6; 1259 16384 TABLE public t_0 nesta_migrator",
+    ]),
+  }), "duplicate DATABASE");
 });
 
 test("pg_restore role-reference failure is not classified harmless", () => {

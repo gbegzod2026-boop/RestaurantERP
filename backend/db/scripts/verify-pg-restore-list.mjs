@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Deterministic production pg_restore --list verification. No PowerShell pipe.
+// Deterministic production pg_restore --list --verbose verification. No PowerShell pipe.
 // Usage: node db/scripts/verify-pg-restore-list.mjs <custom-format.dump>
 import { resolvePgClientBins, runPgRestoreList, verifyPgRestoreListResult } from "./lib/pgDumpClientGuard.mjs";
 
@@ -18,6 +18,13 @@ console.log(JSON.stringify({
   verified: check.verified === true,
   reason: check.reason,
   status: raw.status,
-  command: "pg_restore --list (no pipe)",
+  tocEntries: check.tocEntries ?? null,
+  uniqueDumpIds: check.uniqueDumpIds ?? null,
+  malformed: check.malformed ?? null,
+  unsupported: check.unsupported ?? null,
+  duplicates: check.duplicates ?? null,
+  specials: check.specials ?? null,
+  diagnostics: (raw.stderr || "").trim() ? "present" : "none",
+  command: "pg_restore --list --verbose (no pipe)",
 }, null, 2));
 process.exit(check.ok === true && check.authorizing === true ? 0 : 1);
