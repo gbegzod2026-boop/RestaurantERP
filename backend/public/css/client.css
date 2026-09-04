@@ -1,0 +1,3912 @@
+/* ============================================================
+   Nesta ERP — client.css
+   Dark theme | Mobile-first responsive | v5
+   ============================================================ */
+
+/* ── Google Fonts ─────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800;900&family=DM+Sans:wght@400;500;600&display=swap');
+
+/* ── CSS Variables — Light Theme ──────────────────────────── */
+:root {
+  --bg-body: #f0f2f5;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8f9fb;
+  --bg-overlay: rgba(240, 242, 245, 0.88);
+  --bg-input: #f3f4f6;
+  --bg-tag: #e9edf2;
+
+  --primary: #16a34a;
+  --primary-dark: #15803d;
+  --primary-glow: rgba(22, 163, 74, 0.18);
+  --primary-subtle: rgba(22, 163, 74, 0.08);
+
+  --accent-amber: #d97706;
+  --accent-blue: #2563eb;
+  --accent-red: #dc2626;
+  --accent-purple: #7c3aed;
+
+  --text-primary: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --text-green: #16a34a;
+
+  --border-color: rgba(0, 0, 0, 0.09);
+  --border-green: rgba(22, 163, 74, 0.28);
+  --border-focus: rgba(22, 163, 74, 0.55);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-full: 9999px;
+
+  --shadow-card: 0 1px 4px rgba(0, 0, 0, 0.07), 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-green: 0 4px 20px rgba(22, 163, 74, 0.18);
+  --shadow-btn: 0 2px 12px rgba(22, 163, 74, 0.28);
+
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+
+  --header-h: 72px;
+  --transition: 0.2s cubic-bezier(.4, 0, .2, 1);
+
+  /* ── Reservation status badge tokens (Bronlarim) — _reservationStatusMeta()
+     client.js ichida shu nomlarni o'qiydi. Alohida token bo'lishi
+     sababi: theme almashganda JS qayta chaqirilmasdan, brauzerning o'zi
+     CSS'ni qayta hisoblab, badge darhol to'g'ri rangga o'tishi kerak. ── */
+  --status-pending-bg: #fef3c7;   --status-pending-fg: #92400e;
+  --status-confirmed-bg: #dcfce7; --status-confirmed-fg: #166534;
+  --status-arrived-bg: #ffedd5;   --status-arrived-fg: #9a3412;
+  --status-completed-bg: #f1f5f9; --status-completed-fg: #475569;
+  --status-noshow-bg: #e2e8f0;    --status-noshow-fg: #334155;
+  --status-canceled-bg: #fee2e2;  --status-canceled-fg: #991b1b;
+
+  /* admin.css'dagi bilan bir xil naqsh — brauzerning O'ZI chizadigan
+     native UI'ni (input[type=date]/time popup kalendari, <select> dropdown
+     paneli, scrollbar) light palitrada ko'rsatishga majburlaydi. Bu CSS'da
+     boshqacha o'zgartirib bo'lmaydigan yagona joy (masalan popup kalendar
+     hech qanday CSS qoidasi bilan qayta stillanmaydi). */
+  color-scheme: light;
+}
+
+/* ── CSS Variables — Dark Theme ───────────────────────────────
+   🆕 Client-ni Waiter dizayn tizimi bilan birlashtirish (NESTA ERP —
+   CLIENT PANELINI WAITER DIZAYNI BILAN TO'LIQ BIRLASHTIRISH). Avval bu
+   yerda umuman dark-mode infratuzilmasi yo'q edi. O'zgarmas nom
+   strategiyasi: client.css'ning O'Z token nomlari (--bg-body, --primary,
+   --text-primary va h.k.) saqlanadi — faqat waiter.css'dagi bilan bir xil
+   MEXANIZM (html[data-theme="dark"], localStorage "app_theme") va
+   SEMANTIK jihatdan bir xil qiymatlar qo'shiladi. Bu butun faylning
+   qolgan qismi (deyarli barchasi allaqachon var(--...) orqali yozilgan)
+   avtomatik dark-mode-ga o'tadi — faqat pastda alohida (hardcoded rangli)
+   bo'limlar uchun qo'shimcha override kerak bo'ladi (ular tegishli
+   joylarida alohida belgilangan). ── */
+html[data-theme="dark"] {
+  /* admin.css'dagi bilan bir xil naqsh — teskarisi (dark). Native
+     date/time popup kalendari, <select> dropdown paneli, scrollbar endi
+     to'q rangda chiziladi. */
+  color-scheme: dark;
+
+  --status-pending-bg: rgba(217, 119, 6, 0.2);   --status-pending-fg: #fbbf24;
+  --status-confirmed-bg: rgba(34, 197, 94, 0.2); --status-confirmed-fg: #4ade80;
+  --status-arrived-bg: rgba(234, 88, 12, 0.2);   --status-arrived-fg: #fb923c;
+  --status-completed-bg: rgba(100, 116, 139, 0.22); --status-completed-fg: #cbd5e1;
+  --status-noshow-bg: rgba(51, 65, 85, 0.35);    --status-noshow-fg: #94a3b8;
+  --status-canceled-bg: rgba(220, 38, 38, 0.2);  --status-canceled-fg: #f87171;
+
+  --bg-body: #0B1220;
+  --bg-card: #16213A;
+  --bg-card-hover: #1B2A47;
+  --bg-overlay: rgba(11, 18, 32, 0.9);
+  --bg-input: #1B2A47;
+  --bg-tag: #1B2A47;
+
+  --primary: #22c55e;
+  --primary-dark: #16a34a;
+  --primary-glow: rgba(34, 197, 94, 0.28);
+  --primary-subtle: rgba(34, 197, 94, 0.14);
+
+  --accent-amber: #f59e0b;
+  --accent-blue: #3b82f6;
+  --accent-red: #f87171;
+  --accent-purple: #a78bfa;
+
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+  --text-green: #4ade80;
+
+  --border-color: rgba(255, 255, 255, 0.09);
+  --border-green: rgba(34, 197, 94, 0.35);
+  --border-focus: rgba(34, 197, 94, 0.6);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .35);
+  --shadow-green: 0 4px 20px rgba(34, 197, 94, 0.28);
+  --shadow-btn: 0 2px 12px rgba(34, 197, 94, 0.32);
+}
+
+/* ── Reset ────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 🩹 Root-cause fix ("footerdan keyingi bo'sh joy" — staff-footer bar bilan
+   pastki navigatsiya orasidagi keraksiz kulrang bo'shliq): .nesta-staff-
+   footer (mountStaffFooter({fixed:false, insertBefore:".bottom-nav"}))
+   normal oqim ichida, body'ning oxirgi farzandlaridan biri sifatida
+   joylashadi — .bottom-nav'ning o'zi position:fixed bo'lgani uchun
+   (staffFooter.css'ning o'z izohiga qarang: ikkita fixed element ustma-ust
+   chiqmasin degan ataylab qilingan tanlov), footer HAQIQIY sahifa
+   kontenti (menyu va h.k.) tugagan joyda qoladi — agar kontent qisqa
+   bo'lsa, footer bilan ekran pastidagi (suzib turgan) navigatsiya orasida
+   bo'sh joy paydo bo'ladi. body endi flex-column konteyner — .nesta-staff-
+   footer-static'ga qo'shilgan margin-top:auto (staffFooter.css) uni har
+   doim shu ustunning PASTIGA (ya'ni bottom-nav'ning tepasiga) turtib
+   qo'yadi, kontent uzunligidan qat'i nazar. position:fixed/absolute
+   elementlar (modallar, bottom-nav, header agar shunday bo'lsa) normal
+   oqimdan chetda qolgani uchun bu o'zgarish ularga ta'sir qilmaydi.
+   min-height:100dvh saqlanadi, faqat display:flex/flex-direction qo'shildi. */
+body {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+  background-color: var(--bg-body);
+  color: var(--text-primary);
+  min-height: 100dvh;
+  line-height: 1.5;
+  overflow-x: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 24px);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  object-fit: cover;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+input,
+select {
+  font-family: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-body);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ════════════════════════════════════════════════════════════
+   HEADER
+   ════════════════════════════════════════════════════════════ */
+/* 🩹 Bitta qatorli header — talab: "faqat chegirma va narx banneri
+   ikkinchi qatorda bo'lsin". Avval har bir .header-*-row o'z alohida
+   to'liq kengliqdagi (block) qatorida turardi (flex-direction:column),
+   shuning uchun logo/tema/til/profil/restoran nomi/qidiruv 4-5 ta
+   alohida qatorga bo'linib ketardi. Endi .header o'zi flex-wrap qator —
+   har bir .header-*-row endi flex:0 0 auto (yoki qidiruv uchun
+   moslashuvchan) elementga aylanadi va joy yetgan holatda BARCHASI bitta
+   qatorga sig'adi; joy yetmagandagina (juda tor ekran) tabiiy ravishda
+   keyingi qatorga o'tadi — bu qattiq "hech qachon ikkiga bo'linmasin"
+   emas, balki "imkon qadar bitta qatorda" degani (fizik joy chegarasi
+   bor). #promoBannerStrip/#header-timer-container esa har doim MAJBURIY
+   ravishda o'z alohida to'liq kengliqdagi qatoriga tushiriladi
+   (flex-basis:100%) — talab qilingan "faqat banner ikkinchi qatorda". */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-color);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 8px;
+  column-gap: 14px;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+html[data-theme="dark"] .header {
+  background: rgba(11, 18, 32, 0.92);
+}
+
+/* 🆕 YAGONA STAFF FOOTER — header bilan aynan bir xil fon. Light-mode
+   uchun standart qiymat pastda; dark-mode qiymati (html[data-theme="dark"]
+   .nesta-staff-footer, pastroqda) header bilan bir xil to'q fonni beradi —
+   waiter.css/kassa.css'dagi bilan bir xil naqsh. Static (normal-flow)
+   rejimda — .bottom-nav'dan tepada (client.js: mountStaffFooter({
+   fixed:false, insertBefore:".bottom-nav" })). */
+.nesta-staff-footer {
+  --staff-footer-bg: rgba(255, 255, 255, 0.96);
+  --staff-footer-text: #111827;
+  --staff-footer-text-secondary: #6b7280;
+  --staff-footer-border: var(--border-color);
+}
+
+html[data-theme="dark"] .nesta-staff-footer {
+  --staff-footer-bg: rgba(22, 33, 58, 0.96);
+  --staff-footer-text: #F1F5F9;
+  --staff-footer-text-secondary: #94A3B8;
+  --staff-footer-border: rgba(255, 255, 255, 0.09);
+}
+
+/* ── Header Top Row ───────────────────────────────────────── */
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* Logo */
+.logo-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, #15803d, #16a34a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 14px var(--primary-glow);
+  flex-shrink: 0;
+}
+
+.logo-img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.brand-main-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.nesta-white {
+  color: #111827;
+}
+
+.crm-green {
+  color: var(--primary);
+}
+
+/* VIP Badge */
+#headerBadge {
+  flex-shrink: 0;
+}
+
+/* ── Lang Selector ────────────────────────────────────────── */
+.lang-selector {
+  display: flex;
+  align-items: center;
+}
+
+/* ── Header Ready Box ─────────────────────────────────────── */
+.header-ready-box {
+  flex-shrink: 0;
+}
+
+/* ── Filters Row ──────────────────────────────────────────── */
+.header-filters-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Table Auth Box ───────────────────────────────────────── */
+.table-auth-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-title {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+}
+
+.auth-inputs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.auth-inputs>* {
+  flex: 1;
+  min-width: 100px;
+}
+
+.table-status-msg {
+  font-size: 12px;
+  color: var(--primary);
+}
+
+/* ── Glass Timer ──────────────────────────────────────────── */
+.glass-timer {
+  display: flex;
+  align-items: center;
+}
+
+/* ════════════════════════════════════════════════════════════
+   FORM CONTROLS (shared)
+   ════════════════════════════════════════════════════════════ */
+.custom-select,
+.custom-input,
+select,
+input[type="number"],
+input[type="tel"],
+input[type="text"] {
+  background: var(--bg-input);
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 12px;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+}
+
+.custom-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24'%3E%3Cpath fill='%236b7280' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+.custom-select:focus,
+.custom-input:focus,
+input:focus {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--primary-subtle);
+}
+
+.custom-select option {
+  background: #ffffff;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .custom-select option {
+  background: var(--bg-card);
+}
+
+/* ── Theme toggle button (header) — waiter.js'ning window.toggleWaiterTheme()
+   bilan bir xil mexanizm/localStorage kaliti ("app_theme"), lekin Client
+   o'zining .icon-btn (emoji-based) uslubida — Waiter FontAwesome
+   ishlatadi, Client'da FA yuklanmagan, shuning uchun bir xil vizual rolni
+   emoji bilan bajaradi (🌙/☀️, waiter.css'dagi sun/moon almashish naqsh
+   bilan bir xil: faqat joriy rejimga mos ikonka ko'rinadi). ── */
+.theme-toggle-btn .theme-icon-sun { display: none; }
+html[data-theme="dark"] .theme-toggle-btn .theme-icon-moon { display: none; }
+html[data-theme="dark"] .theme-toggle-btn .theme-icon-sun { display: inline; }
+
+/* ── Header restaurant name + live date/time (Waiter's .w-center-datetime
+   bilan bir xil vizual til) — #storeName yoniga qo'shiladi. ── */
+.store-datetime {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Locked input */
+.locked-table-input {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ── Buttons ──────────────────────────────────────────────── */
+.btn-check {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-btn);
+  transition: transform var(--transition), box-shadow var(--transition), opacity var(--transition);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-check:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(22, 163, 74, .38);
+}
+
+.btn-check:active {
+  transform: scale(.97);
+  opacity: .9;
+}
+
+/* Action button (Hisob so'rash) */
+.action-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 0 16px 12px;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  border-radius: var(--radius-lg);
+  text-align: center;
+  box-shadow: var(--shadow-green);
+  transition: transform var(--transition), box-shadow var(--transition);
+  letter-spacing: 0.2px;
+}
+
+.action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 28px rgba(22, 163, 74, .38);
+}
+
+.action-btn:active {
+  transform: scale(.98);
+}
+
+/* ════════════════════════════════════════════════════════════
+   MAIN CONTAINER
+   ════════════════════════════════════════════════════════════ */
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px 16px 8px;
+}
+
+/* ── Section Title ────────────────────────────────────────── */
+.section-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-title::before {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 20px;
+  background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+  border-radius: var(--radius-full);
+}
+
+/* ── VIP Banner ───────────────────────────────────────────── */
+#vip-banner {
+  border-radius: var(--radius-lg) !important;
+  font-family: var(--font-display);
+}
+
+/* ════════════════════════════════════════════════════════════
+   MENU GRID
+   ════════════════════════════════════════════════════════════ */
+/* 🆕 Waiter'ning .os-items grid mantig'iga moslashtirildi (kartalar sonini
+   qattiq belgilash o'rniga, mavjud kenglikka avtomatik moslashish) — Client
+   uchun konteyner kengligi (.container max-width) breakpoint bo'yicha
+   oldindan ma'lum bo'lgani sababli, aniq ustun sonlari (talab qilingan
+   6/5/4/3/2 progressiyasi) pastdagi @media'larda belgilanadi, lekin har
+   bir ustun 1fr (o'zi mavjud joyga cho'ziladi) — shu ikkalasi birga
+   "auto-sizing to available space" talabini beradi. */
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+/* Menu Card */
+.menu-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: transform var(--transition), border-color var(--transition), box-shadow var(--transition);
+  position: relative;
+}
+
+.menu-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--border-green);
+  box-shadow: var(--shadow-card), 0 0 20px var(--primary-glow);
+}
+
+.menu-card:active {
+  transform: scale(.98);
+}
+
+.menu-card-img {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+  background: var(--bg-tag);
+}
+
+.menu-card-img-placeholder {
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  background: var(--bg-tag);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+}
+
+.menu-card-body {
+  padding: 18px 20px 20px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.menu-card-name {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.menu-card-category {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.menu-card-price {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--primary);
+  margin-top: auto;
+}
+
+/* Badges */
+.badge-new {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--accent-blue);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+}
+
+.badge-top {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--accent-amber);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.5px;
+}
+
+/* Add to cart btn on card */
+.menu-card-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 10px;
+  background: var(--primary-subtle);
+  border: 1px solid var(--border-green);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 10px;
+  transition: background var(--transition), transform var(--transition);
+}
+
+.menu-card-add:hover {
+  background: rgba(22, 163, 74, .14);
+}
+
+.menu-card-add:active {
+  transform: scale(.97);
+}
+
+/* ── Recipe / Tarkib ──────────────────────────────────────── */
+.menu-card-recipe {
+  margin-top: 8px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 6px;
+}
+
+.menu-card-recipe-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--bg-tag);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu-card-recipe-toggle:hover,
+.menu-card-recipe-toggle.active {
+  background: rgba(22, 163, 74, 0.08);
+  border-color: var(--border-green);
+  color: var(--primary);
+}
+
+.menu-card-recipe-arrow {
+  font-size: 13px;
+  transition: transform var(--transition);
+  display: inline-block;
+}
+
+.menu-card-recipe-toggle.active .menu-card-recipe-arrow {
+  transform: rotate(180deg);
+}
+
+.menu-card-recipe-list {
+  list-style: none;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.28s cubic-bezier(.4,0,.2,1), opacity 0.22s ease, padding 0.2s ease;
+  opacity: 0;
+  padding: 0 4px;
+}
+
+.menu-card-recipe-list.open {
+  max-height: 400px;
+  opacity: 1;
+  padding: 6px 4px 2px;
+}
+
+.menu-card-ing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.menu-card-ing-row:nth-child(odd) {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.menu-card-ing-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-card-ing-amount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  white-space: nowrap;
+  margin-left: 8px;
+  background: rgba(22, 163, 74, 0.08);
+  border: 1px solid rgba(22, 163, 74, 0.20);
+  border-radius: var(--radius-full);
+  padding: 1px 7px;
+}
+
+/* ── Qty +/- counter ──────────────────────────────────────── */
+.qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.qty button {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--primary-subtle);
+  border: 1px solid var(--border-green);
+  color: var(--primary);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--transition), transform var(--transition);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.qty button:hover {
+  background: rgba(22, 163, 74, 0.16);
+}
+
+.qty button:active {
+  transform: scale(0.9);
+  background: rgba(22, 163, 74, 0.24);
+}
+
+.qty span {
+  flex: 1;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CART — Redesign v3 (screenshot-exact)
+   Bottom-sheet on mobile, centered dialog on desktop
+   Item card: left image col + right info col + bottom stepper/price row
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Floating Cart Button ─────────────────────────────────── */
+.cart-icon,
+#cartIcon {
+  position: fixed;
+  bottom: calc(100px + env(safe-area-inset-bottom, 0px));
+  right: 20px;
+  z-index: 300;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 24px rgba(22,163,74,0.40);
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(.34,1.56,.64,1), box-shadow 0.22s ease;
+  border: none;
+}
+.cart-icon:hover, #cartIcon:hover {
+  transform: scale(1.1) translateY(-2px);
+  box-shadow: 0 12px 36px rgba(22,163,74,0.50);
+}
+.cart-icon svg, #cartIcon svg {
+  width: 26px; height: 26px;
+  stroke: #fff; fill: none; stroke-width: 2.2;
+}
+
+/* ── Cart Count Badge ─────────────────────────────────────── */
+/* Stage 7 redesign fix — pre-existing overflow bug found live via 320px
+   screenshot testing (NOT introduced by this pass): #cartCount is a
+   direct <body> child in the static HTML (client.js only ever sets its
+   text via cartCount.innerText — nothing repositions/nests it inside a
+   badge-holder icon), so this rule's "peek out −5px past the corner of a
+   positioned parent" offset resolves against the viewport itself, pushing
+   it 5px past the right edge on a 320px-wide screen. .cart-badge has no
+   other real usage in this app (confirmed via grep) — changing right:-5px
+   to right:0 removes the overflow without visibly moving the badge
+   (same visual corner, same size, just flush with the edge instead of
+   bleeding 5px past it). */
+.cart-badge,
+#cartCount {
+  position: absolute;
+  top: -5px; right: 0;
+  min-width: 22px; height: 22px;
+  padding: 0 5px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 11px; font-weight: 900;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2.5px solid #fff;
+  font-family: var(--font-display);
+}
+
+/* ── Overlay backdrop ─────────────────────────────────────── */
+.cart-modal { display: none; }
+#cartModal   { display: none; }
+.cart-modal,
+#cartModal {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  background: rgba(15, 20, 30, 0.42);
+  display: none;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 0;
+}
+@media (min-width: 600px) {
+  .cart-modal, #cartModal {
+    justify-content: center;
+    padding: 20px;
+  }
+}
+.cart-modal.open { display: flex; animation: cartOverlayIn 0.22s ease forwards; }
+#cartModal.open  { display: flex; animation: cartOverlayIn 0.22s ease forwards; }
+@keyframes cartOverlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Sheet panel ──────────────────────────────────────────── */
+.cart-sheet,
+#cartModal > .cart-sheet,
+#cartModal .cart-sheet,
+.cart-panel {
+  background: #fff !important;
+  width: 100% !important;
+  max-width: 560px !important;
+  border-radius: 26px 26px 0 0 !important;
+  overflow: hidden !important;
+  box-shadow: 0 -4px 40px rgba(0,0,0,0.14) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 92dvh !important;
+  animation: cartSheetUp 0.32s cubic-bezier(.22,1,.36,1) !important;
+}
+@media (min-width: 600px) {
+  .cart-sheet,
+  #cartModal > .cart-sheet,
+  #cartModal .cart-sheet,
+  .cart-panel {
+    border-radius: 26px !important;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.18) !important;
+    animation: cartDialogIn 0.28s cubic-bezier(.22,1,.36,1) !important;
+  }
+}
+@keyframes cartSheetUp {
+  from { transform: translateY(60px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes cartDialogIn {
+  from { transform: translateY(16px) scale(0.97); opacity: 0; }
+  to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+/* drag handle */
+.cart-drag-bar {
+  width: 38px; height: 4px;
+  background: #e5e7eb;
+  border-radius: 2px;
+  margin: 10px auto 0;
+  flex-shrink: 0;
+}
+@media (min-width: 600px) { .cart-drag-bar { display: none; } }
+
+/* ── Header ───────────────────────────────────────────────── */
+.cart-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 14px 16px 13px !important;
+  background: #fff !important;
+  border-bottom: 1px solid rgba(0,0,0,0.07) !important;
+  flex-shrink: 0 !important;
+  gap: 12px !important;
+}
+.cart-header > span {
+  display: flex !important;
+  align-items: center !important;
+  gap: 11px !important;
+  flex: 1 !important;
+}
+
+/* green pill: icon + texts */
+.cart-header-pill {
+  background: #f0fdf4;
+  border: 1.5px solid #bbf7d0;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px 7px 8px;
+}
+.cart-header-icon-wrap {
+  position: relative;
+  width: 32px; height: 32px;
+  background: #16a34a;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.cart-header-icon-wrap svg {
+  width: 17px; height: 17px;
+  stroke: #fff; fill: none; stroke-width: 2.2;
+}
+.cart-header-badge {
+  position: absolute;
+  top: -4px; right: -5px;
+  min-width: 17px; height: 17px;
+  background: #fff;
+  color: #16a34a;
+  font-size: 9px; font-weight: 900;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  border: 2px solid #16a34a;
+  padding: 0 3px;
+  font-family: var(--font-display);
+}
+.cart-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.cart-header-title {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #111827 !important;
+  font-family: var(--font-display) !important;
+  line-height: 1.2 !important;
+}
+.cart-header > span b {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #111827 !important;
+  font-family: var(--font-display) !important;
+}
+.cart-header-sub {
+  font-size: 11px !important;
+  color: #9ca3af !important;
+  font-weight: 500 !important;
+}
+.cart-close {
+  width: 34px !important; height: 34px !important;
+  border-radius: 50% !important;
+  background: #f3f4f6 !important;
+  border: none !important;
+  color: #6b7280 !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  font-size: 16px !important;
+  cursor: pointer !important;
+  transition: background 0.15s !important;
+  flex-shrink: 0 !important;
+}
+.cart-close:hover { background: #e5e7eb !important; }
+
+/* ── Items scroll area ────────────────────────────────────── */
+.cart-items,
+#cartItems {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 12px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #f8f9fb;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db transparent;
+}
+.cart-items::-webkit-scrollbar { width: 3px; }
+.cart-items::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
+
+/* ── Item card ────────────────────────────────────────────── */
+.nc-cart-card,
+.cart-items > div,
+#cartItems > div {
+  background: #fff !important;
+  border: 1px solid rgba(0,0,0,0.08) !important;
+  border-radius: 18px !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.05) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  margin-bottom: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+/* top row: image col + body col */
+.nc-cart-card-top,
+.cart-items > div > div:first-child,
+#cartItems > div > div:first-child {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  gap: 0 !important;
+}
+
+/* image column */
+.nc-cart-img-wrap {
+  width: 110px !important;
+  min-width: 110px !important;
+  flex-shrink: 0 !important;
+  border-right: 1px solid rgba(0,0,0,0.07) !important;
+  display: block !important;
+  position: relative !important;
+  overflow: hidden !important;
+  align-self: stretch !important;
+}
+.nc-cart-img,
+.cart-items > div img,
+#cartItems > div img {
+  width: 110px !important;
+  height: 110px !important;
+  object-fit: cover !important;
+  display: block !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #f0fdf4 !important;
+  flex-shrink: 0 !important;
+}
+.nc-cart-img-placeholder {
+  width: 110px !important;
+  height: 110px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 38px !important;
+  background: linear-gradient(140deg, #f0fdf4, #dcfce7) !important;
+}
+
+/* body column */
+.nc-cart-body {
+  flex: 1 !important;
+  padding: 11px 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+}
+
+/* name row + delete */
+.nc-cart-top {
+  display: flex !important;
+  align-items: flex-start !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
+}
+.nc-cart-name,
+.cart-items [class*="name"],
+#cartItems [class*="name"],
+.cart-items [class*="title"],
+#cartItems [class*="title"] {
+  font-family: var(--font-display) !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  color: #111827 !important;
+  line-height: 1.3 !important;
+  flex: 1 !important;
+}
+
+/* description */
+.cart-items [class*="desc"],
+#cartItems [class*="desc"] {
+  font-size: 11.5px !important;
+  color: #6b7280 !important;
+  font-weight: 400 !important;
+  line-height: 1.4 !important;
+}
+
+/* delete button */
+.nc-cart-del,
+.cart-items > div > button,
+#cartItems > div > button,
+.cart-items [class*="remove"],
+#cartItems [class*="remove"],
+.cart-items [class*="delete"],
+#cartItems [class*="delete"] {
+  width: 28px !important; height: 28px !important;
+  border-radius: 50% !important;
+  background: #fff0f0 !important;
+  border: 1px solid rgba(220,38,38,0.18) !important;
+  color: rgba(220,38,38,0.75) !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  flex-shrink: 0 !important;
+  transition: background 0.15s !important;
+  position: static !important;
+  top: auto !important; right: auto !important;
+}
+.nc-cart-del:hover,
+.cart-items > div > button:hover,
+#cartItems > div > button:hover { background: #fee2e2 !important; }
+
+/* category badges */
+.nc-cart-cats,
+.nc-cart-cats * { display: flex; flex-wrap: wrap; gap: 4px; }
+.nc-cat-badge,
+.cart-items [class*="badge"],
+#cartItems [class*="badge"],
+.cart-items [class*="tag"],
+#cartItems [class*="tag"] {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  padding: 3px 8px !important;
+  border-radius: 6px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  margin: 0 !important;
+}
+.nc-cat-badge.cat { background: #f0fdf4 !important; color: #15803d !important; border: 1px solid #bbf7d0 !important; }
+.nc-cat-badge.sub { background: #eff6ff !important; color: #1d4ed8 !important; border: 1px solid #bfdbfe !important; }
+
+/* bottom row: stepper + price */
+.nc-cart-footer,
+.cart-items > div .nc-cart-footer {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 12px 10px !important;
+  border-top: 1px solid rgba(0,0,0,0.07) !important;
+  background: #fafafa !important;
+  margin-left: 0 !important;
+}
+
+/* qty stepper */
+.nc-cart-qty-row,
+.cart-items [class*="qty"],
+#cartItems [class*="qty"] {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  background: #fff !important;
+  border: 1.5px solid #e5e7eb !important;
+  border-radius: 12px !important;
+  padding: 4px 8px !important;
+  width: auto !important;
+}
+.nc-cart-qty-btn,
+.cart-items [class*="qty"] button,
+#cartItems [class*="qty"] button {
+  width: 28px !important; height: 28px !important;
+  border-radius: 8px !important;
+  background: #f0fdf4 !important;
+  border: none !important;
+  color: #15803d !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  line-height: 1 !important;
+  transition: background 0.12s, transform 0.1s !important;
+}
+.nc-cart-qty-btn:hover,
+.cart-items [class*="qty"] button:hover,
+#cartItems [class*="qty"] button:hover {
+  background: #bbf7d0 !important;
+}
+.nc-cart-qty-btn:active,
+.cart-items [class*="qty"] button:active { transform: scale(0.88) !important; }
+.nc-cart-qty-num,
+.cart-items [class*="qty"] span,
+#cartItems [class*="qty"] span {
+  font-family: var(--font-display) !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  color: #111827 !important;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  border-radius: 50% !important;
+  background: #f3f4f6 !important;
+  border: 1.5px solid #e5e7eb !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  user-select: none !important;
+  flex-shrink: 0 !important;
+}
+
+/* price block */
+.nc-price-wrap { text-align: right !important; }
+.nc-cart-price-main,
+.cart-items [class*="price"],
+#cartItems [class*="price"] {
+  font-family: var(--font-display) !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+  color: #15803d !important;
+  letter-spacing: -0.2px !important;
+}
+.nc-cart-price-unit,
+.cart-items [class*="unit"],
+#cartItems [class*="unit"],
+.cart-items small,
+#cartItems small {
+  font-size: 11px !important;
+  color: #9ca3af !important;
+  font-weight: 500 !important;
+  margin-top: 2px !important;
+  display: block !important;
+}
+
+/* ── Cart Footer (total + order btn) ─────────────────────── */
+.cart-summary {
+  padding: 10px 12px calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+  background: #fff !important;
+  border-top: 1px solid rgba(0,0,0,0.07) !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+/* total row */
+.cart-total {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 13px 14px !important;
+  background: #f0fdf4 !important;
+  border: 1px solid #bbf7d0 !important;
+  border-radius: 16px !important;
+  margin-bottom: 0 !important;
+}
+.cart-total-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.cart-total-icon {
+  width: 38px; height: 38px;
+  background: #fff;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.cart-total-label {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+}
+.cart-total-value,
+#cartTotal {
+  font-family: var(--font-display) !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  color: #15803d !important;
+  letter-spacing: -0.3px !important;
+}
+.cart-total > span { color: #111827 !important; font-size: 14px !important; font-weight: 700 !important; }
+.cart-total b, .cart-total strong {
+  font-size: 20px !important; font-weight: 900 !important; color: #15803d !important;
+}
+
+/* order button */
+.cart-order-btn,
+.cart-summary > button {
+  width: 100% !important;
+  padding: 16px 20px !important;
+  background: #16a34a !important;
+  color: #fff !important;
+  font-family: var(--font-display) !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+  border-radius: 18px !important;
+  border: none !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  letter-spacing: 0.15px !important;
+  transition: background 0.18s, transform 0.15s !important;
+  box-shadow: none !important;
+}
+.cart-order-btn:hover,
+.cart-summary > button:hover { background: #15803d !important; }
+.cart-order-btn:active,
+.cart-summary > button:active { transform: scale(0.98) !important; }
+
+/* ── CART — dark-mode overrides ────────────────────────────
+   "Redesign v3" bo'limi yuqorida hardcoded oq fon/qora matn bilan
+   yozilgan (!important bilan) — bu yerda har bir qoida uchun
+   html[data-theme="dark"]-prefiksli, xuddi shu specifikatsiya
+   naqshidagi (shu jumladan #cartModal ID variantlari) dark
+   qiymatlar beriladi, shunda cascade har doim to'g'ri hal bo'ladi. */
+html[data-theme="dark"] .cart-sheet,
+html[data-theme="dark"] #cartModal > .cart-sheet,
+html[data-theme="dark"] #cartModal .cart-sheet,
+html[data-theme="dark"] .cart-panel {
+  background: var(--bg-card) !important;
+  box-shadow: 0 -4px 40px rgba(0,0,0,0.5) !important;
+}
+html[data-theme="dark"] .cart-drag-bar { background: rgba(255,255,255,0.16) !important; }
+html[data-theme="dark"] .cart-header {
+  background: var(--bg-card) !important;
+  border-bottom-color: rgba(255,255,255,0.08) !important;
+}
+html[data-theme="dark"] .cart-header-title,
+html[data-theme="dark"] .cart-header > span b {
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .cart-header-sub { color: var(--text-muted) !important; }
+html[data-theme="dark"] .cart-header-pill {
+  background: var(--primary-subtle) !important;
+  border-color: var(--border-green) !important;
+}
+html[data-theme="dark"] .cart-close {
+  background: var(--bg-input) !important;
+  color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .cart-close:hover { background: var(--bg-card-hover) !important; }
+html[data-theme="dark"] .cart-items,
+html[data-theme="dark"] #cartItems {
+  background: var(--bg-body) !important;
+}
+html[data-theme="dark"] .nc-cart-card,
+html[data-theme="dark"] .cart-items > div,
+html[data-theme="dark"] #cartItems > div {
+  background: var(--bg-card) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.3) !important;
+}
+html[data-theme="dark"] .nc-cart-img-wrap { border-right-color: rgba(255,255,255,0.08) !important; }
+html[data-theme="dark"] .nc-cart-img-placeholder {
+  background: linear-gradient(140deg, #16213A, #1B2A47) !important;
+}
+html[data-theme="dark"] .nc-cart-name,
+html[data-theme="dark"] .cart-items [class*="name"],
+html[data-theme="dark"] #cartItems [class*="name"],
+html[data-theme="dark"] .cart-items [class*="title"],
+html[data-theme="dark"] #cartItems [class*="title"] {
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .cart-items [class*="desc"],
+html[data-theme="dark"] #cartItems [class*="desc"] {
+  color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .nc-cart-del,
+html[data-theme="dark"] .cart-items > div > button,
+html[data-theme="dark"] #cartItems > div > button,
+html[data-theme="dark"] .cart-items [class*="remove"],
+html[data-theme="dark"] #cartItems [class*="remove"],
+html[data-theme="dark"] .cart-items [class*="delete"],
+html[data-theme="dark"] #cartItems [class*="delete"] {
+  background: rgba(248,113,113,0.14) !important;
+  border-color: rgba(248,113,113,0.3) !important;
+  color: #f87171 !important;
+}
+html[data-theme="dark"] .nc-cat-badge.cat { background: rgba(34,197,94,0.14) !important; color: #4ade80 !important; border-color: rgba(34,197,94,0.3) !important; }
+html[data-theme="dark"] .nc-cat-badge.sub { background: rgba(59,130,246,0.14) !important; color: #93c5fd !important; border-color: rgba(59,130,246,0.3) !important; }
+html[data-theme="dark"] .nc-cart-footer,
+html[data-theme="dark"] .cart-items > div .nc-cart-footer {
+  background: var(--bg-input) !important;
+  border-top-color: rgba(255,255,255,0.08) !important;
+}
+html[data-theme="dark"] .nc-cart-qty-row,
+html[data-theme="dark"] .cart-items [class*="qty"],
+html[data-theme="dark"] #cartItems [class*="qty"] {
+  background: var(--bg-card) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+}
+html[data-theme="dark"] .nc-cart-qty-btn,
+html[data-theme="dark"] .cart-items [class*="qty"] button,
+html[data-theme="dark"] #cartItems [class*="qty"] button {
+  background: var(--primary-subtle) !important;
+  color: #4ade80 !important;
+}
+html[data-theme="dark"] .nc-cart-qty-btn:hover,
+html[data-theme="dark"] .cart-items [class*="qty"] button:hover,
+html[data-theme="dark"] #cartItems [class*="qty"] button:hover {
+  background: rgba(34,197,94,0.28) !important;
+}
+html[data-theme="dark"] .nc-cart-qty-num,
+html[data-theme="dark"] .cart-items [class*="qty"] span,
+html[data-theme="dark"] #cartItems [class*="qty"] span {
+  color: var(--text-primary) !important;
+  background: var(--bg-input) !important;
+  border-color: rgba(255,255,255,0.14) !important;
+}
+html[data-theme="dark"] .nc-cart-price-main,
+html[data-theme="dark"] .cart-items [class*="price"],
+html[data-theme="dark"] #cartItems [class*="price"] {
+  color: #4ade80 !important;
+}
+html[data-theme="dark"] .nc-cart-price-unit,
+html[data-theme="dark"] .cart-items [class*="unit"],
+html[data-theme="dark"] #cartItems [class*="unit"],
+html[data-theme="dark"] .cart-items small,
+html[data-theme="dark"] #cartItems small {
+  color: var(--text-muted) !important;
+}
+html[data-theme="dark"] .cart-summary {
+  background: var(--bg-card) !important;
+  border-top-color: rgba(255,255,255,0.08) !important;
+}
+html[data-theme="dark"] .cart-total {
+  background: var(--primary-subtle) !important;
+  border-color: var(--border-green) !important;
+}
+html[data-theme="dark"] .cart-total-icon {
+  background: var(--bg-card) !important;
+  border-color: var(--border-green) !important;
+}
+html[data-theme="dark"] .cart-total-label,
+html[data-theme="dark"] .cart-total > span {
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .cart-total-value,
+html[data-theme="dark"] #cartTotal,
+html[data-theme="dark"] .cart-total b,
+html[data-theme="dark"] .cart-total strong {
+  color: #4ade80 !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+   NOTIFICATION
+   ════════════════════════════════════════════════════════════ */
+.notification {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-110%);
+  z-index: 999;
+  background: #ffffff;
+  border: 1px solid var(--border-green);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 20px;
+  border-radius: var(--radius-full);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  transition: transform .35s cubic-bezier(.32, 1.2, .55, 1);
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+}
+
+.notification.show {
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ════════════════════════════════════════════════════════════
+   CALL WAITER BUTTON
+   ════════════════════════════════════════════════════════════ */
+body>div[style*="padding: 0 20px"] button,
+body>div>button[onclick*="callWaiter"] {
+  width: 100%;
+  background: #ffffff;
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 14px;
+  border-radius: var(--radius-lg);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  transition: background var(--transition), border-color var(--transition), transform var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: var(--shadow-card);
+}
+
+body>div[style*="padding: 0 20px"] button:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-amber);
+  transform: translateY(-1px);
+}
+
+/* ════════════════════════════════════════════════════════════
+   SUPPORT FOOTER
+   ════════════════════════════════════════════════════════════ */
+.support-footer {
+  text-align: center;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border-color);
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.8;
+}
+
+.support-footer b {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* ════════════════════════════════════════════════════════════
+   RECEIPT BOX
+   ════════════════════════════════════════════════════════════ */
+#receiptBox {
+  font-family: var(--font-display);
+}
+
+#receiptContent {
+  background: var(--bg-card);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  border: 1px solid var(--border-color);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ORDER STATUS / TIMER STATES
+   ════════════════════════════════════════════════════════════ */
+.status-new {
+  color: var(--accent-blue);
+}
+
+.status-inprogress {
+  color: var(--accent-amber);
+}
+
+.status-ready {
+  color: var(--primary);
+}
+
+.status-late {
+  color: var(--accent-red);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ════════════════════════════════════════════════════════════ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .5;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+
+  70% {
+    transform: scale(1.1);
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  from {
+    background-position: -200% 0;
+  }
+
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* ════════════════════════════════════════════════════════════
+   MODAL OVERLAY (checkout, etc.)
+   ════════════════════════════════════════════════════════════ */
+.modal-overlay {
+  font-family: var(--font-body);
+}
+
+/* ════════════════════════════════════════════════════════════
+   SWEETALERT2 OVERRIDES
+   ════════════════════════════════════════════════════════════ */
+.swal2-popup {
+  background: #ffffff !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: var(--radius-xl) !important;
+  font-family: var(--font-body) !important;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14) !important;
+}
+
+.swal2-title {
+  color: var(--text-primary) !important;
+  font-family: var(--font-display) !important;
+}
+
+.swal2-html-container {
+  color: var(--text-secondary) !important;
+}
+
+.swal2-confirm {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark)) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.swal2-cancel {
+  background: var(--bg-tag) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-md) !important;
+}
+
+.swal2-close {
+  color: var(--text-secondary) !important;
+}
+
+html[data-theme="dark"] .swal2-popup {
+  background: var(--bg-card) !important;
+}
+
+/* ════════════════════════════════════════════════════════════
+   RESPONSIVE — MOBILE FIRST
+   ════════════════════════════════════════════════════════════ */
+
+/* ── xs: 0–479px ──────────────────────────────────────────── */
+@media (max-width: 479px) {
+  .header {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  /* 🩹 To'liq sana formati ("18 avgust 2026 y. · 16:55:41") juda tor
+     ekranda (logo + tema/til tugmalari orasidagi qolgan joy ~100-140px)
+     bitta qatorga sig'maydi — shuning uchun bu yerda ikkiga (sana /
+     soat) bo'linib, kesilmasdan to'liq o'qilishi ta'minlanadi. */
+  .header-center-sub {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .store-datetime {
+    white-space: normal;
+    text-align: center;
+    font-size: 10.5px;
+  }
+
+  .brand-main-title {
+    font-size: 17px;
+  }
+
+  .brand-logo-circle {
+    width: 34px;
+    height: 34px;
+  }
+
+  .logo-img {
+    width: 20px;
+    height: 20px;
+  }
+
+  .header-filters-row {
+    gap: 6px;
+  }
+
+  .custom-select,
+  .custom-input {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+
+  .auth-inputs {
+    flex-direction: column;
+  }
+
+  .auth-inputs>* {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .cart-icon,
+  #cartIcon {
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px));
+    right: 14px;
+    width: 58px;
+    height: 58px;
+  }
+
+  .cart-emoji {
+    font-size: 26px;
+  }
+
+  .container {
+    padding: 14px 12px 6px;
+  }
+
+  .section-title {
+    font-size: 17px;
+  }
+
+  .action-btn {
+    width: calc(100% - 24px);
+    margin: 0 12px 10px;
+    font-size: 14px;
+  }
+}
+
+/* ── sm: 480–639px ────────────────────────────────────────── */
+@media (min-width: 480px) and (max-width: 639px) {
+  .menu-grid {
+    gap: 16px;
+  }
+
+  .auth-inputs {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── md: 640–767px ────────────────────────────────────────── */
+@media (min-width: 640px) {
+  .header {
+    padding: 12px 20px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* cart sheet fills bottom on all screens */
+  .cart-header {
+    border-radius: 24px 24px 0 0;
+  }
+}
+
+/* ── lg: 768–1023px ───────────────────────────────────────── */
+@media (min-width: 768px) {
+  /* 🩹 Avval bu yerda .header'ni display:grid qiladigan va endi mavjud
+     bo'lmagan klasslarga (.header-ready-box/.header-filters-row/
+     .table-auth-box — client.html'da hech qachon topilmadi, eski/legacy
+     header dizaynidan qolgan o'lik CSS) mo'ljallangan qoida bor edi —
+     bu .header-icons-row/.store-info-row/.header-search-row'ni umuman
+     joylashtirmasdi, shuning uchun ular implicit grid bo'yicha noto'g'ri
+     qatorlarga tushib ketardi. Endi .header (yuqorida, asosiy qoidada)
+     universal flex-wrap qator — bu yerda faqat kenglik o'sishi bilan
+     padding/typography nozik sozlanadi, layout mexanizmi o'zi
+     o'zgarmaydi (barcha breakpoint'larda bir xil ishlaydi). */
+  .header {
+    padding: 14px 24px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+
+  .container {
+    padding: 24px 20px 8px;
+  }
+
+  .section-title {
+    font-size: 22px;
+  }
+}
+
+/* ── xl: 1024px+ ──────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .header {
+    padding: 14px 32px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 22px;
+  }
+
+  .container {
+    max-width: 1100px;
+  }
+
+  .cart-icon {
+    right: 32px;
+    bottom: 110px;
+  }
+}
+
+/* ── xxl: 1280px+ (Waiter'ning "mid" desktop kenglik toifasi) ─── */
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1300px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 24px;
+  }
+}
+
+/* ── 1440px+ ──────────────────────────────────────────────── */
+@media (min-width: 1440px) {
+  .container {
+    max-width: 1440px;
+  }
+}
+
+/* ── 1600px+ (Waiter'ning "desktop-large" toifasi) ───────────── */
+@media (min-width: 1600px) {
+  .container {
+    max-width: 1600px;
+  }
+
+  .menu-grid {
+    grid-template-columns: repeat(6, 1fr);
+    gap: 26px;
+  }
+}
+
+/* ── 1920px+ ──────────────────────────────────────────────── */
+@media (min-width: 1920px) {
+  .container {
+    max-width: 1760px;
+  }
+
+  .menu-grid {
+    gap: 28px;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHAT FAB — chat-system.js inline stilini override
+   ════════════════════════════════════════════════════════════ */
+
+/* Chat toggle tugmasi — ID: chatFab */
+#chatFab {
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px)) !important;
+  right: 22px !important;
+}
+
+@media (max-width: 479px) {
+  #chatFab {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+    right: 14px !important;
+  }
+}
+
+@media (min-width: 1024px) {
+  #chatFab {
+    bottom: 32px !important;
+    right: 32px !important;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   UTILITY
+   ════════════════════════════════════════════════════════════ */
+.hidden {
+  display: none !important;
+}
+
+.visible {
+  display: block !important;
+}
+
+.text-green {
+  color: var(--primary);
+}
+
+.text-amber {
+  color: var(--accent-amber);
+}
+
+.text-red {
+  color: var(--accent-red);
+}
+
+.text-blue {
+  color: var(--accent-blue);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-sm {
+  font-size: 12px;
+}
+
+.text-xs {
+  font-size: 11px;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.font-black {
+  font-weight: 900;
+}
+
+.flex {
+  display: flex;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.gap-2 {
+  gap: 8px;
+}
+
+.gap-3 {
+  gap: 12px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.rounded-full {
+  border-radius: var(--radius-full);
+}
+
+/* Pulse badge (e.g. VIP) */
+.pulse-ring {
+  animation: pulseRing 2s infinite;
+}
+
+@keyframes pulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, .40);
+  }
+
+  70% {
+    box-shadow: 0 0 0 8px rgba(22, 163, 74, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   GLASS TIMER — inner layout helpers
+   ════════════════════════════════════════════════════════════ */
+.timer-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.timer-icon {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.timer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — animations
+   ════════════════════════════════════════════════════════════ */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInCard {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spinPay {
+  0%   { transform: rotate(0); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes popSuccess {
+  0%   { transform: scale(0); opacity: 0; }
+  70%  { transform: scale(1.1); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-5px); }
+  75%       { transform: translateX(5px); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — payment method buttons
+   ════════════════════════════════════════════════════════════ */
+.co-method-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
+  cursor: pointer;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  transition: all 0.18s;
+  min-width: 0;
+}
+
+.co-method-btn:hover {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
+
+.co-method-btn.co-active {
+  border-color: #22c55e;
+  background: #f0fdf4;
+  color: #16a34a;
+}
+
+.co-method-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — card form
+   ════════════════════════════════════════════════════════════ */
+.co-card-form {
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  animation: fadeInCard 0.2s ease;
+  margin-top: 12px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — inputs
+   ════════════════════════════════════════════════════════════ */
+.co-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #fff;
+  outline: none;
+  transition: border-color 0.15s;
+  box-shadow: none;
+}
+
+.co-input:invalid {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
+.co-input:focus {
+  border-color: #22c55e;
+}
+
+.co-input.co-err {
+  border-color: #ef4444;
+  animation: shake 0.25s;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — pay button
+   ════════════════════════════════════════════════════════════ */
+.co-pay-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(34, 197, 94, 0.32);
+  transition: transform 0.15s, box-shadow 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.co-pay-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 24px rgba(34, 197, 94, 0.42);
+}
+
+.co-pay-btn:active {
+  transform: scale(0.98);
+}
+
+.co-pay-btn:disabled {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — order item rows
+   ════════════════════════════════════════════════════════════ */
+.co-item-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.co-item-row:last-child {
+  border-bottom: none;
+}
+
+.co-item-img {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+
+.co-item-img-placeholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════
+   CHECKOUT MODAL — category / subcategory badges
+   ════════════════════════════════════════════════════════════ */
+.co-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-weight: 600;
+}
+
+.co-badge-cat {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+  margin-right: 4px;
+}
+
+.co-badge-sub {
+  background: #eff6ff;
+  color: #3b82f6;
+  border: 1px solid #bfdbfe;
+}
+
+/* ── Checkout modal — dark-mode overrides (.co-method-btn/.co-input
+   allaqachon pastroqdagi var()-based ikkinchi ta'rif orqali dark-safe —
+   faqat shu yerdagi qolgan hardcoded qoidalar uchun override kerak). ── */
+html[data-theme="dark"] .co-card-form {
+  background: var(--bg-input);
+  border-color: var(--border-color);
+}
+html[data-theme="dark"] .co-badge-cat {
+  background: var(--primary-subtle);
+  color: #4ade80;
+  border-color: var(--border-green);
+}
+html[data-theme="dark"] .co-badge-sub {
+  background: rgba(59,130,246,0.14);
+  color: #93c5fd;
+  border-color: rgba(59,130,246,0.32);
+}
+
+/* ════════════════════════════════════════════════════════════
+   FEEDBACK MODAL  —  client.css ga oxiriga qo'shing
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Overlay ─────────────────────────────────────────────── */
+.fb-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 40, 0.62);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fbFadeIn 0.22s ease;
+}
+
+@keyframes fbFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fbFadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* ── Card ────────────────────────────────────────────────── */
+.fb-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px 26px 26px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.22),
+    0 2px 8px  rgba(0, 0, 0, 0.08);
+  animation: fbPopIn 0.3s cubic-bezier(.32, 1.25, .55, 1);
+  position: relative;
+}
+
+@keyframes fbPopIn {
+  from { transform: scale(0.92) translateY(16px); opacity: 0; }
+  to   { transform: scale(1)    translateY(0);    opacity: 1; }
+}
+
+/* ── Close (✕) ──────────────────────────────────────────── */
+.fb-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: none;
+  font-size: 13px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+.fb-close:hover { background: #e2e8f0; color: #1e293b; }
+
+/* ── Header ──────────────────────────────────────────────── */
+.fb-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.fb-emoji {
+  display: block;
+  font-size: 44px;
+  line-height: 1;
+  margin-bottom: 10px;
+  animation: fbBounce 0.55s cubic-bezier(.34, 1.56, .64, 1) 0.1s both;
+}
+
+/* ============================================================
+   Delivery-First Customer App — added sections
+   Store header / search / category tabs / banners / bottom nav /
+   checkout (.co-*) / tracking timeline / favorites & order history /
+   out-of-stock menu-card state. Mobile-first, verified down to 360px.
+   ============================================================ */
+
+/* 🩹 Waiter'ning .w-header-center bilan bir xil naqsh — restoran nomi
+   ustida, sana/soat tagida, header'ning o'rtasida. Mobile-first: default
+   holatda oddiy oqim ichidagi (overlap xavfisiz) markazlashgan blok;
+   kenglik yetarli bo'lganda (≥768px, pastroqdagi @media) Waiter'dagidek
+   header'ning ANIQ geometrik markaziga mutlaq pozitsiyalanadi. */
+.header-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+}
+
+.header-center-sub {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  /* 🩹 To'liq sana formati ("18 avgust 2026 y. · 16:55:41") avvalgi
+     qisqa formatdan (08/18 · 16:55) ancha uzunroq — tor kenglikda
+     #storeRating (bo'sh bo'lmasa) keyingi qatorga tushishi mumkin,
+     lekin sana/soat matnining o'zi (.store-datetime, pastda) bir
+     qatorda, kesilmasdan qoladi. */
+  flex-wrap: wrap;
+}
+
+.header-center .store-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+  .header {
+    position: relative;
+  }
+
+  .header-center {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    flex: 0 0 auto;
+    max-width: 45%;
+    pointer-events: none;
+  }
+
+  .header-center * {
+    pointer-events: auto;
+  }
+}
+
+.store-name {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.store-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.store-badge-open {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--primary);
+}
+
+.store-badge-closed {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--accent-red);
+}
+
+.store-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 6px;
+}
+
+.store-meta-item {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.store-meta-item:empty {
+  display: none;
+}
+
+/* 🩹 Qidiruv header'dan menyu bo'limi sarlavhasi qatoriga ko'chirildi
+   (talab: "searchbar ni headerdan olib tashla va menyu tepasiga sahifa
+   burchagiga joyla kichik qilib") — #menuSearch input'ining o'zi va uni
+   client.js'da topadigan ID o'zgarmadi, faqat joylashuvi. */
+.menu-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.menu-section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+.menu-search-row {
+  flex: 0 0 auto;
+  width: 200px;
+  max-width: 45vw;
+}
+
+.menu-search-row .custom-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 12px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 479px) {
+  .menu-search-row {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+    order: 3;
+  }
+}
+
+#categoryTabs,
+#subcategoryTabs {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 8px;
+  padding: 10px 0 4px;
+  scrollbar-width: none;
+}
+
+#categoryTabs::-webkit-scrollbar,
+#subcategoryTabs::-webkit-scrollbar {
+  display: none;
+}
+
+.promo-banner-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  margin: 10px 0;
+  scrollbar-width: none;
+  /* 🩹 Talab: "faqat chegirma va narx banneri ikkinchi qatorda bo'lsin" —
+     .header endi flex-wrap qator (yuqoridagi izohga qarang); bu banner
+     har doim MAJBURIY ravishda alohida to'liq kengliqdagi qatorga
+     tushadi, boshqa header elementlari bilan bitta qatorda aralashmaydi. */
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.promo-banner-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.promo-banner-strip:empty {
+  display: none;
+}
+
+.promo-banner-card {
+  flex: 0 0 auto;
+  min-width: 220px;
+  max-width: 280px;
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ── Out of stock menu card state ── */
+.menu-card-outofstock {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+}
+
+.badge-outofstock {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(17, 24, 39, 0.82);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+  z-index: 2;
+}
+
+.menu-card-outofstock-note,
+.menu-card-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.menu-card-outofstock-note {
+  font-weight: 700;
+  color: var(--accent-red);
+}
+
+.menu-card-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.menu-card-preptime {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Bottom navigation ── */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 500;
+  display: flex;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border-color);
+  padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 0));
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.bottom-nav button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+.bottom-nav button span:first-child {
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* Room for the fixed bottom nav so content isn't hidden behind it */
+body {
+  padding-bottom: 64px;
+}
+
+/* ── Generic slide-up sheet modal (favorites / order history / profile) ── */
+.app-sheet-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+  background: rgba(15, 23, 42, 0.55);
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.app-sheet-modal[style*="flex"] {
+  display: flex;
+}
+
+.app-sheet-inner {
+  background: var(--bg-card);
+  width: 100%;
+  max-width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  border-radius: 24px 24px 0 0;
+  padding: 18px 20px calc(18px + env(safe-area-inset-bottom, 0));
+}
+
+.app-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 16px;
+}
+
+.app-sheet-header button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.fav-row,
+.order-history-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+}
+
+.order-history-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.order-history-row > div:first-child {
+  display: flex;
+  justify-content: space-between;
+}
+
+.order-history-date {
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+
+/* ── Order tracking timeline ── */
+.tracking-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 14px;
+}
+
+.tracking-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.tracking-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.tracking-step-done {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tracking-step-done .tracking-dot {
+  background: var(--primary);
+}
+
+.tracking-cancelled {
+  color: var(--accent-red);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+/* ── Delivery checkout modal (.co-* — content injected by
+     window.openDeliveryCheckout() in client.js) ── */
+#checkout-modal[style*="flex"] {
+  display: flex;
+}
+
+.co-method-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 4px;
+  border: 2px solid var(--border-color);
+  border-radius: 14px;
+  cursor: pointer;
+  background: var(--bg-card);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  transition: all .18s;
+  min-width: 0;
+}
+
+.co-method-btn:hover {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+.co-method-btn.co-active {
+  border-color: var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+}
+
+.co-method-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.co-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  outline: none;
+  transition: border-color .15s;
+}
+
+.co-input:focus {
+  border-color: var(--primary);
+}
+
+.co-pay-btn {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 14px;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+  background: linear-gradient(135deg, #22c55e, #15803d);
+  color: #fff;
+  box-shadow: 0 4px 18px rgba(34, 197, 94, .32);
+  transition: transform .15s, box-shadow .15s;
+}
+
+.co-pay-btn:hover {
+  transform: translateY(-1px);
+}
+
+/* ============================================================
+   Modern Delivery-App visual pass (Wolt/Yandex-Eats/Glovo style)
+   Header icons row, rating, "Deliver to" bar, home featured
+   sections, modifier chips, reorder button.
+   ============================================================ */
+
+.header-icons-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+  /* 🩹 Talab: "til tanlashni va dark/light mode ni headerni o'ng
+     tomoniga ko'chir" — .header-center endi flex:1 1 auto (yoki ≥768px'da
+     mutlaq pozitsiyalangan) bo'lgani uchun, bu margin-left:auto
+     header-icons-row'ni har doim qatorning ENG O'NG chetiga suradi. */
+  margin-left: auto;
+}
+
+.icon-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  font-size: 18px;
+  cursor: pointer;
+  transition: transform .12s, background .15s;
+}
+
+.icon-btn:hover {
+  background: var(--bg-card-hover);
+}
+
+.icon-btn:active {
+  transform: scale(0.92);
+}
+
+.store-rating {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.deliver-to-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+}
+
+.deliver-to-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.deliver-to-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.deliver-to-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.deliver-to-address {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deliver-to-change {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+/* ── Home featured sections (horizontal scroll rows) ── */
+#homeFeaturedSections:empty {
+  display: none;
+}
+
+.home-section {
+  margin: 18px 0;
+}
+
+.home-section-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
+.home-section-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+}
+
+.home-section-row::-webkit-scrollbar {
+  display: none;
+}
+
+.mini-card {
+  flex: 0 0 auto;
+  width: 130px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  overflow: hidden;
+  position: relative;
+  transition: transform .12s;
+}
+
+.mini-card:active {
+  transform: scale(0.97);
+}
+
+.mini-card-oos {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  cursor: default;
+}
+
+.mini-card-img,
+.mini-card-img-placeholder {
+  width: 100%;
+  height: 90px;
+  object-fit: cover;
+  display: block;
+}
+
+.mini-card-img-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  background: var(--bg-input);
+}
+
+.mini-card-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 6px 8px 0;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-card-price {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  padding: 2px 8px 8px;
+}
+
+.mini-card-oos-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: rgba(17, 24, 39, 0.82);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+/* ── Per-dish rating + name row on the main menu grid ── */
+.menu-card-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.menu-card-rating {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Modifier chips in the cart ── */
+.nc-cart-modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.nc-mod-chip {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 30px;
+  background: var(--bg-tag);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Reorder button in order history ── */
+.reorder-btn {
+  margin-top: 6px;
+  align-self: flex-start;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1.5px solid var(--primary);
+  background: var(--primary-subtle);
+  color: var(--primary);
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.reorder-btn:hover {
+  background: var(--primary-glow);
+}
+
+/* ── Accessibility: consistent minimum tap target size ── */
+.cat-tab,
+.subcat-tab,
+.co-method-btn,
+.menu-card-add-btn,
+.bottom-nav button {
+  min-height: 40px;
+}
+
+button,
+.icon-btn,
+.deliver-to-row {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+.icon-btn:focus-visible,
+.deliver-to-row:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.co-pay-btn:disabled {
+  background: #94a3b8;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.co-item-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.co-item-row:last-child {
+  border-bottom: none;
+}
+
+.co-item-img,
+.co-item-img-placeholder {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.co-item-img {
+  object-fit: cover;
+  border: 1px solid var(--border-color);
+}
+
+.co-item-img-placeholder {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+/* ── Responsive: desktop keeps the mobile-first layout centered & capped ── */
+@media (min-width: 900px) {
+  .app-sheet-inner,
+  #checkout-modal #checkout-inner {
+    border-radius: 20px;
+    margin-bottom: 5vh;
+  }
+
+  .bottom-nav {
+    max-width: 480px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-radius: 16px 16px 0 0;
+    border-left: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+  }
+}
+
+@keyframes fbBounce {
+  0%   { transform: scale(0.4); opacity: 0; }
+  75%  { transform: scale(1.15); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+
+.fb-title {
+  font-family: var(--font-display, 'Sora', sans-serif);
+  font-size: 19px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 5px;
+  letter-spacing: -0.3px;
+}
+
+.fb-subtitle {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  font-weight: 500;
+}
+
+/* ── Rating Group ────────────────────────────────────────── */
+.fb-group {
+  background: #f8fafc;
+  border: 1px solid #e9edf2;
+  border-radius: 16px;
+  padding: 13px 16px 14px;
+  margin-bottom: 10px;
+}
+
+.fb-group-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 10px;
+}
+
+.fb-group-icon { font-size: 17px; line-height: 1; }
+
+/* ── Stars ───────────────────────────────────────────────── */
+.fb-stars {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.fb-stars span {
+  font-size: 30px;
+  line-height: 1;
+  color: #d1d5db;
+  -webkit-text-stroke: 1.2px #c4c9d4;
+  transition:
+    color 0.14s ease,
+    transform 0.15s cubic-bezier(.34, 1.56, .64, 1),
+    filter 0.14s ease;
+  user-select: none;
+}
+
+.fb-stars span:hover,
+.fb-stars span.hovered {
+  transform: scale(1.28);
+  color: #fcd34d;
+  -webkit-text-stroke: 1px #f59e0b;
+  filter: drop-shadow(0 2px 6px rgba(251, 191, 36, 0.55));
+}
+
+.fb-stars span.active {
+  color: #f59e0b;
+  -webkit-text-stroke: 1px #d97706;
+  filter: drop-shadow(0 1px 4px rgba(245, 158, 11, 0.38));
+}
+
+/* ── Comment textarea ────────────────────────────────────── */
+.fb-comment { margin: 14px 0 18px; }
+
+.fb-comment textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 11px 13px;
+  font-family: var(--font-body, 'DM Sans', sans-serif);
+  font-size: 13px;
+  color: #374151;
+  background: #f8fafc;
+  outline: none;
+  line-height: 1.55;
+  box-sizing: border-box;
+  transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+}
+
+.fb-comment textarea::placeholder { color: #9ca3af; }
+
+.fb-comment textarea:focus {
+  border-color: #16a34a;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.13);
+}
+
+/* ── Submit button ───────────────────────────────────────── */
+.fb-submit {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+  color: #fff;
+  font-family: var(--font-display, 'Sora', sans-serif);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(34, 197, 94, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.2s;
+  margin-bottom: 10px;
+}
+
+.fb-submit:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 7px 24px rgba(34, 197, 94, 0.45);
+}
+
+.fb-submit:active:not(:disabled) { transform: scale(0.98); }
+
+.fb-submit:disabled,
+.fb-submit--loading {
+  background: linear-gradient(135deg, #86efac, #4ade80);
+  cursor: not-allowed;
+  box-shadow: none;
+  opacity: 0.8;
+}
+
+/* ── Skip link ───────────────────────────────────────────── */
+.fb-skip {
+  display: block;
+  width: 100%;
+  padding: 5px;
+  border: none;
+  background: none;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.fb-skip:hover { color: #6b7280; }
+
+/* ── Success state ───────────────────────────────────────── */
+.fb-success {
+  text-align: center;
+  padding: 18px 0 10px;
+  animation: fbPopIn 0.35s cubic-bezier(.32, 1.25, .55, 1);
+}
+
+.fb-success-icon {
+  display: block;
+  font-size: 58px;
+  line-height: 1;
+  margin-bottom: 16px;
+  animation: fbBounce 0.5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.fb-success-title {
+  font-family: var(--font-display, 'Sora', sans-serif);
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 8px;
+}
+
+.fb-success-desc {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ── Mobile ──────────────────────────────────────────────── */
+@media (max-width: 440px) {
+  .fb-card        { padding: 26px 18px 22px; border-radius: 20px; }
+  .fb-emoji       { font-size: 38px; }
+  .fb-title       { font-size: 17px; }
+  .fb-stars span  { font-size: 26px; }
+}
+
+/* ── Feedback modal — dark-mode overrides (hardcoded hex above) ── */
+html[data-theme="dark"] .fb-card { background: var(--bg-card); }
+html[data-theme="dark"] .fb-close { background: var(--bg-input); color: var(--text-secondary); }
+html[data-theme="dark"] .fb-close:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+html[data-theme="dark"] .fb-title { color: var(--text-primary); }
+html[data-theme="dark"] .fb-subtitle { color: var(--text-secondary); }
+html[data-theme="dark"] .fb-group { background: var(--bg-input); border-color: var(--border-color); }
+html[data-theme="dark"] .fb-group-label { color: var(--text-secondary); }
+html[data-theme="dark"] .fb-comment textarea {
+  background: var(--bg-input);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+html[data-theme="dark"] .fb-comment textarea:focus {
+  background: var(--bg-card);
+  border-color: var(--primary);
+}
+html[data-theme="dark"] .fb-skip { color: var(--text-muted); }
+html[data-theme="dark"] .fb-skip:hover { color: var(--text-secondary); }
+html[data-theme="dark"] .fb-success-title { color: var(--text-primary); }
+html[data-theme="dark"] .fb-success-desc { color: var(--text-secondary); }
+
+/* ════════════════════════════════════════════════════════════
+   IDs — contextual overrides & scoped styles
+   ════════════════════════════════════════════════════════════ */
+
+/* Lang selector */
+#langSelect {
+  width: auto;
+  padding: 6px 12px;
+}
+
+/* Filter selects — full width on small screens */
+#filterCategory,
+#filterSubcategory,
+#filterType {
+  flex: 1;
+  min-width: 80px;
+}
+
+/* Table input locked state */
+#tableInput {
+  cursor: not-allowed;
+  opacity: 0.85;
+}
+
+/* Phone input */
+#clientPhoneInput {
+  flex: 1;
+}
+
+/* Table check button */
+#tableCheckBtn {
+  white-space: nowrap;
+}
+
+/* VIP percent inline highlight */
+#vip-percent {
+  font-weight: 900;
+  font-size: inherit;
+}
+
+/* Menu grid container */
+#clientMenu {
+  width: 100%;
+}
+
+/* Header ETA block */
+#header-ready-eta {
+  margin-left: auto;
+  text-align: right;
+}
+
+#header-eta-time {
+  font-size: 14px;
+  font-weight: 800;
+  color: #16a34a;
+}
+
+#header-countdown-text {
+  font-size: 22px;
+  font-weight: 900;
+  color: #22c55e;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+/* Prep label (timer header text) */
+#chef-prep-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #16a34a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Logo image in header */
+#headerLogoImg {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  border-radius: 50%;
+  display: block;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html <style> BLOCKS — admin panel CSS audit
+   (mechanical move, Phase 1; each former inline block kept intact and
+   separated below so it can be re-filed into the right named section
+   in a follow-up pass; nothing here has been renamed or altered)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── admin.html style block #1 ── */
+
+    /* Menyu kartochkasida narxni +/- tugmalari ustida ko'rsatish */
+    .menu-card .qty {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+      width: 100%;
+    }
+    .menu-card .qty-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      background: var(--bg-card, #f8fafc);
+      border: 1px solid var(--border-color, #e2e8f0);
+      border-radius: 10px;
+      padding: 6px 10px;
+    }
+    .menu-card .qty-price {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--primary, #16a34a);
+      text-align: center;
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.25);
+      border-radius: 8px;
+      padding: 4px 8px;
+    }
+  
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html inline style="..." ATTRIBUTES — Phase 2a
+   Each class below corresponds 1:1 to a former inline style string.
+   Identical inline styles were deduplicated into ONE shared class.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.u-93f17c0d {
+  background:none;
+  box-shadow:none;
+  border:none;
+  width:44px;
+  height:44px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.u-acd069ee {
+  width:44px;
+  height:44px;
+  object-fit:contain;
+  border-radius:50%;
+  display:block;
+}
+
+.u-1a52cca8 {
+  display: none;
+  background: linear-gradient(135deg, #FBBF24, #F59E0B);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.4);
+  border: 1px solid #FDE68A;
+  letter-spacing: 0.5px;
+  margin-left: 10px;
+}
+
+.u-696a3c25 {
+  width: auto;
+  padding: 6px 12px;
+}
+
+.u-cb458930 {
+  display:none;
+}
+
+.u-1fbbf5ac {
+  background:linear-gradient(135deg,rgba(22,163,74,0.1),rgba(16,185,129,0.06));
+  border:1.5px solid rgba(34,197,94,0.3);
+  border-radius:14px;
+  padding:8px 16px;
+  display:none;
+  align-items:center;
+  gap:10px;
+  /* #header-timer-container — .header endi flex-wrap qator bo'lgani
+     uchun, ko'rsatilganda (JS style.display='flex' qilganda) bu ham
+     boshqa header elementlari bilan bitta qatorda aralashmasdan, o'z
+     alohida qatoriga tushishi kerak. */
+  flex: 1 1 100%;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.u-77ad6c12 {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  width:100%;
+}
+
+.u-34eab3ae {
+  font-size:22px;
+  line-height:1;
+}
+
+.u-b81b059b {
+  display:flex;
+  flex-direction:column;
+  gap:1px;
+}
+
+.u-3ec23a04 {
+  font-size:10px;
+  font-weight:700;
+  color:#16a34a;
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+}
+
+.u-991029de {
+  font-size:22px;
+  font-weight:900;
+  color:#22c55e;
+  line-height:1.1;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:1px;
+}
+
+.u-d785f403 {
+  margin-left:auto;
+  text-align:right;
+  display:none;
+}
+
+.u-0fba45b5 {
+  font-size:10px;
+  color:#94a3b8;
+  font-weight:600;
+}
+
+.u-8cc7d5a0 {
+  font-size:14px;
+  font-weight:800;
+  color:#16a34a;
+}
+
+.u-1ee0d65a {
+  display: none;
+  background: linear-gradient(135deg, #FBBF24, #F59E0B);
+  color: #fff;
+  padding: 16px 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+  animation: fadeIn 0.5s;
+}
+
+.u-bcdc7df8 {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.u-dfef11cd {
+  font-size: 14px;
+  margin-top: 5px;
+  opacity: 0.9;
+}
+
+.u-93b8ea5b {
+  display:none;
+}
+
+.u-3b07ef7a {
+  display: none;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 20px;
+  border-radius: var(--radius-lg);
+  margin: 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.u-0ec501be {
+  display:none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 10000;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.u-e60d5eab {
+  width: 100%;
+  max-width: 400px;
+}
+
+.u-4bf230a9 {
+  display:none;
+  padding:0;
+}
+
+.u-3be814ee {
+  display:none;
+  margin-bottom:10px;
+  flex-wrap:wrap;
+  gap:6px;
+}
+
+.u-c58d5bea {
+  margin-bottom:10px;
+}
+
+.u-cf5a7acc {
+  width:100%;
+  justify-content:center;
+}
+
+.u-804cbe9e {
+  display:none;
+  margin-bottom:8px;
+  font-size:12.5px;
+  font-weight:600;
+  color:var(--primary);
+}
+
+.u-2ba2335d {
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:8px;
+}
+
+.u-f998f1c6 {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:8px;
+  margin-top:8px;
+}
+
+.u-f8c05ed7 {
+  margin-top:8px;
+  width:100%;
+}
+
+.u-92d17336 {
+  margin-top:10px;
+}
+
+.u-c68d6a22 {
+  font-size:12.5px;
+  font-weight:700;
+  color:#475569;
+  margin:0 0 6px;
+}
+
+.u-67669670 {
+  display:flex;
+  gap:6px;
+  margin-bottom:8px;
+  flex-wrap:wrap;
+}
+
+.u-a09241f8 {
+  padding:7px 14px;
+  border-radius:999px;
+  border:1.5px solid #e2e8f0;
+  background:#fff;
+  color:#475569;
+  font-size:12.5px;
+  font-weight:600;
+  cursor:pointer;
+}
+
+.u-8588e44d {
+  width:100%;
+}
+
+.u-a94a1ed9 {
+  display:none;
+  margin-top:6px;
+  font-size:12px;
+  font-weight:600;
+  color:#16a34a;
+}
+
+.u-783babc5 {
+  margin-top:8px;
+  display:flex;
+  gap:8px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.u-fc5e0a0b {
+  display:flex;
+  align-items:center;
+  gap:6px;
+  font-size:13px;
+}
+
+.u-527ca194 {
+  height:220px;
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:8px;
+  display:none;
+}
+
+.u-eaefdbfe {
+  margin-top:8px;
+  font-size:13px;
+  font-weight:600;
+}
+
+.u-45dd21a9 {
+  text-align:center;
+  padding:8px 0 4px;
+}
+
+.u-cff73c4d {
+  font-size:40px;
+  line-height:1;
+}
+
+.u-0c48f2a7 {
+  font-size:16px;
+  font-weight:700;
+  margin-top:10px;
+  text-align:center;
+  max-width:260px;
+}
+
+.u-33d2c6ad {
+  margin-top:14px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.u-10e84482 {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:14.5px;
+}
+
+.u-d5e8c5f3 {
+  flex:1;
+}
+
+.u-c43de725 {
+  font-size:13px;
+  color:var(--text-secondary,#6b7280);
+}
+
+.u-f4e33083 {
+  margin-top:14px;
+}
+
+.u-a10c5e0d {
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.u-8224f9be {
+  margin-top:8px;
+  width:100%;
+  justify-content:center;
+}
+
+.u-66553ab0 {
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.55);
+  z-index:9999;
+  align-items:flex-end;
+  justify-content:center;
+  padding:0;
+}
+
+.u-e568c02b {
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.55);
+  z-index:10000;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+}
+
+/* ── Delivery-address panel utility classes — dark-mode overrides
+   (these render inside #checkout-modal/#addressesModal, both already
+   dark-aware via var(--bg-card)/var(--co-input) elsewhere; only the
+   hardcoded-hex utility classes below need an explicit pass). ── */
+html[data-theme="dark"] .u-c68d6a22 { color: var(--text-secondary); }
+html[data-theme="dark"] .u-a09241f8 {
+  border-color: var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-secondary);
+}
+html[data-theme="dark"] .u-a94a1ed9 { color: var(--primary); }
+html[data-theme="dark"] .u-c43de725 { color: var(--text-secondary); }

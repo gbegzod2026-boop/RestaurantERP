@@ -1,0 +1,1571 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   courier.css — Nesta Courier panel stylesheet
+   Extracted from courier.html's inline <style> block + inline style="..."
+   attributes (CSS Architecture Migration). Pure move — no values changed.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html <style> BLOCKS — admin panel CSS audit
+   (mechanical move, Phase 1; each former inline block kept intact and
+   separated below so it can be re-filed into the right named section
+   in a follow-up pass; nothing here has been renamed or altered)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── admin.html style block #1 ── */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+/* 🩹 Talab: "footer tepaga chiqib ketgan, pastga sahifa eng tagiga
+   tushur" — mountStaffFooter({fixed:false}, ...) (courier.js) footer'ni
+   normal oqim ichida joylashtiradi (.nesta-staff-footer-static, o'zida
+   margin-top:auto bor — staffFooter.css), lekin bu faqat body FLEX
+   konteyner bo'lgandagina ishlaydi (client.css'da bu xuddi shu sababdan
+   qo'shilgan edi). Avval body oddiy block edi — kontent qisqa bo'lsa,
+   footer sahifa OXIRIDA emas, kontentdan keyin, pastki navigatsiyagacha
+   bo'lgan katta bo'sh joydan OLDIN qolib ketardi. */
+body {
+  font-family: 'Inter', 'Plus Jakarta Sans', -apple-system, sans-serif;
+  background: #f1f5f9;
+  color: #0f172a;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 90px;
+}
+
+/* ══════════════ HEADER ══════════════ */
+.courier-header {
+  background: #0f172a;
+  color: #fff;
+  padding: 14px 16px;
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 🆕 YAGONA STAFF FOOTER — header bilan aynan bir xil fon (#0f172a).
+   Courier header body.dark-mode'ga qarab HECH QACHON o'zgarmaydi
+   (yuqoridagi .courier-header'da ham theme shartlari yo'q) — shuning
+   uchun footer ham shartsiz, doim shu rangda. Static (normal-flow)
+   rejimda — .bottom-nav'dan tepada, courier.js: mountStaffFooter({
+   fixed:false, insertBefore:".bottom-nav" }). */
+.nesta-staff-footer {
+  --staff-footer-bg: #0f172a;
+  --staff-footer-text: #ffffff;
+  --staff-footer-text-secondary: rgba(255, 255, 255, 0.55);
+  --staff-footer-border: rgba(255, 255, 255, 0.08);
+}
+
+/* 🩹 WAITER HEADER BILAN BIR XIL STRUKTURA — avvalgi .courier-header-left
+   (avatar+ism+"Kuryer — Restoran" pastki qator) va .courier-header-right
+   (battery+til+logout, bittalik chap-o'ng joylashuv) butunlay YANGI,
+   waiter'dan farqli struktura edi. Endi waiter.css'dagi .w-header-left/
+   .w-sep/.w-staff/.w-header-center/.w-center-rest/.w-center-datetime/
+   .w-header-actions bilan BIR XIL naqsh (co- prefiksi bilan, chef.css'da
+   ham xuddi shunday ch- prefiksi ishlatilgan edi) — mavjud CSS fayllar
+   birlashtirilmagani uchun qiymatlar takrorlanadi, lekin struktura/hisob
+   bir xil. .courier-avatar/.courier-name/.courier-sub olib tashlandi
+   (waiter headerida avatar/ikkinchi qator yo'q). */
+.co-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.co-sep {
+  color: rgba(255, 255, 255, .35);
+  font-size: 15px;
+  font-weight: 300;
+  flex-shrink: 0;
+}
+
+.co-staff {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+/* Markaziy blok — waiter.css'ning .w-header-center bilan bir xil texnika
+   (position:absolute, chap/o'ng tomon o'lchamidan mustaqil haqiqiy
+   markaz). .courier-header allaqachon position:sticky (yuqorida) — shu
+   containing block sifatida yetarli. */
+.co-header-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.25;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 40%;
+}
+
+.co-header-center .co-center-rest {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.co-header-center .co-center-datetime {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, .55);
+  margin-top: 2px;
+}
+
+.co-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* 🆕 Theme-toggle — waiter bilan bir xil ikonka almashish (fa-moon/
+   fa-sun), lekin html[data-theme] o'rniga courier'ning O'ZINING
+   body.dark-mode klassidan (courier.js: _syncCourierThemeToggleIcon()
+   qo'yadigan .is-dark klass orqali) foydalanadi — yangi/parallel theme
+   tizimi yaratilmadi. header.css'dan 42x42px o'lcham meros qilinadi. */
+.theme-toggle-btn {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.theme-toggle-btn .fa-sun { display: none; }
+.theme-toggle-btn .fa-moon { display: inline; }
+.theme-toggle-btn.is-dark .fa-sun { display: inline; }
+.theme-toggle-btn.is-dark .fa-moon { display: none; }
+
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.btn-logout:hover { background: rgba(239, 68, 68, 0.2); }
+
+/* Til select — courier-header-actions'dagi boshqa tugmalar bilan bir xil
+       (rgba oq fon, 9px radius) uslub, chef.html/waiter.html'dagi #langSelect
+       bilan bir xil id/atributlar orqali ishlaydi. */
+.courier-lang-select {
+  height: 34px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 9px;
+  cursor: pointer;
+  outline: none;
+}
+
+.courier-lang-select option {
+  background: #1e293b;
+  color: #fff;
+}
+
+/* Courier header fon rangi to'q ko'k — umumiy nesta-header brend matni
+       shu yerda oq rangda ko'rinishi kerak. */
+.courier-header .nesta-header-product {
+  color: #fff;
+}
+
+.courier-header .nesta-header-role {
+  color: #94a3b8;
+}
+
+.courier-header .nesta-header-avatar {
+  background: #1e293b;
+  color: #fff;
+}
+
+/* 🩹 MOBILE — courier.css'da avval umuman @media breakpoint yo'q edi
+   (panel har doim telefon kengligida ishlatiladi deb hisoblangan, header
+   ham ataylab minimal edi). Endi header waiter bilan bir xil to'liq
+   tarkibga ega bo'lgani uchun (markaz blok + separator + xodim nomi +
+   4 ta amal tugmasi) — tor ekranda waiter.css'ning O'ZI qanday
+   qisqarishini ishlatadi: .w-header-center 780px'da, .w-staff/.w-sep
+   760px'da yashiriladi. Bu yerda ham xuddi shu ikkita chegara (bitta
+   qo'shma qoidada) ishlatiladi — faqat logo+brand va o'ng amal
+   tugmalari (theme/til/logout — barchasi funksional jihatdan zarur)
+   har doim ko'rinib turadi. */
+@media (max-width: 480px) {
+  .co-header-center {
+    display: none;
+  }
+  .co-sep,
+  .co-staff {
+    display: none;
+  }
+  .co-header-actions {
+    gap: 6px;
+  }
+  .courier-lang-select {
+    width: 46px;
+    padding: 0 4px;
+    text-align: center;
+  }
+}
+
+/* ══════════════ SMENA KARTASI (shift summary) ══════════════ */
+.shift-card {
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: #fff;
+  padding: 18px 16px 16px;
+  position: relative;
+}
+
+.shift-card-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #e2e8f0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+
+/* Holat (availability) tugmasi */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  gap: 10px;
+  /* Stage 9 redesign fix — pre-existing overflow bug found live via 320-
+     390px screenshot testing (NOT introduced by this pass): three nowrap
+     status-toggle buttons ("Ishlayapman"/"Tanaffus"/"Offline" — the
+     longest-label language, UZ) didn't fit next to the label at narrow
+     widths (courier.css had no responsive breakpoints at all before this
+     fix). flex-wrap lets the toggle group drop to its own row; min-width:0
+     lets the label shrink instead of forcing this flex row wider than its
+     container. */
+  flex-wrap: wrap;
+}
+
+.status-bar-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  min-width: 0;
+}
+
+.status-toggle-group {
+  display: flex;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+  /* Own full row once wrapped (see .status-bar above) — otherwise it would
+     sit alone at whatever width its 3 buttons demand, which can still
+     exceed a very narrow viewport on its own. min-width:0 is required
+     here too (not just on the buttons inside it) — as a flex item of
+     .status-bar, THIS element also defaults to min-width:auto and was
+     still refusing to shrink below its own content's width without it. */
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.status-toggle-btn {
+  border: none;
+  background: transparent;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #94a3b8;
+  white-space: nowrap;
+  /* Share the row equally and allow shrinking below their nowrap text's
+     natural width (flex items default to min-width:auto, which is exactly
+     what caused the overflow) — text-overflow ellipsis is the safety net
+     if a translation is ever long enough to still not fit. */
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.status-toggle-btn.active[data-status="online"] {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.status-toggle-btn.active[data-status="paused"] {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status-toggle-btn.active[data-status="offline"] {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Statistika gridi */
+.shift-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.shift-stat-box {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 12px 6px;
+  text-align: center;
+}
+
+.shift-stat-value {
+  font-size: 19px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.15;
+}
+
+.shift-stat-value.small {
+  font-size: 13.5px;
+}
+
+.shift-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+/* Batareya chip (header ichida qoladi) */
+.battery-chip {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ══════════════ FAOL BUYURTMALAR SARLAVHASI ══════════════ */
+.active-orders-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+  padding: 16px 14px 8px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.active-orders-heading .cnt-badge {
+  background: #ef4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  border-radius: 20px;
+  padding: 1px 8px;
+  min-width: 18px;
+  text-align: center;
+}
+
+/* ══════════════ CONTENT ══════════════ */
+.courier-content {
+  padding: 14px;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.courier-empty {
+  text-align: center;
+  color: #94a3b8;
+  padding: 60px 20px;
+  font-size: 14px;
+}
+
+.courier-empty .icon {
+  font-size: 40px;
+  margin-bottom: 10px;
+}
+
+/* ══════════════ ASSIGNMENT CARD ══════════════ */
+.assign-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  border-left: 4px solid #3b82f6;
+}
+
+/* 🆕 "Mavjud buyurtmalar" (umumiy pool, hali hech kim olmagan) — boshqa
+   faol kartalardan ajralib turishi uchun accent chegara. */
+.assign-card.available-card {
+  border-left-color: #16a34a;
+}
+
+.assign-card.status-picked_up {
+  border-left-color: #f59e0b;
+}
+
+.assign-card.status-in_transit {
+  border-left-color: #8b5cf6;
+}
+
+.assign-card.status-delivered {
+  border-left-color: #22c55e;
+}
+
+.assign-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.assign-order-num {
+  font-weight: 800;
+  font-size: 15px;
+  color: #0f172a;
+}
+
+.assign-status-chip {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.assign-status-chip.assigned {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.assign-status-chip.picked_up {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.assign-status-chip.in_transit {
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.assign-status-chip.delivered {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.assign-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #475569;
+  margin-bottom: 5px;
+}
+
+.assign-row .lbl-icon {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.assign-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 10px;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+
+.assign-meta-item {
+  font-size: 11.5px;
+}
+
+.assign-meta-item .meta-lbl {
+  color: #94a3b8;
+  font-weight: 700;
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 2px;
+}
+
+.assign-meta-item .meta-val {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.assign-distance-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 20px;
+  padding: 3px 9px;
+}
+
+/* ══════════════ BUYURTMA TAFSILOTI MODAL ══════════════ */
+.cdetail-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 900;
+  display: none;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.cdetail-overlay.show {
+  display: flex;
+}
+
+.cdetail-sheet {
+  background: #fff;
+  width: 100%;
+  max-width: 560px;
+  max-height: 88vh;
+  overflow-y: auto;
+  border-radius: 18px 18px 0 0;
+  padding: 18px 16px 24px;
+  animation: cdetailUp 0.2s ease;
+}
+
+@keyframes cdetailUp {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.cdetail-handle {
+  width: 40px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  margin: 0 auto 14px;
+}
+
+.cdetail-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.cdetail-order-num {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cdetail-close-btn {
+  border: none;
+  background: #f1f5f9;
+  color: #475569;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cdetail-section-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin: 16px 0 8px;
+}
+
+.cdetail-section-title:first-of-type {
+  margin-top: 0;
+}
+
+.cdetail-customer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.cdetail-customer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cdetail-customer-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.cdetail-customer-phone {
+  font-size: 12.5px;
+  color: #64748b;
+}
+
+.cdetail-contact-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.cdetail-contact-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.cdetail-contact-btn.call {
+  background: #dcfce7;
+}
+
+.cdetail-contact-btn.telegram {
+  background: #dbeafe;
+}
+
+.cdetail-address-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.cdetail-nav-btn {
+  width: 100%;
+  border: none;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 11px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cdetail-items-list {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 4px 12px;
+}
+
+.cdetail-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  font-size: 13.5px;
+  color: #0f172a;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cdetail-item-row:last-child {
+  border-bottom: none;
+}
+
+.cdetail-item-qty {
+  font-weight: 700;
+  color: #64748b;
+}
+
+.cdetail-note-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.5;
+}
+
+.cdetail-payment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.cdetail-payment-chip.selected {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+/* ══════════════ 5-BOSQICHLI STATUS TUGMASI ══════════════ */
+.cdetail-status-track {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 4px;
+}
+
+.cdetail-status-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  opacity: 0.4;
+}
+
+.cdetail-status-step.done {
+  opacity: 1;
+}
+
+.cdetail-status-step.current {
+  opacity: 1;
+}
+
+.cdetail-status-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
+  font-weight: 800;
+}
+
+.cdetail-status-step.done .cdetail-status-dot {
+  background: #22c55e;
+  color: #fff;
+}
+
+.cdetail-status-step.current .cdetail-status-dot {
+  background: #2563eb;
+  color: #fff;
+}
+
+.cdetail-status-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.cdetail-status-step.current .cdetail-status-label {
+  color: #0f172a;
+}
+
+.cdetail-status-arrow {
+  font-size: 11px;
+  color: #cbd5e1;
+  padding-left: 10px;
+  margin-left: 1px;
+}
+
+.cdetail-next-btn {
+  width: 100%;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 13px;
+  border-radius: 12px;
+  cursor: pointer;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.cdetail-next-btn.success {
+  background: #16a34a;
+}
+
+.cdetail-next-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ══════════════ XARITA BO'LIMI ══════════════ */
+.cdetail-map-mini-route {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.cdetail-map-mini-route .map-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+}
+
+.cdetail-map-mini-route .map-node-icon {
+  font-size: 16px;
+}
+
+.cdetail-map-mini-route .map-arrow {
+  color: #94a3b8;
+  font-size: 13px;
+  padding: 0 4px;
+}
+
+#cdetailYandexMap {
+  width: 100%;
+  height: 220px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #e2e8f0;
+  margin-bottom: 10px;
+}
+
+.cdetail-map-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cdetail-map-stat-box {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+}
+
+.cdetail-map-stat-value {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cdetail-map-stat-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* ══════════════ TARIX BO'LIMI (ALOHIDA SAHIFA) ══════════════ */
+.history-view {
+  display: none;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.history-view.show {
+  display: block;
+}
+
+.history-filter-tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.history-filter-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 9px 6px;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.history-filter-btn.active {
+  background: #0f172a;
+  color: #fff;
+}
+
+.history-order-row {
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-order-left {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-order-num {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.history-order-time {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* 🆕 "👤 Alisher · 17.08.2026 21:34" — yetkazgan kuryer + sana/vaqt (item 21). */
+.history-order-courier {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.history-order-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.history-order-sum {
+  font-size: 14px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.history-order-status {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #15803d;
+  background: #f0fdf4;
+  border-radius: 20px;
+  padding: 2px 8px;
+}
+
+/* ══════════════ PASTKI NAVIGATSIYA ══════════════ */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  z-index: 600;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.bottom-nav-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 10px 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.bottom-nav-btn .bn-icon {
+  font-size: 18px;
+}
+
+.bottom-nav-btn.active {
+  color: #2563eb;
+}
+
+.assign-total {
+  font-weight: 800;
+  font-size: 15px;
+  color: #0f172a;
+  margin: 8px 0;
+}
+
+.assign-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.assign-btn {
+  flex: 1;
+  border: none;
+  padding: 11px 10px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.assign-btn.primary {
+  background: #2563eb;
+  color: #fff;
+}
+
+.assign-btn.success {
+  background: #22c55e;
+  color: #fff;
+}
+
+.assign-btn.outline {
+  background: #f8fafc;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.assign-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.assign-nav-btn {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ══════════════ TOAST ══════════════ */
+#courierToast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: #0f172a;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  max-width: 90%;
+  text-align: center;
+}
+
+#courierToast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+#courierToast.error {
+  background: #dc2626;
+}
+
+#courierToast.success {
+  background: #16a34a;
+}
+
+/* ══════════════ LOADER ══════════════ */
+.courier-loader {
+  display: flex;
+  justify-content: center;
+  padding: 40px;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ══════════════ YANGI BUYURTMA POPUP (Accept/Reject + countdown) ══════════════ */
+.offer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  z-index: 1200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.offer-overlay.show {
+  display: flex;
+}
+
+.offer-card {
+  background: #fff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 380px;
+  padding: 20px 18px 18px;
+  animation: cdetailUp 0.25s ease;
+}
+
+.offer-countdown-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.offer-countdown {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  background: conic-gradient(#2563eb var(--pct, 100%), #e2e8f0 0);
+  position: relative;
+}
+
+.offer-countdown::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #0f172a;
+}
+
+.offer-countdown span {
+  position: relative;
+  z-index: 1;
+}
+
+.offer-title {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.offer-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 7px 0;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+}
+
+.offer-row b {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.offer-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.offer-btn {
+  flex: 1;
+  border: none;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 14.5px;
+  cursor: pointer;
+}
+
+.offer-btn.accept {
+  background: #16a34a;
+  color: #fff;
+}
+
+.offer-btn.reject {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ══════════════ DASHBOARD VIEW ══════════════ */
+.page-view {
+  display: none;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 14px;
+}
+
+.page-view.show {
+  display: block;
+}
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.dash-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.dash-card-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.dash-card-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 3px;
+}
+
+.dash-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 16px 0 10px;
+}
+
+.dash-range-tabs {
+  display: flex;
+  background: #fff;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.dash-range-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 8px 6px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  cursor: pointer;
+}
+
+.dash-range-btn.active {
+  background: #0f172a;
+  color: #fff;
+}
+
+/* ══════════════ MAP VIEW ══════════════ */
+#courierMapFull {
+  width: 100%;
+  height: calc(100vh - 260px);
+  min-height: 320px;
+  border-radius: 14px;
+  background: #e2e8f0;
+}
+
+/* ══════════════ PROFILE / SETTINGS VIEW ══════════════ */
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.profile-avatar-lg {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #0f172a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.profile-list {
+  background: #fff;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  margin-bottom: 14px;
+}
+
+.profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 13.5px;
+}
+
+.profile-row:last-child {
+  border-bottom: none;
+}
+
+.profile-row-label {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.profile-row-val {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.profile-row select,
+.profile-row .switch-toggle {
+  border: none;
+  background: transparent;
+  font-weight: 700;
+  color: #2563eb;
+}
+
+.switch-toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 20px;
+  background: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.switch-toggle.on {
+  background: #16a34a;
+}
+
+.switch-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  transition: left 0.15s;
+}
+
+.switch-toggle.on::after {
+  left: 20px;
+}
+
+.profile-btn-row {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: #fff;
+  padding: 14px 16px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.profile-btn-row.danger {
+  color: #dc2626;
+}
+
+body.dark-mode {
+  background: #0b1220;
+  color: #e2e8f0;
+}
+
+body.dark-mode .dash-card,
+body.dark-mode .assign-card,
+body.dark-mode .profile-list,
+body.dark-mode .profile-header,
+body.dark-mode .history-order-row,
+body.dark-mode .profile-btn-row,
+body.dark-mode .history-filter-tabs,
+body.dark-mode .dash-range-tabs,
+body.dark-mode .bottom-nav,
+body.dark-mode .offer-card {
+  background: #111827;
+  color: #e2e8f0;
+}
+
+body.dark-mode .assign-meta-grid,
+body.dark-mode .cdetail-sheet {
+  background: #111827;
+}
+
+body.dark-mode .cdetail-sheet {
+  color: #e2e8f0;
+}
+
+/* 🩹 Talab: "dark mode'da ba'zi so'zlar ko'rinmayapti" — root cause:
+   yuqoridagi .dash-card/.assign-card/.history-order-row/.offer-card/
+   .profile-list/.cdetail-sheet kabi konteynerlarga dark-mode'da
+   color:#e2e8f0 berilgan, lekin ularning ICHIDAGI ko'plab bolalar (masalan
+   .assign-order-num, .assign-total, .meta-val) o'zlarining ANIQ
+   color:#0f172a (deyarli qora) qoidasiga ega — bu meros olingan
+   color:#e2e8f0'ni bosib yuboradi (element o'ziga tegishli aniq color
+   qoidasiga ega bo'lsa, u har doim merosdan ustun turadi). Natijada bu
+   matnlar dark-mode'ning to'q foniga qarshi deyarli ko'rinmas bo'lib
+   qolgan edi. Har biriga alohida, aniq dark-mode color'i berildi. */
+body.dark-mode .active-orders-heading,
+body.dark-mode .assign-order-num,
+body.dark-mode .assign-meta-item .meta-val,
+body.dark-mode .assign-total,
+body.dark-mode .cdetail-order-num,
+body.dark-mode .cdetail-customer-name,
+body.dark-mode .cdetail-item-row,
+body.dark-mode .cdetail-status-step.current .cdetail-status-label,
+body.dark-mode .cdetail-map-stat-value,
+body.dark-mode .history-order-num,
+body.dark-mode .history-order-sum,
+body.dark-mode .offer-title,
+body.dark-mode .offer-row b,
+body.dark-mode .dash-card-value,
+body.dark-mode .dash-section-title,
+body.dark-mode .profile-row-val {
+  color: #e2e8f0;
+}
+
+/* .assign-row (mijoz nomi/manzil qatorlari) — unconditional color:#475569
+   dark fonda o'qish qiyin edi (kontrast past), yorug'roq kulrangga
+   almashtirildi. */
+body.dark-mode .assign-row {
+  color: #cbd5e1;
+}
+
+/* .assign-distance-chip (masofa belgisi, masalan "3.2 km") — o'zining
+   yorug' foni (#f1f5f9) va matni (#475569) doim bir xil qolar edi,
+   dark-mode'da to'q karta ustida yorug' "yamalgan" ko'rinardi. */
+body.dark-mode .assign-distance-chip {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html inline style="..." ATTRIBUTES — Phase 2a
+   Each class below corresponds 1:1 to a former inline style string.
+   Identical inline styles were deduplicated into ONE shared class.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.u-93b8ea5b {
+  display: none;
+}
+
+.u-f55d1c7b {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.u-5fd34285 {
+  font-size: 12.5px;
+  color: #94a3b8;
+}

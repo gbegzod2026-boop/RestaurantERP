@@ -1,0 +1,103 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   staffFooter.css — Xodim/mijoz paneli uchun yagona (unified) footer
+   dizayn standarti (Waiter/Chef/Kassa/Courier/Client bilan bir xil).
+
+   header.css bilan bir xil naqsh: bu fayl faqat LAYOUT/tipografiya/
+   spacing/responsive'ni birlashtiradi. Ranglar (fon/matn) har bir panel
+   o'zining HEADER fonига mos ravishda quyidagi CSS custom property'larni
+   belgilaydi (chunki har bir panelning header foni boshqacha —
+   header.css ham buni bir joyga to'plamaydi, xuddi shu sababdan):
+     --staff-footer-bg              (fon — panel header foni bilan bir xil)
+     --staff-footer-text            (asosiy matn — oq/light yoki to'q)
+     --staff-footer-text-secondary  (ikkinchi darajali matn — muted)
+     --staff-footer-border          (yuqori chegara rangi)
+   Standart qiymatlar pastda beriladi (light-mode-ga mos) — panel CSS'i
+   ularni bosib yozmasa ham vizual jihatdan buzilmagan ko'rinadi.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.nesta-staff-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 22px;
+  padding: 11px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--staff-footer-bg, #ffffff);
+  color: var(--staff-footer-text, #0f172a);
+  border-top: 1px solid var(--staff-footer-border, rgba(15, 23, 42, 0.08));
+  box-sizing: border-box;
+  width: 100%;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+/* Viewport pastiga yopishgan rejim — bottom-nav'i yo'q panellar uchun
+   (Waiter/Chef/Kassa). Har bir panel o'z asosiy kontent konteyneriga
+   mos padding-bottom qo'shishi kerak (bu fayl buni bilib bo'lmaydi,
+   chunki har bir panelning layout tuzilishi boshqacha). */
+.nesta-staff-footer-fixed {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Normal-flow rejim — allaqachon o'z fixed bottom-nav'iga ega panellar
+   uchun (Courier/Client) — ikkita fixed element ustma-ust chiqmasin
+   deb, footer shu panellarda oddiy oqim ichida, bottom-nav'dan tepada
+   joylashadi (mountStaffFooter({fixed:false, insertBefore:...})).
+   🩹 margin-top:auto — client.css'ning body { display:flex; flex-
+   direction:column; } bilan birga: sahifa kontenti qisqa bo'lsa ham, bu
+   footer har doim ustun PASTIGA (ya'ni fixed bottom-nav'ning tepasiga)
+   turtib qo'yiladi — avval kontent qanchalik uzunligiga qarab, footer
+   bilan ekran pastidagi navigatsiya orasida bo'sh kulrang joy qolib
+   ketardi. */
+.nesta-staff-footer-static {
+  position: static;
+  box-shadow: none;
+  margin-top: auto;
+}
+
+.nesta-staff-footer-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.nesta-staff-footer-icon {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.9;
+  flex-shrink: 0;
+}
+
+.nesta-staff-footer-item b {
+  font-weight: 700;
+  color: inherit;
+}
+
+.nesta-staff-footer-custom {
+  color: var(--staff-footer-text-secondary, var(--staff-footer-text, #64748b));
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+/* ── Responsive — talab: 1-2 qatorga moslashadi, matn kesilmaydi ── */
+@media (max-width: 640px) {
+  .nesta-staff-footer {
+    gap: 6px 16px;
+    padding: 9px 16px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 400px) {
+  .nesta-staff-footer {
+    padding: 8px 12px;
+    gap: 4px 12px;
+  }
+}

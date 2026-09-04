@@ -1485,10 +1485,10 @@ io.on("connection", (socket) => {
 });
 
 // ─── Static + Listen ──────────────────────────────────────────────────────────
-const staticPath = path.join(__dirname, "../admin-frontend/public");
+const staticPath = path.join(__dirname, "public");
 
 // P1-3 fix (PRODUCTION-AUDIT.md): express.static() below serves EVERY file
-// under admin-frontend/public by default, including old .bak snapshots
+// under the static root by default, including old .bak snapshots
 // (admin.html.bak, superadmin.html.bak, ...) left over from earlier editing
 // sessions — confirmed live: admin.html.bak (500KB) was fetchable at
 // /admin.html.bak with a plain HTTP 200 before this fix. These are old

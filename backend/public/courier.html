@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="uz">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title data-i18n="courier_page_title">Nesta ERP — Kuryer paneli</title>
+  <link rel="icon" href="img/logo (2).svg" type="image/png">
+  <link rel="stylesheet" href="css/design-system.css">
+  <!-- 🆕 waiter.html bilan bir xil — header endi fa-solid ikonalar
+       (theme-toggle moon/sun, logout) ishlatadi. Bu link avval ham
+       mavjud emas edi — logout tugmasidagi fa-solid ikon shu sababli
+       hech qachon ko'rinmagan (mavjud, ushbu task doirasida topilgan
+       kamchilik). -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="css/header.css">
+  <link rel="stylesheet" href="css/staffFooter.css">
+  <link rel="stylesheet" href="css/courier.css">
+</head>
+
+<body>
+
+  <!-- ══════════════ HEADER ══════════════
+       🩹 Waiter panelning canonical headeri bilan bir xil struktura/klass
+       naqshiga o'tkazildi (chap: logo+brand — sep — xodim nomi; markaz:
+       restoran nomi + sana/vaqt; o'ng: theme + til + logout). Avvalgi
+       avatar-doira + battery-chip + "Kuryer — Restoran" pastki qator
+       dizayni butunlay YANGI, waiter'dan farq qiluvchi struktura edi —
+       endi shu farq olib tashlandi. Battery-chip (kuryerga xos, xavfsizlik
+       uchun muhim ko'rsatkich, waiter'da yo'q) funksional ahamiyati
+       sababli saqlab qolindi, faqat o'ng amallar qatoriga ko'chirildi. -->
+  <header class="courier-header nesta-header">
+    <div class="co-header-left">
+      <div id="nestaHeaderBrand" class="nesta-header-brand"></div>
+      <span class="co-sep">—</span>
+      <span id="courierNameLabel" class="co-staff">—</span>
+    </div>
+
+    <div class="co-header-center">
+      <span id="courierHeaderRest" class="co-center-rest"></span>
+      <span id="courierHeaderDateTime" class="co-center-datetime"></span>
+    </div>
+
+    <div class="co-header-actions">
+      <div class="battery-chip u-93b8ea5b" id="courierBatteryChip">
+        🔋 <span id="courierBatteryPct">—</span>%
+      </div>
+      <button type="button" class="theme-toggle-btn" id="courierThemeToggleBtn"
+        onclick="window.toggleCourierHeaderTheme && window.toggleCourierHeaderTheme()"
+        data-i18n-title="theme_toggle_title" title="Mavzuni almashtirish">
+        <i class="fa-solid fa-moon"></i>
+        <i class="fa-solid fa-sun"></i>
+      </button>
+      <select id="langSelect" class="courier-lang-select" data-i18n-title="lang_select_title" title="Tilni tanlang">
+        <option value="uz" data-i18n="lang_uz">UZ</option>
+        <option value="ru" data-i18n="lang_ru">RU</option>
+        <option value="en" data-i18n="lang_en">EN</option>
+      </select>
+      <button class="btn-logout" onclick="window.courierLogout()" data-i18n-title="logout_btn" title="Chiqish"
+        aria-label="Chiqish" data-i18n-aria-label="logout_btn">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        <span data-i18n="logout">Chiqish</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="shift-card">
+
+    <div class="shift-stats-grid">
+      <div class="shift-stat-box">
+        <div class="shift-stat-value" id="shiftStatTotal">0</div>
+        <div class="shift-stat-label" data-i18n="courier_shift_stat_total">Bugungi buyurtmalar</div>
+      </div>
+      <div class="shift-stat-box">
+        <div class="shift-stat-value" id="shiftStatDelivered">0</div>
+        <div class="shift-stat-label" data-i18n="courier_shift_stat_delivered">Yetkazildi</div>
+      </div>
+      <div class="shift-stat-box">
+        <div class="shift-stat-value" id="shiftStatActive">0</div>
+        <div class="shift-stat-label" data-i18n="courier_shift_stat_active">Faol</div>
+      </div>
+      <div class="shift-stat-box">
+        <div class="shift-stat-value small" id="shiftStatEarnings">0 <span data-i18n="currency">so'm</span></div>
+        <div class="shift-stat-label" data-i18n="courier_shift_stat_earnings">Daromad</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mainCourierView">
+    <div class="active-orders-heading">
+      📦 <span data-i18n="courier_active_orders_title">Faol buyurtmalar</span>
+      <span class="cnt-badge u-93b8ea5b" id="activeOrdersCountBadge">0</span>
+    </div>
+
+    <div class="courier-content" id="courierContent">
+      <div class="courier-loader">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-view" id="dashboardView">
+    <div class="dash-range-tabs">
+      <button class="dash-range-btn active" data-range="today" onclick="window.setDashboardRange('today')"
+        data-i18n="history_filter_today">Bugun</button>
+      <button class="dash-range-btn" data-range="week" onclick="window.setDashboardRange('week')"
+        data-i18n="history_filter_week">Hafta</button>
+      <button class="dash-range-btn" data-range="month" onclick="window.setDashboardRange('month')"
+        data-i18n="history_filter_month">Oy</button>
+    </div>
+    <div class="dash-grid" id="dashboardGrid"></div>
+  </div>
+
+  <!-- ══════════════ XARITA VIEW ══════════════ -->
+  <div class="page-view" id="mapPageView">
+    <div id="courierMapFull"></div>
+  </div>
+
+  <!-- ══════════════ PROFIL VIEW ══════════════ -->
+  <div class="page-view" id="profileView">
+    <div class="profile-header">
+      <div class="profile-avatar-lg" id="profileAvatarLg">K</div>
+      <div>
+        <div id="profileNameLg" class="u-f55d1c7b">—</div>
+        <div id="profilePhoneLg" class="u-5fd34285">—</div>
+      </div>
+    </div>
+    <div class="profile-list" id="profileInfoList"></div>
+    <!-- 🆕 Bugungi statistika (item 23) — Buyurtmalar tabidagi smena
+         kartasi bilan bir xil hisoblash, courier.js: renderProfileView(). -->
+    <div class="dash-section-title" data-i18n="courier_shift_title">Mening smenam</div>
+    <div class="profile-list" id="profileStatsList"></div>
+    <div class="dash-section-title" data-i18n="courier_settings_title">Sozlamalar</div>
+    <div class="profile-list" id="profileSettingsList"></div>
+    <div class="profile-list">
+      <button class="profile-btn-row danger" onclick="window.courierLogout()" data-i18n="courier_logout_btn">🚪
+        Chiqish</button>
+    </div>
+  </div>
+
+  <!-- ══════════════ TARIX VIEW ══════════════ -->
+  <div class="history-view" id="historyView">
+    <div class="history-filter-tabs">
+      <button class="history-filter-btn active" data-range="today" onclick="window.setHistoryRange('today')"
+        data-i18n="history_filter_today">Bugun</button>
+      <button class="history-filter-btn" data-range="yesterday" onclick="window.setHistoryRange('yesterday')"
+        data-i18n="history_filter_yesterday">Kecha</button>
+      <button class="history-filter-btn" data-range="week" onclick="window.setHistoryRange('week')"
+        data-i18n="history_filter_week">Hafta</button>
+      <button class="history-filter-btn" data-range="month" onclick="window.setHistoryRange('month')"
+        data-i18n="history_filter_month">Oy</button>
+    </div>
+    <!-- 🆕 Kuryer bo'yicha filter — faqat birdan ortiq kuryer yetkazgan
+         bo'lsa ko'rinadi (courier.js: renderHistoryList() to'ldiradi). -->
+    <div id="historyCourierFilterBox" style="display:none; padding:0 14px 10px;"></div>
+    <div id="historyList"></div>
+  </div>
+
+  <!-- ══════════════ YANGI BUYURTMA POPUP ══════════════ -->
+  <div class="offer-overlay" id="offerOverlay">
+    <div class="offer-card" id="offerCard"></div>
+  </div>
+
+  <div id="courierToast"></div>
+
+  <div class="cdetail-overlay" id="cdetailOverlay" onclick="if(event.target===this) window.closeAssignmentDetails()">
+    <div class="cdetail-sheet" id="cdetailSheet"></div>
+  </div>
+
+  <div class="bottom-nav">
+    <button class="bottom-nav-btn active" id="bnavOrders" onclick="window.switchCourierView('orders')">
+      <span class="bn-icon">📦</span>
+      <span data-i18n="courier_nav_orders">Buyurtmalar</span>
+    </button>
+    <button class="bottom-nav-btn" id="bnavMap" onclick="window.switchCourierView('map')">
+      <span class="bn-icon">🗺️</span>
+      <span data-i18n="courier_nav_map">Xarita</span>
+    </button>
+    <button class="bottom-nav-btn" id="bnavHistory" onclick="window.switchCourierView('history')">
+      <span class="bn-icon">📜</span>
+      <span data-i18n="courier_nav_history">Tarix</span>
+    </button>
+    <button class="bottom-nav-btn" id="bnavProfile" onclick="window.switchCourierView('profile')">
+      <span class="bn-icon">👤</span>
+      <span data-i18n="courier_nav_profile">Profil</span>
+    </button>
+  </div>
+
+  <script src="https://api-maps.yandex.ru/2.1/?apikey=e77f99e2-cb05-44da-98db-853176e6837b&lang=uz_UZ"
+    onerror="window.__yandexMapsFailed=true"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="js/courier.js?v=1"></script>
+  <script type="module">
+    import { renderHeader } from "./js/header.js";
+    renderHeader("nestaHeaderBrand", { product: "erp", role: "courier" });
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nesta ERP — Kassa</title>
+  <link rel="icon" href="img/logo (2).svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/design-system.css" />
+  <link rel="stylesheet" href="css/header.css" />
+  <link rel="stylesheet" href="css/staffFooter.css" />
+  <link rel="stylesheet" href="css/kassa.css" />
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="nesta-header">
+  <div class="logo">
+    <div id="nestaHeaderBrand" class="nesta-header-brand">
+      <img class="nesta-header-logo" src="img/logo (2).svg" alt="Nesta">
+      <div class="nesta-header-titles">
+        <span class="nesta-header-product" data-i18n="product_erp">Nesta ERP</span>
+        <span class="nesta-header-role" data-i18n="header_role_cashier">Cashier</span>
+      </div>
+    </div>
+    <span class="k-sep">—</span>
+    <span id="kassaHeaderStaffName" class="k-staff"></span>
+  </div>
+  <!-- 🩹 Soat/sana bitta qatorga birlashtirildi — talab: "shu rasmdagi
+       kabi" (restoran nomi tepada, ostida MUTED, bitta qatorda
+       "18 avgust 2026 y. · 17:39:34" formati — client.html'dagi
+       #clientHeaderDateTime bilan bir xil vizual til). Avvalgi alohida
+       HH/MM/SS+yonib-o'chuvchi ikki nuqta va alohida sana qatori olib
+       tashlandi (kassa.js: tickKassaClock()). -->
+  <div class="h-center">
+    <div id="kassaHeaderRestName" class="u-1263a69d"></div>
+    <div id="kClockDateTime" class="k-datetime">-- --- ---- · --:--:--</div>
+  </div>
+  <div class="h-right">
+    <button type="button" class="theme-toggle-btn" id="kassaThemeToggleBtn" onclick="window.toggleKassaTheme && window.toggleKassaTheme()"
+      data-i18n-title="theme_toggle_title" title="Mavzuni almashtirish">
+      <span class="ttb-moon">🌙</span>
+      <span class="ttb-sun">☀️</span>
+    </button>
+    <div class="lang-wrap" id="kassaLangWrap">
+      <button type="button" class="hbadge" id="kassaLangBtn" onclick="window.toggleKassaLangMenu && window.toggleKassaLangMenu()">
+        
+        <span id="kassaLangLabel">O'zbekcha</span>
+      </button>
+      <div class="lang-menu" id="kassaLangMenu"></div>
+    </div>
+
+    <button type="button" class="btn-logout" onclick="window.kassaLogout()">
+      <span data-i18n="logout">Chiqish</span>
+    </button>
+
+  </div>
+</header>
+
+<!-- ── TAB NAV ── -->
+<nav class="tab-nav">
+  <button class="tab-btn active" id="tabMap" onclick="switchTab('map')">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <rect x="3" y="3" width="7" height="7" rx="1"/>
+      <rect x="14" y="3" width="7" height="7" rx="1"/>
+      <rect x="3" y="14" width="7" height="7" rx="1"/>
+      <rect x="14" y="14" width="7" height="7" rx="1"/>
+    </svg>
+    <span data-i18n="kassa_tab_map">Zallar</span>
+  </button>
+  <button class="tab-btn" id="tabHistory" onclick="switchTab('history')">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="10"/>
+      <polyline points="12 6 12 12 16 14"/>
+    </svg>
+    <span data-i18n="kassa_tab_payments_history">To'lovlar tarixi</span>
+  </button>
+  <button class="tab-btn" id="tabReport" onclick="switchTab('report')">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <polyline points="3 17 9 11 13 15 21 7"/>
+      <polyline points="14 7 21 7 21 14"/>
+    </svg>
+    <span data-i18n="kassa_tab_report">Hisobot</span>
+  </button>
+  <button class="tab-btn" id="tabOcr" onclick="switchTab('ocr')">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <polyline points="23 4 23 10 17 10"/>
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+    </svg>
+    <span data-i18n="order_change_requests_title">Buyurtma o'zgarishlari</span>
+    <span id="ocrTabBadge" class="ocr-nav-badge u-93b8ea5b">0</span>
+  </button>
+</nav>
+
+<!-- ── ZALLAR / STOLLAR XARITASI ── -->
+<div id="pageMap">
+  <div class="map-wrap">
+    <!-- 🩹 Endi Waiter panelidagi #hallFilter bilan bir xil canonical
+         manba (tb.tableType, shared.js getTableTypeMeta()) bo'yicha
+         ishlaydi — avval bu yerda tb.zone (kam ishlatiladigan, faqat
+         Admin popup'da info sifatida ko'rinadigan maydon) bo'yicha
+         filtrlanardi. CSS klassi (.zone-tabs/.zone-tab) tarixiy nom
+         sifatida saqlandi — vizual dizayn (pill tugma + count badge,
+         dark/light, mobil scroll) o'zgarishsiz qoladi. -->
+    <div class="zone-tabs" id="kassaHallFilter"></div>
+    <div class="map-legend">
+      <span class="dot"><span class="sw u-aa0915f3"></span><span data-i18n="kassa_map_legend_free">Bo'sh</span></span>
+      <span class="dot"><span class="sw u-ca875283"></span><span data-i18n="kassa_map_legend_busy">Band</span></span>
+      <span class="dot"><span class="sw u-3bc589f1"></span><span data-i18n="kassa_map_legend_billreq">Hisob kutilmoqda</span></span>
+      <span class="dot"><span class="sw u-086eb1d4"></span><span data-i18n="kassa_map_legend_cleaning">Tozalanmoqda</span></span>
+    </div>
+    <div class="hall-grid" id="hallGrid">
+      <div class="hall-empty">
+        <div class="icon">🪑</div>
+        <span data-i18n="kassa_map_loading">Yuklanmoqda...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── STOL POPOVER ── -->
+<div class="tpop-overlay" id="tpopOverlay" onclick="if(event.target===this) closeTablePopover()">
+  <div class="tpop">
+    <div class="tpop-head">
+      <div class="tpop-title" id="tpopTitle">Stol —</div>
+      <button class="tpop-close" onclick="closeTablePopover()" title="Yopish" data-i18n-title="close_btn">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.3" viewBox="0 0 24 24">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div id="tpopBody"></div>
+    <div class="tpop-actions" id="tpopActions"></div>
+  </div>
+</div>
+
+<!-- ── STOL BUYURTMA EKRANI (ko'rish + to'lov, menyu yo'q) ── -->
+<div id="pageTableOrder">
+  <div class="kto-screen">
+
+    <!-- CHAP: mijoz/ofitsiant + buyurtma tarkibi (faqat ko'rish) -->
+    <div class="kto-left">
+      <div class="kto-back-row">
+        <button class="kto-back-btn" onclick="window.closeTableOrderScreen()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
+          </svg>
+          <span data-i18n="kassa_kto_back">Stollar</span>
+        </button>
+      </div>
+
+      <div class="kto-info">
+        <div class="kto-table-title"><span data-i18n="kassa_kto_table_prefix">Stol №</span><span id="ktoTableNum">—</span></div>
+        <div class="kto-info-row"><span data-i18n="kassa_kto_client">Mijoz</span>: <b id="ktoClientLabel">—</b></div>
+        <div class="kto-info-row u-ff6eee77"><span data-i18n="kassa_kto_waiter">Ofitsiant</span>: <b id="ktoWaiterName">—</b></div>
+        <div class="kto-info-row u-ff6eee77"><span data-i18n="kassa_kto_opened_at">Ochilgan vaqt</span>: <b id="ktoOpenedAt">—</b></div>
+      </div>
+
+      <div class="kto-cart-head">
+        <h3>🧾 <span data-i18n="kassa_kto_orders">Buyurtmalar</span></h3>
+      </div>
+      <div id="ktoCartList" class="kto-cart-list">
+        <div class="kto-cart-empty" data-i18n="kassa_kto_no_active_order">Faol buyurtma yo'q.</div>
+      </div>
+    </div>
+
+    <!-- O'NG: jami/chegirma/xizmat haqi + to'lov usuli + tugmalar -->
+    <div class="kto-right kto-right-payment">
+      <div class="kto-totals">
+        <div class="kto-total-line"><span data-i18n="kassa_kto_subtotal">Jami</span><span id="ktoSubtotal">0</span></div>
+        <div class="kto-total-line u-93b8ea5b" id="ktoDiscountLine"><span data-i18n="kassa_discount_label">Chegirma</span><span id="ktoDiscount">0</span></div>
+        <div class="kto-total-line u-93b8ea5b" id="ktoServiceLine"><span data-i18n="kassa_kto_service_fee">Xizmat haqi</span><span id="ktoServiceFee">0</span></div>
+        <!-- 🆕 STOL XIZMAT NARXI — restoran-darajasidagi "Xizmat haqi" (%)
+             qatoridan alohida (item 8: aralashtirilmasin) — stolga
+             biriktirilgan aniq summa, faqat >0 bo'lsa ko'rinadi. -->
+        <div class="kto-total-line u-93b8ea5b" id="ktoTableServiceLine"><span data-i18n="table_service_row_label">Stol xizmati</span><span id="ktoTableService">0</span></div>
+        <div class="kto-total-line grand"><span data-i18n="kassa_kto_grand_total">Yakuniy summa</span><span id="ktoGrandTotal">0</span></div>
+      </div>
+
+      <div class="kto-pay-methods">
+        <button class="kto-pay-method" onclick="window.selKtoMethod('Naqd')" id="kpm-0">
+          <span class="dot"></span> <span data-i18n="kassa_kto_pm_cash">Naqd</span>
+        </button>
+        <button class="kto-pay-method" onclick="window.selKtoMethod('Payme')" id="kpm-1">
+          <span class="dot"></span> Payme
+        </button>
+        <button class="kto-pay-method" onclick="window.selKtoMethod('Click')" id="kpm-2">
+          <span class="dot"></span> Click
+        </button>
+        <button class="kto-pay-method" onclick="window.selKtoMethod('Uzum Bank')" id="kpm-3">
+          <span class="dot"></span> Uzum
+        </button>
+        <button class="kto-pay-method" onclick="window.selKtoMethod('Bank karta')" id="kpm-4">
+          <span class="dot"></span> <span data-i18n="kassa_kto_pm_card">Karta</span>
+        </button>
+      </div>
+      <!-- Naqd (kpm-0) alwaysOn bo'lgani uchun amalda kamdan-kam ko'rinadi,
+           lekin himoya sifatida qo'shildi (bir xil naqsh — pageKassa
+           #payGridEmpty bilan bir xil). -->
+      <div id="ktoPayMethodsEmpty" class="pm-empty-state u-93b8ea5b">
+        <div class="pm-empty-icon">💳</div>
+        <div class="pm-empty-title" data-i18n="kassa_no_payment_methods_title">To'lov usullari mavjud emas</div>
+        <div class="pm-empty-desc" data-i18n="kassa_no_payment_methods_desc">Admin sozlamalarida kamida bitta to'lov usulini yoqing.</div>
+      </div>
+
+      <div id="ktoCardNumberRow" class="kto-card-number-row u-93b8ea5b">
+        <label for="ktoCardNumberInput" data-i18n="pay_modal_card_number">Karta raqami</label>
+        <input type="text" id="ktoCardNumberInput" class="kto-card-number-input"
+               placeholder="0000 0000 0000 0000"
+               oninput="window.updateKtoPayBtnState && window.updateKtoPayBtnState()">
+      </div>
+
+      <div class="kto-pay-actions">
+        <button class="kto-btn ghost" onclick="window.printKtoReceipt()">
+          🧾 <span data-i18n="kassa_kto_print_receipt">Chek chiqarish</span>
+        </button>
+        <button class="kto-btn pay" id="ktoPayBtn" onclick="window.confirmKtoPayment()" disabled>
+          💳 <span data-i18n="kassa_kto_confirm_payment">To'lovni tasdiqlash</span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="pageKassa">
+<main>
+  <!-- LEFT -->
+  <div>
+    <div id="configWarning" data-i18n="kassa_config_warning" data-i18n-html>Restoran ID topilmadi. URL ga <code>?rest=ID</code> qo'shing.</div>
+
+    <!-- STEP 1 -->
+    <div class="card">
+      <div class="section-title" data-i18n="kassa_step1_title">1. Buyurtma ID raqam kiriting</div>
+      <div class="search-row">
+        <div class="input-wrap">
+          <input id="orderInput" type="text" placeholder="Masalan: 102547" autocomplete="off" data-i18n-placeholder="kassa_input_placeholder" />
+          <button class="clear-btn" onclick="document.getElementById('orderInput').value=''" title="Tozalash" data-i18n-title="kassa_clear_btn">×</button>
+        </div>
+        <button class="btn-search" id="searchBtn" onclick="searchOrder()">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <span id="searchBtnTxt" data-i18n="kassa_search_order_btn">Buyurtmani topish</span>
+        </button>
+      </div>
+      <div id="errorMsg"></div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div id="orderSection">
+      <div class="card">
+        <div class="u-1e517e8c">
+          <div class="section-title u-a2d48c76" data-i18n="kassa_step2_title">2. Buyurtma ma'lumotlari</div>
+          <span class="status-badge status-ready" id="oStatus" data-i18n="kassa_status_ready">Tayyor ✓</span>
+        </div>
+
+        <!-- order num + table -->
+        <div class="order-header">
+          <div class="order-num">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span id="oId">Buyurtma raqami: —</span>
+          </div>
+          <div class="table-badge">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="3" rx="1"/>
+              <path d="M5 6v13M19 6v13M8 6v13M16 6v13"/>
+            </svg>
+            <span id="oTable">Stol: —</span>
+          </div>
+        </div>
+
+        <!-- client -->
+        <div id="clientStrip"></div>
+
+        <!-- 🚚 delivery info + courier assign (faqat delivery buyurtmalarida ko'rinadi) -->
+        <div id="kassaDeliveryPanel" class="u-93b8ea5b"></div>
+
+        <!-- items -->
+        <div id="itemsList"></div>
+
+        <!-- totals -->
+        <div class="totals">
+          <div class="total-row">
+            <span class="lbl" data-i18n="kassa_total_items">Jami mahsulotlar</span>
+            <span class="val" id="tCount">—</span>
+          </div>
+          <div class="total-row">
+            <span class="lbl" data-i18n="kassa_original_price">Asl narx</span>
+            <span class="val" id="tSubtotal">—</span>
+          </div>
+          <div class="total-row discount u-93b8ea5b" id="discountRow">
+            <span class="lbl" data-i18n="kassa_discount_label">Chegirma</span>
+            <span class="val" id="tDiscount">—</span>
+          </div>
+          <div class="total-row grand">
+            <span class="lbl" data-i18n="kassa_payment_amount">To'lov summa</span>
+            <span class="val" id="tTotal">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUCCESS -->
+    <div id="successSection">
+      <div class="success-card">
+        <div class="success-icon">✅</div>
+        <h2 data-i18n="kassa_success_h2">To'lov muvaffaqiyatli!</h2>
+        <div class="sub" id="sOrderId">—</div>
+        <div class="receipt-box">
+          <div class="r"><span class="rl" data-i18n="kassa_receipt_table">Stol</span><span class="rr" id="sTable">—</span></div>
+          <div class="r"><span class="rl" data-i18n="kassa_receipt_method">To'lov turi</span><span class="rr" id="sMethod">—</span></div>
+          <div class="r"><span class="rl" data-i18n="kassa_receipt_amount">Summa</span><span class="rr" id="sTotal">—</span></div>
+          <div class="r"><span class="rl" data-i18n="kassa_receipt_date">Sana</span><span class="rr" id="sDate">—</span></div>
+        </div>
+        <!-- 🆕 Chek to'lovdan keyin avtomatik chiqadi (kassa.js processPayment());
+             bu tugma faqat popup bloklangan/xatolik holatida qayta urinish uchun. -->
+        <button class="btn-search u-d79ce2bc" onclick="window.reprintLastKassaReceipt()" style="background:var(--bg-hover);color:var(--text-primary);margin-bottom:8px;" data-i18n="kassa_reprint_receipt_btn">
+          🖨 Qayta chop etish
+        </button>
+        <button class="btn-search u-d79ce2bc" onclick="resetAll()" data-i18n="kassa_new_order">
+          Yangi buyurtma
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div>
+    <!-- KASSA ICHKI SOAT WIDGET -->
+    <div class="card u-6f336748" id="kassaInnerClockCard">
+      <div class="u-ccef810b">
+
+        <!-- Chap: Analog soat -->
+        <div class="u-5ee8f8e3">
+          <svg id="kassaInnerSvg" width="56" height="56" viewBox="0 0 56 56" fill="none">
+            <!-- Soat ramkasi -->
+            <circle cx="28" cy="28" r="26" stroke="#1e40af" stroke-width="1.5" fill="#0f172a"/>
+            <circle cx="28" cy="28" r="24" stroke="#334155" stroke-width="0.5" fill="none"/>
+            <!-- 12 belgisi -->
+            <circle cx="28" cy="6"  r="1.5" fill="#60a5fa"/>
+            <circle cx="28" cy="50" r="1.5" fill="#475569"/>
+            <circle cx="6"  cy="28" r="1.5" fill="#475569"/>
+            <circle cx="50" cy="28" r="1.5" fill="#475569"/>
+            <!-- Soat mili -->
+            <line id="ikHourHand" x1="28" y1="28" x2="28" y2="14" stroke="#e2e8f0" stroke-width="3" stroke-linecap="round"/>
+            <!-- Daqiqa mili -->
+            <line id="ikMinHand"  x1="28" y1="28" x2="28" y2="9"  stroke="#60a5fa" stroke-width="2" stroke-linecap="round"/>
+            <!-- Soniya mili -->
+            <line id="ikSecHand"  x1="28" y1="28" x2="28" y2="7"  stroke="#f87171" stroke-width="1.2" stroke-linecap="round"/>
+            <!-- Markaziy nuqta -->
+            <circle cx="28" cy="28" r="3" fill="#60a5fa"/>
+            <circle cx="28" cy="28" r="1.5" fill="#0f172a"/>
+          </svg>
+
+          <div>
+            <div data-i18n="kassa_clock_label" class="u-dfd3c6c5">Hozirgi vaqt</div>
+            <div class="u-857b4b40">
+              <span id="ikClockHH" class="u-c33eb399">00</span>
+              <span id="ikColon1" class="u-a1293635">:</span>
+              <span id="ikClockMM" class="u-c33eb399">00</span>
+              <span id="ikColon2" class="u-f187dbf8">:</span>
+              <span id="ikClockSS" class="u-bfd6f56a">00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- O'ng: Sana -->
+        <div class="u-08a0ed40">
+          <div id="ikClockDay" class="u-deaf6c1e">---</div>
+          <div id="ikClockDate" class="u-843ba6cf">-- --- ----</div>
+          <!-- Ish vaqti hisoblagich -->
+          <div class="u-fce1753e">
+            <div class="u-bdebad69"></div>
+            <span data-i18n="kassa_active_badge" class="u-f0fdde4b">FAOL</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div class="card">
+      <div class="section-title" data-i18n="kassa_step3_title">3. To'lov turini tanlang</div>
+      <div class="pay-grid">
+
+        <!-- Naqd -->
+        <div class="pay-card" onclick="selMethod('Naqd')" id="pm-0">
+          <div class="pm-icon ic-naqd">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round">
+              <rect x="1" y="4" width="22" height="16" rx="2"/>
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M1 10h3M20 10h3M1 14h3M20 14h3"/>
+            </svg>
+          </div>
+          <span data-i18n="kassa_pay_label_cash">Naqd</span>
+        </div>
+
+        <!-- UzCard -->
+        <div class="pay-card" onclick="selMethod('UzCard')" id="pm-1">
+          <div class="pm-icon ic-uzcard">
+            <svg width="28" height="20" viewBox="0 0 48 32" fill="none">
+              <rect width="48" height="32" rx="4" fill="#1e3a8a"/>
+              <rect y="10" width="48" height="8" fill="#fff" opacity=".15"/>
+              <rect x="6" y="20" width="12" height="4" rx="1" fill="#fbbf24"/>
+              <text x="24" y="12" font-size="8" fill="#fff" font-weight="700" text-anchor="middle" font-family="Inter,sans-serif">UZCARD</text>
+            </svg>
+          </div>
+          UzCard
+        </div>
+
+        <!-- Humo -->
+        <div class="pay-card" onclick="selMethod('Humo')" id="pm-2">
+          <div class="pm-icon ic-humo">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <!-- Humo logo-like: two arcs -->
+              <path d="M5 19 Q5 5 12 5 Q19 5 19 19" stroke="#92400e" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+              <path d="M9 19 Q9 10 12 10 Q15 10 15 19" stroke="#d97706" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            </svg>
+          </div>
+          Humo
+        </div>
+
+        <!-- Uzum -->
+        <div class="pay-card" onclick="selMethod('Uzum Bank')" id="pm-3">
+          <div class="pm-icon ic-uzum">
+            <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+              <circle cx="15" cy="15" r="14" fill="#7c3aed"/>
+              <text x="15" y="20" text-anchor="middle" font-size="15" font-weight="900" fill="#fff" font-family="Inter,sans-serif">U</text>
+            </svg>
+          </div>
+          Uzum Bank
+        </div>
+
+        <!-- Click -->
+        <div class="pay-card" onclick="selMethod('Click')" id="pm-4">
+          <div class="pm-icon ic-click u-861d1ed7">
+            CLICK
+          </div>
+          Click
+        </div>
+
+        <!-- Payme -->
+        <div class="pay-card" onclick="selMethod('Payme')" id="pm-5">
+          <div class="pm-icon ic-payme">
+            <svg width="30" height="30" viewBox="0 0 30 30" fill="none">
+              <circle cx="15" cy="15" r="14" fill="#be185d"/>
+              <text x="15" y="20" text-anchor="middle" font-size="15" font-weight="900" fill="#fff" font-family="Inter,sans-serif">p</text>
+            </svg>
+          </div>
+          Payme
+        </div>
+
+        <!-- Bank karta -->
+        <div class="pay-card" onclick="selMethod('Bank karta')" id="pm-6">
+          <div class="pm-icon ic-bank">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="1.8" stroke-linecap="round">
+              <rect x="1" y="4" width="22" height="16" rx="2"/>
+              <line x1="1" y1="10" x2="23" y2="10"/>
+              <rect x="4" y="14" width="5" height="3" rx="1" fill="#15803d" stroke="none"/>
+            </svg>
+          </div>
+          <span><span data-i18n="kassa_pay_label_card">Bank karta</span><span class="pm-sub">VISA / Mesterrard</span></span>
+        </div>
+
+        <!-- QR -->
+        <div class="pay-card" onclick="selMethod('QR kod')" id="pm-7">
+          <div class="pm-icon ic-qr">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="1.8" stroke-linecap="round">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <path d="M14 14h2v2h-2zM18 14h2M14 18h2M18 18h2v2h-2zM20 16v2"/>
+            </svg>
+          </div>
+          <span><span data-i18n="kassa_pay_label_qr_via">QR kod orqali</span><span class="pm-sub" data-i18n="kassa_qr_sub">To'lash</span></span>
+        </div>
+      </div>
+      <!-- Barcha to'lov usullari Admin → Sozlamalar'da o'chirilgan bo'lsa
+           ko'rinadi (applyEnabledPaymentMethodsToKassaUI(), kassa.js) —
+           amalda "QR kod" har doim ko'rinadigani uchun bu holat pageKassa'da
+           kamdan-kam yuzaga keladi, lekin himoya sifatida qo'shildi. -->
+      <div id="payGridEmpty" class="pm-empty-state u-93b8ea5b">
+        <div class="pm-empty-icon">💳</div>
+        <div class="pm-empty-title" data-i18n="kassa_no_payment_methods_title">To'lov usullari mavjud emas</div>
+        <div class="pm-empty-desc" data-i18n="kassa_no_payment_methods_desc">Admin sozlamalarida kamida bitta to'lov usulini yoqing.</div>
+      </div>
+    </div>
+
+    <!-- STEP 4 -->
+    <div class="card">
+      <div class="section-title" data-i18n="kassa_step4_title">4. To'lovni tasdiqlash</div>
+
+      <div class="confirm-row">
+        <span class="c-lbl" data-i18n="kassa_confirm_order_num">Buyurtma raqami:</span>
+        <span class="c-val" id="cNum">—</span>
+      </div>
+      <div class="confirm-row">
+        <span class="c-lbl" data-i18n="kassa_confirm_method">To'lov turi:</span>
+        <span class="c-method" id="cMethod">—</span>
+      </div>
+      <div class="confirm-row">
+        <span class="c-lbl" data-i18n="kassa_confirm_amount">To'lov summa:</span>
+        <span class="c-amount" id="cAmount">—</span>
+      </div>
+
+      <div class="action-btns">
+        <button class="btn-cancel" onclick="resetAll()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          <span data-i18n="kassa_cancel_btn">Bekor qilish</span>
+        </button>
+        <button class="btn-pay" id="payBtn" onclick="processPayment()" disabled>
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+          <span id="payBtnTxt" data-i18n="kassa_pay_btn">To'lash</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+</div><!-- /pageKassa -->
+
+<!-- ── KASSA HISOBOTI SAHIFASI ── -->
+<div id="pageReport">
+  <div class="u-f669fa51">
+
+    <!-- 📈 Kassa hisoboti (bugungi kun) -->
+    <div class="report-card">
+      <div class="report-title" data-i18n="kassa_report_title">📈 Kassa hisoboti — bugun</div>
+      <div class="report-methods" id="reportMethodsRow"></div>
+      <div class="report-stats">
+        <div class="report-stat"><div class="rval" id="repCount">—</div><div class="rlbl" data-i18n="kassa_report_stat_checks">chek</div></div>
+        <div class="report-stat"><div class="rval" id="repAvg">—</div><div class="rlbl" data-i18n="kassa_report_stat_avg">o'rtacha chek</div></div>
+        <div class="report-stat"><div class="rval" id="repMax">—</div><div class="rlbl" data-i18n="kassa_report_stat_max">eng katta chek</div></div>
+        <div class="report-stat"><div class="rval" id="repTopMethod">—</div><div class="rlbl" data-i18n="kassa_report_stat_top_method">eng ko'p ishlatilgan to'lov turi</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── BUYURTMA O'ZGARTIRISH SO'ROVLARI ──
+     Ofitsiant "bekor qilish"/"almashtirish" so'rovi yuboradi (waiter.js) —
+     order'ning o'zi FAQAT shu yerda (yoki admin.html'da) Kassir/Admin
+     tasdiqlagandan keyin o'zgaradi (shared.js). -->
+<div id="pageOcr">
+  <div class="u-f669fa51">
+    <div class="ocr-tabs">
+      <button type="button" class="ocr-tab-btn active" data-tab="pending" onclick="window._setOcrTab('pending')" data-i18n="status_pending">Kutilmoqda</button>
+      <button type="button" class="ocr-tab-btn" data-tab="approved" onclick="window._setOcrTab('approved')" data-i18n="status_approved">Tasdiqlandi</button>
+      <button type="button" class="ocr-tab-btn" data-tab="rejected" onclick="window._setOcrTab('rejected')" data-i18n="status_rejected">Rad etildi</button>
+      <button type="button" class="ocr-tab-btn" data-tab="all" onclick="window._setOcrTab('all')" data-i18n="kassa_hist_filter_all">Barchasi</button>
+    </div>
+    <div id="ocrList"></div>
+  </div>
+</div>
+
+<!-- ── TO'LOVLAR TARIXI SAHIFASI ── -->
+<div id="pageHistory">
+  <div class="u-f669fa51">
+
+    <!-- Toolbar -->
+    <div class="hist-toolbar u-5a6660b4">
+      <input class="history-search" id="histSearch" type="text" placeholder="Buyurtma #, kassa kodi, telefon yoki stol..." oninput="filterHistory()" data-i18n-placeholder="kassa_hist_search_ph" />
+      <button class="hist-filter-btn active" id="hfAll"   onclick="setHistFilter('all')" data-i18n="kassa_hist_filter_all">Barchasi</button>
+      <button class="hist-filter-btn"        id="hfToday" onclick="setHistFilter('today')" data-i18n="kassa_hist_filter_today">Bugun</button>
+      <button class="hist-filter-btn"        id="hfYesterday" onclick="setHistFilter('yesterday')" data-i18n="kassa_hist_filter_yesterday">Kecha</button>
+      <input class="hist-date-input" id="histDateFrom" type="date" onchange="setHistFilter('range')" data-i18n-title="kassa_hist_date_from" title="Sanadan">
+      <span class="u-5d036b78">—</span>
+      <input class="hist-date-input" id="histDateTo" type="date" onchange="setHistFilter('range')" data-i18n-title="kassa_hist_date_to" title="Sanagacha">
+      <select class="hist-select" id="histCashierFilter" onchange="filterHistory()">
+        <option value="" data-i18n="kassa_hist_filter_all_cashiers">Barcha kassirlar</option>
+      </select>
+      <select class="hist-select" id="histMethodFilter" onchange="filterHistory()">
+        <option value="" data-i18n="kassa_hist_filter_all_methods">Barcha to'lov turlari</option>
+      </select>
+    </div>
+
+    <!-- Stats -->
+    <div class="hist-stats-row">
+      <div class="hstat">
+        <div class="hval" id="hsTotalCount">—</div>
+        <div class="hlbl" data-i18n="kassa_hist_stat_total">Jami to'lovlar</div>
+      </div>
+      <div class="hstat">
+        <div class="hval" id="hsTotalAmount">—</div>
+        <div class="hlbl" data-i18n="kassa_hist_stat_sum">Jami summa</div>
+      </div>
+      <div class="hstat">
+        <div class="hval" id="hsAvg">—</div>
+        <div class="hlbl" data-i18n="kassa_hist_stat_avg">O'rtacha cheque</div>
+      </div>
+    </div>
+
+    <!-- List -->
+    <div class="hist-grid" id="historyList">
+      <div class="history-loading u-112b16cb">
+        <span class="spinner u-8690fe6e"></span>
+        <span data-i18n="kassa_hist_loading">Yuklanmoqda...</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── FIREBASE + LOGIC ── -->
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="js/chat-system.js"></script>
+<script type="module" src="js/kassa.js?v=1"></script>
+</body>
+</html>

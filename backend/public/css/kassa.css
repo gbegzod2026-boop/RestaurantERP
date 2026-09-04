@@ -1,0 +1,2810 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+@media (min-width: 781px) {
+  :root {
+    --nesta-header-logo-size: 42px;
+  }
+}
+
+:root {
+  --bg: #f5f7fa;
+  --white: #ffffff;
+  --border: #e5e7eb;
+  --accent: #16A34A;
+  --accent-soft: #eff6ff;
+  --accent-soft-br: #bfdbfe;
+  --green: #16a34a;
+  --green-bg: #f0fdf4;
+  --green-br: #bbf7d0;
+  --danger: #dc2626;
+  --danger-bg: #fef2f2;
+  --danger-br: #fca5a5;
+  --warn: #d97706;
+  --warn-bg: #fef3c7;
+  --warn-br: #fcd34d;
+  --info: #2563eb;
+  --info-soft: #eff6ff;
+  --info-soft-br: #bfdbfe;
+  --cleaning: #0ea5e9;
+  --cleaning-bg: #f0f9ff;
+  --cleaning-br: #bae6fd;
+  --text: #111827;
+  --text2: #374151;
+  --muted: #6b7280;
+  --muted2: #9ca3af;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, .04);
+  --shadow-card-hover: 0 6px 18px rgba(15, 23, 42, .08);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, .25);
+}
+
+/* ── DARK MODE — admin.js/waiter.js bilan bir xil localStorage kaliti
+       ("app_theme") va bir xil html[data-theme="dark"] atributi orqali
+       ishlaydi (design-system.css/header.css allaqachon shu atributni
+       o'qiydi). Yuqoridagi bilan AYNAN bir xil o'zgaruvchi nomlari — faqat
+       qiymatlari to'q rejimga moslashtirilgan. ── */
+html[data-theme="dark"] {
+  --bg: #0B1220;
+  --white: #16213A;
+  --border: rgba(255, 255, 255, .10);
+  --accent: #22C55E;
+  --accent-soft: rgba(34, 197, 94, .14);
+  --accent-soft-br: rgba(34, 197, 94, .32);
+  --green: #22C55E;
+  --green-bg: rgba(34, 197, 94, .14);
+  --green-br: rgba(34, 197, 94, .32);
+  --danger: #F87171;
+  --danger-bg: rgba(248, 113, 113, .14);
+  --danger-br: rgba(248, 113, 113, .32);
+  --warn: #FBBF24;
+  --warn-bg: rgba(251, 191, 36, .14);
+  --warn-br: rgba(251, 191, 36, .32);
+  --info: #60A5FA;
+  --info-soft: rgba(96, 165, 250, .14);
+  --info-soft-br: rgba(96, 165, 250, .32);
+  --cleaning: #38BDF8;
+  --cleaning-bg: rgba(56, 189, 248, .14);
+  --cleaning-br: rgba(56, 189, 248, .32);
+  --text: #F1F5F9;
+  --text2: #CBD5E1;
+  --muted: #94A3B8;
+  --muted2: #64748B;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .24);
+  --shadow-card-hover: 0 6px 18px rgba(0, 0, 0, .4);
+  --shadow-modal: 0 24px 60px rgba(0, 0, 0, .55);
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── HEADER ── */
+/* ── HEADER — 3 aniq zona: LEFT (logo+brand, flex-shrink:0) / CENTER
+       (restoran nomi, flex:1 — qolgan bo'sh joyni egallab, o'z ichida
+       markazlaydi, uzun nomda ellipsis) / RIGHT (theme/til/soat,
+       flex-shrink:0, header.css'ning margin-left:auto qoidasi bilan birga
+       ishlaydi). Bu 3 zona bir-biriga hech qachon tegib/ustma-ust
+       chiqmaydi — LEFT/RIGHT o'lchami qat'iy, faqat CENTER siqiladi. ── */
+header {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+/* 🆕 YAGONA STAFF FOOTER — header bilan aynan bir xil (theme-reactive)
+       tokenlar: var(--white) — fon, var(--text)/var(--text2) — matn.
+       kassa'ning main'ida allaqachon 90px pastki padding bor (yuqoridagi
+       "main" qoidasi) — fixed footer (~46px) shu joyga sig'adi, qo'shimcha
+       padding kerak emas. */
+.nesta-staff-footer {
+  --staff-footer-bg: var(--white);
+  --staff-footer-text: var(--text);
+  --staff-footer-text-secondary: var(--text2);
+  --staff-footer-border: var(--border);
+}
+
+.logo {
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -.5px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  /* 🩹 ROOT CAUSE — "Nesta ERP —Alisher" yopishib qolishi: bu konteyner
+         (#nestaHeaderBrand + .k-sep + .k-staff, uchtasi ham to'g'ridan-to'g'ri
+         shu flex qatorning farzandlari) hech qanday gap'ga ega emas edi —
+         &nbsp; bilan emas, shu yerda gap orqali to'g'rilanadi. */
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.logo-brand {
+  color: #111827;
+}
+
+/* 🆕 waiter/chef panellari bilan bir xil struktura (separator + xodim
+       nomi) — kassa panelida bu umuman mavjud emas edi. Boshqa ikkitasidan
+       farqli o'laroq kassa headeri o'zining mavjud theme-reactive
+       (var(--text2)/var(--muted)) tizimini davom ettiradi — waiter/chef'ning
+       qattiq to'q-ko'k foniga majburan moslashtirilmadi (kassa headeri
+       allaqachon light/dark rejimlarni to'liq qo'llab-quvvatlaydi). */
+.k-sep {
+  color: var(--muted2);
+  flex-shrink: 0;
+}
+
+/* 🩹 Xodim nomi yopishib/kesilib qolish tuzatildi — ROOT CAUSE: (1)
+       max-width juda tor (160px) edi — "Asosiy Boshqaruvchi" kabi o'rtacha
+       uzunlikdagi ism ham kesilib qolardi; (2) .h-center pastda flex:1
+       ("qolgan joy") edi, ya'ni .logo kengaygan sari "New" markazdan
+       siljib ketardi. Endi max-width ancha saxiyroq (320px — deyarli
+       har qanday xodim ismi to'liq sig'adi) va .h-center pastda mustaqil
+       position:absolute qilindi (waiter/chef header markazi bilan bir
+       xil texnika) — .logo/.h-right o'lchami "New"ning haqiqiy markazda
+       qolishiga endi umuman ta'sir qilmaydi. */
+.k-staff {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+/* 🩹 Markaziy blok endi 3 qatorli ustun — Soat / Sana / Restoran nomi
+       (waiter/chef header markazi bilan bir xil position:absolute
+       texnika, lekin tarkib tartibi shu vazifada aniq talab qilingan:
+       soat va sana restoran nomining TEPASIDA). flex-direction:column
+       yo'q edi — shu sabab avval yagona qator (restoran nomi) gorizontal
+       markazlashardi; endi 3 element vertikal bir-birining ustida turadi. */
+.h-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  max-width: 38%;
+  min-width: 0;
+  padding: 0 16px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.h-center svg {
+  opacity: .55;
+  flex-shrink: 0;
+}
+
+#kassaHeaderRestName {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.h-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+.hbadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  padding: 14px 15px;
+  min-width: 100px;
+  min-height: 40px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  background: var(--white);
+  cursor: pointer;
+}
+
+.theme-toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--text2);
+  font-size: 16px;
+  position: relative;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--accent);
+}
+
+.theme-toggle-btn .ttb-sun {
+  display: none;
+}
+
+.theme-toggle-btn .ttb-moon {
+  display: inline;
+}
+
+html[data-theme="dark"] .theme-toggle-btn .ttb-sun {
+  display: inline;
+}
+
+html[data-theme="dark"] .theme-toggle-btn .ttb-moon {
+  display: none;
+}
+
+/* 🆕 waiter/chef panellari bilan bir xil — kassa panelida logout
+       tugmasi umuman mavjud emas edi. Ranglar waiter/chef'dagi kabi
+       qattiq belgilanmagan — kassa'ning o'z --danger/--danger-bg/--danger-br
+       tokenlaridan foydalanadi, shunda light/dark ikkala rejimda ham
+       to'g'ri kontrast bilan ishlaydi. */
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--danger-br);
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+  font-family: inherit;
+}
+
+.btn-logout:hover {
+  background: var(--danger-br);
+}
+
+.lang-wrap {
+  position: relative;
+}
+
+.lang-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  z-index: 50;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
+  padding: 7px;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lang-menu.open {
+  display: flex;
+}
+
+/* 🩹 ROOT CAUSE FIX — bu qoida oldin background:rgba(255,255,255,.08) +
+   color:#fff bilan hech shartsiz yozilgan edi: bu FAQAT to'q fonda
+   o'qiladi. .lang-menu (ota konteyner) esa var(--white) — theme-reactive
+   (light rejimda oq). Natijada light rejimda OQ MATN OQ FONDA — deyarli
+   ko'rinmas edi. Endi .lang-menu-item.active bilan bir xil naqsh:
+   to'liq theme-token asosida. */
+.lang-menu-item {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text2);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lang-menu-item:hover {
+  background: var(--bg);
+}
+
+.lang-menu-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ── TAB NAV ── */
+.tab-nav {
+  background: var(--white);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 45px;
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 20px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1px;
+  font-family: 'Inter', sans-serif;
+  transition: color .15s, border-color .15s;
+}
+
+.tab-btn:hover {
+  color: var(--text2);
+}
+
+.tab-btn.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-btn svg {
+  flex-shrink: 0;
+}
+
+/* ── PAGE VIEWS ── */
+#pageKassa {
+  display: none;
+}
+
+#pageHistory {
+  display: none;
+}
+
+#pageReport {
+  display: none;
+}
+
+
+main {
+  flex: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 28px 24px 90px;
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+  align-items: start;
+}
+
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.card:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 18px;
+}
+
+/* ── STEP 1: INPUT ── */
+.search-row {
+  display: flex;
+  gap: 10px;
+}
+
+.input-wrap {
+  flex: 1;
+  position: relative;
+}
+
+#orderInput {
+  width: 100%;
+  padding: 13px 42px 13px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color .2s, box-shadow .2s;
+  color: var(--text);
+}
+
+#orderInput:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .14);
+}
+
+#orderInput::placeholder {
+  color: var(--muted2);
+  font-weight: 400;
+}
+
+.clear-btn {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted2);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.clear-btn:hover {
+  color: var(--muted);
+}
+
+.btn-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 13px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+  transition: opacity .18s;
+}
+
+.btn-search:hover {
+  opacity: .88;
+}
+
+.btn-search:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+#errorMsg {
+  display: none;
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-br);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ── STEP 2: ORDER ── */
+#orderSection {
+  display: none;
+}
+
+.order-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.order-num {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.table-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.status-badge {
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-ready {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-br);
+}
+
+.status-paid {
+  background: var(--green-bg);
+  color: var(--green);
+  border: 1px solid var(--green-br);
+}
+
+.status-new {
+  background: var(--info-soft);
+  color: var(--info);
+  border: 1px solid var(--info-soft-br);
+}
+
+/* client info */
+.client-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green-bg);
+  border: 1px solid var(--green-br);
+  border-radius: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* ── ORDER ITEMS ── */
+.order-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-item:last-child {
+  border-bottom: none;
+}
+
+.item-img-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 80px;
+  height: 80px;
+}
+
+.item-img {
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  display: block;
+}
+
+.item-img-placeholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+}
+
+.qty-badge {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 6px;
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .1);
+}
+
+.item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.meta-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 2px 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.meta-key {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.meta-val {
+  color: var(--text2);
+}
+
+.item-price-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.item-unit-price {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.item-total {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  text-align: right;
+  white-space: nowrap;
+  padding-top: 4px;
+  min-width: 100px;
+}
+
+/* ── TOTALS ── */
+.totals {
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+}
+
+.total-row .lbl {
+  color: var(--muted);
+}
+
+.total-row .val {
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.total-row.discount .val {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.total-row.grand {
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 2px solid var(--border);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.total-row.grand .lbl {
+  color: var(--text);
+}
+
+.total-row.grand .val {
+  color: var(--accent);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* ── PAY METHODS ── */
+.pay-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.pay-card {
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 12px 14px;
+  text-align: center;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  transition: border-color .18s, background .18s, box-shadow .18s;
+  background: var(--white);
+}
+
+.pay-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pay-card {
+  position: relative;
+}
+
+.pay-card.selected {
+  border-color: var(--green);
+  background: var(--green-bg);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .12);
+  color: var(--text);
+}
+
+/* Tanlangan usulda aniq ✓ belgisi (faqat border/fon o'zgarishiga
+       tayanmaslik uchun — kontrast past bo'lgan holatlarda ham ko'rinsin). */
+.pay-card.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.pay-card.disabled {
+  opacity: .4;
+  pointer-events: none;
+}
+
+.pm-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pm-sub {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: -6px;
+}
+
+/* icon colors */
+.ic-naqd {
+  background: #d1fae5;
+}
+
+.ic-uzcard {
+  background: #1e3a8a;
+}
+
+.ic-humo {
+  background: #fef3c7;
+}
+
+.ic-uzum {
+  background: #ede9fe;
+}
+
+.ic-click {
+  background: #e0f2fe;
+}
+
+.ic-payme {
+  background: #fce7f3;
+}
+
+.ic-bank {
+  background: #f0fdf4;
+}
+
+.ic-qr {
+  background: #f8fafc;
+}
+
+/* ── CONFIRM ── */
+.confirm-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.confirm-row:last-of-type {
+  border-bottom: none;
+}
+
+.confirm-row .c-lbl {
+  color: var(--muted);
+}
+
+.confirm-row .c-val {
+  font-weight: 700;
+}
+
+.confirm-row .c-method {
+  color: var(--green);
+  font-weight: 700;
+}
+
+.confirm-row .c-amount {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.action-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.btn-cancel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  color: var(--danger);
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: border-color .15s;
+}
+
+.btn-cancel:hover {
+  border-color: var(--danger);
+}
+
+.btn-pay {
+  flex: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--green);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: opacity .18s;
+}
+
+.btn-pay:hover {
+  opacity: .88;
+}
+
+.btn-pay:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* ── SUCCESS ── */
+#successSection {
+  display: none;
+}
+
+.success-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 36px;
+  text-align: center;
+}
+
+.success-icon {
+  font-size: 52px;
+  margin-bottom: 18px;
+}
+
+.success-card h2 {
+  font-size: 22px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.success-card .sub {
+  color: var(--muted);
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.receipt-box {
+  margin: 20px auto;
+  padding: 16px 24px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: left;
+  font-size: 13px;
+  max-width: 300px;
+}
+
+.receipt-box .r {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 6px 0;
+}
+
+.receipt-box .rl {
+  color: var(--muted);
+}
+
+.receipt-box .rr {
+  font-weight: 600;
+}
+
+/* ── SPINNER ── */
+.spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, .35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ── BOTTOM BAR ── */
+.bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--white);
+  border-top: 1px solid var(--border);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  z-index: 20;
+}
+
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+}
+
+.back-btn:hover {
+  color: var(--text2);
+}
+
+/* stepper */
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.sdot {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  transition: all .2s;
+}
+
+.sdot.done {
+  background: var(--accent);
+  color: #fff;
+}
+
+.sdot.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 2px solid var(--accent);
+}
+
+.sdot.idle {
+  background: var(--border);
+  color: var(--muted);
+  border: 1.5px solid var(--border);
+}
+
+.slbl {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.slbl.done {
+  color: var(--text2);
+}
+
+.slbl.active {
+  color: var(--accent);
+}
+
+.slbl.idle {
+  color: var(--muted2);
+}
+
+.sarr {
+  color: var(--muted2);
+  font-size: 13px;
+}
+
+#configWarning {
+  display: none;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-br);
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* ── HISTORY PAGE ── */
+#pageHistory {
+  display: none;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 28px 24px 90px;
+}
+
+.hist-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.history-search {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  color: var(--text);
+}
+
+.history-search:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, .12);
+}
+
+.history-search::placeholder {
+  color: var(--muted2);
+  font-weight: 400;
+}
+
+.hist-filter-btn {
+  padding: 10px 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all .15s;
+  white-space: nowrap;
+}
+
+.hist-filter-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.hist-date-input,
+.hist-select {
+  padding: 9px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--white);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  font-family: 'Inter', sans-serif;
+  outline: none;
+}
+
+.hist-date-input:focus,
+.hist-select:focus {
+  border-color: var(--accent);
+}
+
+/* Stats strip */
+.report-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.report-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.report-methods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.report-method-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  min-width: 110px;
+}
+
+.report-method-pill .rmp-label {
+  font-size: 11.5px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.report-method-pill .rmp-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.report-method-pill.grand {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-br);
+}
+
+.report-method-pill.grand .rmp-value {
+  color: var(--accent);
+}
+
+.report-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.report-stat .rval {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.report-stat .rlbl {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.hist-stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.hstat {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.hstat .hval {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.hstat .hlbl {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* List */
+.history-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 60px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.hist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.hist-item {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  transition: box-shadow .15s;
+}
+
+.hist-item:hover {
+  box-shadow: 0 3px 16px rgba(0, 0, 0, .07);
+}
+
+.hist-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.hist-order {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.hist-kassa {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.hist-amount {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.hist-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.hist-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 11px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--border);
+  color: var(--muted);
+}
+
+.hist-tag.green {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.hist-tag.blue {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.hist-date {
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.hist-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.hist-action-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: border-color .15s;
+}
+
+.hist-action-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hist-empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+  font-size: 14px;
+  grid-column: 1/-1;
+}
+
+.hist-empty .icon {
+  font-size: 48px;
+  margin-bottom: 14px;
+}
+
+/* Hech qanday to'lov usuli yoqilmagan holat (pageKassa Step3 va KTO
+       to'lov ekrani) — .u-93b8ea5b (display:none) orqali standart holatda
+       yashirin, kassa.js applyEnabledPaymentMethodsToKassaUI() ko'rsatadi. */
+.pm-empty-state {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--muted);
+}
+
+.pm-empty-icon {
+  font-size: 34px;
+  margin-bottom: 10px;
+  opacity: .6;
+}
+
+.pm-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+
+.pm-empty-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+       BUYURTMA O'ZGARTIRISH SO'ROVLARI (Order Change Requests) —
+       admin.css'dagi .ocr-* bilan bir xil vizual til, lekin kassa.css'ning
+       O'Z tokenlaridan (--white/--border/--text/--muted/--accent va h.k.,
+       admin.css'ning --bg-card/--text-primary EMAS — bu ikkalasi butunlay
+       alohida fayl/token tizimi).
+       ═══════════════════════════════════════════════════════════════ */
+.ocr-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ocr-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.ocr-tab-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all .15s ease;
+}
+
+.ocr-tab-btn:hover {
+  border-color: var(--accent);
+}
+
+.ocr-tab-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ocr-card {
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.ocr-card.ocr-pending {
+  border-left-color: var(--warn);
+}
+
+.ocr-card.ocr-approved {
+  border-left-color: var(--green);
+}
+
+.ocr-card.ocr-rejected {
+  border-left-color: var(--danger);
+}
+
+.ocr-card.ocr-cancelled {
+  border-left-color: var(--muted);
+}
+
+.ocr-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ocr-card-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.ocr-status-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.ocr-card.ocr-pending .ocr-status-badge {
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.ocr-card.ocr-approved .ocr-status-badge {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.ocr-card.ocr-rejected .ocr-status-badge {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ocr-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.ocr-change-line {
+  font-size: 14px;
+  color: var(--text);
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: 8px;
+}
+
+.ocr-note {
+  font-size: 12.5px;
+  color: var(--text2);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
+.ocr-resolved-by {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.ocr-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ocr-btn {
+  flex: 1;
+  padding: 9px 14px;
+  border-radius: 9px;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.ocr-btn-approve {
+  background: var(--accent);
+  color: #fff;
+}
+
+.ocr-btn-approve:hover {
+  opacity: .9;
+}
+
+.ocr-btn-reject {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.ocr-btn-reject:hover {
+  opacity: .85;
+}
+
+#pageOcr {
+  display: none;
+}
+
+@keyframes kpulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 6px #22c55e;
+  }
+
+  50% {
+    opacity: .5;
+    box-shadow: 0 0 12px #22c55e;
+  }
+}
+
+@media (max-width: 800px) {
+  header {
+    padding: 0 16px;
+  }
+
+  main {
+    grid-template-columns: 1fr;
+    padding: 20px 16px 90px;
+  }
+
+  .h-center {
+    display: none;
+  }
+
+  /* 🆕 Tor ekranda xodim nomi uchun kamroq joy — headerdagi boshqa
+         elementlar (logo/til/tema/soat) bilan to'qnashmasin. */
+  .k-staff {
+    max-width: 120px;
+  }
+
+  .tab-nav {
+    padding: 0 16px;
+  }
+
+  .hist-stats-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .report-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hist-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-wrap {
+    padding: 20px 16px 90px;
+  }
+
+  .card {
+    padding: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  header {
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .logo-brand {
+    font-size: 17px;
+  }
+
+  .k-staff {
+    max-width: 80px;
+  }
+
+  /* 🩹 Eski qoida shu yerda edi: `.h-right .u-714c72d2 { display:none; }`
+         — soat/sana bloki .h-right ichida turgan davrda tor ekranda uni
+         alohida yashirardi. Endi u .h-center ichiga ko'chirildi va
+         .h-center o'zi shu breakpointda yuqorida to'liq yashiriladi
+         (qarang: ".h-center { display: none; }"), shu sabab bu qoida
+         ortiqcha bo'lib qoldi — o'chirildi. */
+
+  .tab-nav {
+    padding: 0 12px;
+    overflow-x: auto;
+  }
+
+  .tab-btn {
+    padding: 12px 14px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .tab-btn svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  main {
+    padding: 14px 10px 90px;
+    gap: 12px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .search-row {
+    flex-direction: column;
+  }
+
+  .btn-search {
+    justify-content: center;
+  }
+
+  .pay-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .pay-card {
+    padding: 14px 8px 10px;
+  }
+
+  .action-btns {
+    flex-direction: column-reverse;
+  }
+
+  .btn-cancel,
+  .btn-pay {
+    flex: none;
+    width: 100%;
+  }
+
+  .hist-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hist-toolbar>* {
+    width: 100%;
+  }
+
+  .hist-stats-row {
+    grid-template-columns: 1fr;
+  }
+
+  .report-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hall-grid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .htable {
+    min-height: 130px;
+    padding: 12px;
+  }
+
+  .zone-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .map-legend {
+    gap: 12px;
+    font-size: 11.5px;
+  }
+
+  .kto-info {
+    padding: 12px 14px;
+  }
+
+  .kto-right-payment {
+    padding: 14px;
+  }
+
+  .kto-pay-methods {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kto-pay-actions {
+    flex-direction: column;
+  }
+
+  .tpop {
+    padding: 16px;
+    max-height: 88vh;
+  }
+}
+
+/* ══════════════════════════════════════════════
+       ZALLAR / STOLLAR XARITASI (Hall Map)
+       ══════════════════════════════════════════════ */
+#pageMap {
+  display: none;
+}
+
+.map-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 24px 24px 90px;
+}
+
+.zone-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.zone-tab {
+  padding: 9px 18px;
+  border-radius: 9px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.zone-tab:hover {
+  border-color: var(--accent);
+}
+
+.zone-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.zone-tab .cnt {
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, .08);
+  padding: 1px 7px;
+  border-radius: 10px;
+}
+
+.zone-tab.active .cnt {
+  background: rgba(255, 255, 255, .25);
+}
+
+.map-legend {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.map-legend .dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-legend .sw {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* ── STOL GRID — responsiv, "cardni kichraytirib ko'p ustun sig'dirish"
+       o'rniga auto-fit + minmax floor ishlatiladi (waiter.js'dagi Stollar
+       sahifasi bilan bir xil texnika): brauzer HAR BIR card kamida 210px
+       bo'lishini kafolatlaydi va shunga qarab nechta ustun sig'ishini o'zi
+       hisoblaydi (≥1440px'da odatda 5-6, 1280'da 4-5, 992'da 3-4, 768'da 3,
+       kichikroqda pastdagi @media'lar floor'ni siljitadi). ── */
+.hall-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 16px;
+}
+
+.htable {
+  position: relative;
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  cursor: pointer;
+  transition: transform .12s, box-shadow .12s, border-color .12s;
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-card);
+}
+
+.htable:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.htable:active {
+  transform: translateY(0);
+}
+
+.htable.free {
+  border-color: var(--green-br);
+  background: var(--green-bg);
+  cursor: default;
+}
+
+.htable.free:hover {
+  transform: none;
+  box-shadow: var(--shadow-card);
+}
+
+.htable.busy {
+  border-color: var(--danger-br);
+  background: var(--danger-bg);
+}
+
+.htable.billreq {
+  border-color: var(--warn-br);
+  background: var(--warn-bg);
+}
+
+.htable.cleaning {
+  border-color: var(--cleaning-br);
+  background: var(--cleaning-bg);
+  cursor: default;
+}
+
+.htable.cleaning:hover {
+  transform: none;
+  box-shadow: var(--shadow-card);
+}
+
+.htable.billreq {
+  animation: bpulse 1.6s ease-in-out infinite;
+}
+
+@keyframes bpulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 119, 6, .28);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(217, 119, 6, 0);
+  }
+}
+
+.htable-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.htable-num {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.htable-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 3px 9px 3px 7px;
+  border-radius: 20px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.htable-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.htable.free .htable-status-badge {
+  color: var(--green);
+}
+
+.htable.busy .htable-status-badge {
+  color: var(--danger);
+}
+
+.htable.billreq .htable-status-badge {
+  color: var(--warn);
+}
+
+.htable.cleaning .htable-status-badge {
+  color: var(--cleaning);
+}
+
+.htable.free .htable-dot {
+  background: var(--green);
+}
+
+.htable.busy .htable-dot {
+  background: var(--danger);
+}
+
+.htable.billreq .htable-dot {
+  background: var(--warn);
+}
+
+.htable.cleaning .htable-dot {
+  background: var(--cleaning);
+}
+
+.htable-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.htable-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.htable-sum {
+  font-weight: 800;
+  color: var(--text);
+  font-size: 15px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+
+.htable-open-hint {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  text-align: right;
+}
+
+/* "Bo'sh"/"Tozalanmoqda" statuslarida bosish mumkin emas (kassa.js
+       card.onclick'ni shu holatlarda ataylab qo'ymaydi) — shuning uchun
+       .htable-sum karta pastini o'zi to'ldiradi, alohida "→" ishorasiz. */
+
+.hall-empty {
+  grid-column: 1/-1;
+  text-align: center;
+  padding: 70px 20px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.hall-empty .icon {
+  font-size: 44px;
+  margin-bottom: 12px;
+}
+
+/* ── Stol popover ── */
+.tpop-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, .45);
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.tpop-overlay.open {
+  display: flex;
+}
+
+.tpop {
+  background: var(--white);
+  border-radius: 18px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 22px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .25);
+}
+
+.tpop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.tpop-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.tpop-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: none;
+  background: var(--bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+.tpop-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.tpop-row:last-of-type {
+  border-bottom: none;
+}
+
+.tpop-row .lbl {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.tpop-row .val {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tpop-row .val.big {
+  font-size: 17px;
+  color: var(--accent);
+}
+
+.tpop-empty {
+  text-align: center;
+  padding: 22px 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.tpop-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 16px;
+}
+
+.tpop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: opacity .15s;
+}
+
+.tpop-btn:hover {
+  opacity: .9;
+}
+
+.tpop-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.tpop-btn.primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.tpop-btn.warn {
+  background: var(--warn);
+  color: #fff;
+}
+
+.tpop-btn.ghost {
+  background: var(--bg);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+/* ══════════════════════════════════════════════
+       STOL BUYURTMA EKRANI — mavjud buyurtmani ko'rish + to'lov.
+       Menyu yo'q (buyurtmani ofitsiant tuzadi). Stol bosilganda
+       popover o'rniga shu ekran ochiladi.
+    ══════════════════════════════════════════════ */
+#pageTableOrder {
+  display: none;
+}
+
+.kto-screen {
+  display: flex;
+  /* 🩹 Stol tanlanganda .tab-nav endi butunlay yashiriladi (kassa.js:
+     openTableOrderScreen()) — shuning uchun bu yerda faqat header
+     balandligi (56px) ayiriladi, tab-nav uchun (45px) endi bo'sh joy
+     qoldirilmaydi (avval bu bo'sh, ishlatilmaydigan 45px pastda ortiqcha
+     joy qoldirar edi). */
+  height: calc(100vh - 56px);
+  background: var(--bg);
+}
+
+/* ── CHAP: mijoz/ofitsiant + buyurtma tarkibi (faqat ko'rish) ── */
+.kto-left {
+  width: 340px;
+  flex-shrink: 0;
+  background: var(--white);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.kto-back-row {
+  padding: 16px 18px 0;
+}
+
+.kto-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+}
+
+.kto-back-btn:hover {
+  background: var(--bg);
+}
+
+.kto-info {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kto-info-row {
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.kto-info-row b {
+  color: var(--text);
+}
+
+.kto-table-title {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 4px 0 10px;
+}
+
+.kto-cart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 8px;
+}
+
+.kto-cart-head h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+}
+
+.kto-cart-list {
+  flex: 1;
+  padding: 0 18px 18px;
+  overflow-y: auto;
+}
+
+.kto-cart-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.kto-cart-item .name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kto-cart-item .sub {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.kto-cart-item .price {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.kto-cart-empty {
+  text-align: center;
+  color: var(--muted2);
+  padding: 30px 10px;
+  font-size: 13px;
+}
+
+.kto-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: opacity .15s;
+}
+
+.kto-btn:hover {
+  opacity: .9;
+}
+
+.kto-btn:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.kto-btn.pay {
+  background: var(--accent);
+  color: #fff;
+}
+
+.kto-btn.ghost {
+  background: var(--white);
+  color: var(--text2);
+  border: 1.5px solid var(--border);
+}
+
+.kto-btn.ghost:hover {
+  border-color: #cbd5e1;
+  opacity: 1;
+}
+
+/* ── O'NG: jami/chegirma/xizmat haqi + to'lov usuli + tugmalar ── */
+.kto-right-payment {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.kto-totals {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+}
+
+.kto-total-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  color: var(--text2);
+  padding: 6px 0;
+}
+
+.kto-total-line.grand {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 12px;
+}
+
+.kto-pay-methods {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.kto-pay-method {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--white);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text2);
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: border-color .15s, background .15s;
+}
+
+.kto-pay-method .dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--muted2);
+  flex-shrink: 0;
+}
+
+.kto-pay-method:hover {
+  border-color: #cbd5e1;
+}
+
+.kto-pay-method.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.kto-pay-method.selected .dot {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px #fff;
+}
+
+.kto-card-number-row {
+  margin-bottom: 16px;
+}
+
+.kto-card-number-row label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.kto-card-number-input {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  outline: none;
+  transition: border-color .15s;
+}
+
+.kto-card-number-input:focus {
+  border-color: var(--accent);
+}
+
+.kto-pay-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.kto-pay-actions .kto-btn {
+  flex: 1;
+}
+
+@media (max-width: 800px) {
+  .hall-grid {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .kto-screen {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .kto-left {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .kto-pay-methods {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html inline style="..." ATTRIBUTES — Phase 2a
+   Each class below corresponds 1:1 to a former inline style string.
+   Identical inline styles were deduplicated into ONE shared class.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.u-be862f49 {
+  display: none;
+  height: 26px;
+  width: 26px;
+  object-fit: contain;
+  border-radius: 6px;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* 🩹 Restoran nomi endi markaziy blokning 3-qatori (soat/sanadan pastda)
+       — avval yagona element bo'lgani uchun ikkilamchi rangda (--text2)
+       edi; endi asosiy matn rangi (--text) ishlatiladi, chunki u endi
+       markaziy blokning "asosiy" qatori (dark/light ikkalasida ham). */
+.u-1263a69d {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+}
+
+.u-714c72d2 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+/* 🩹 Soat endi markaziy blokning eng yuqori (eng ko'zga tashlanuvchi)
+       qatori — talabga ko'ra asosiy matn rangi (--text), avval
+       ikkilamchi (--text2) edi. Sana (.u-2a28c313, pastda) --muted bilan
+       ikkilamchi bo'lib qoladi — faqat shu ikkalasi orasidagi farq
+       saqlanadi. */
+.u-188702de {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.u-2a28c313 {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.u-aa0915f3 {
+  background: var(--green);
+}
+
+.u-ca875283 {
+  background: var(--danger);
+}
+
+.u-3bc589f1 {
+  background: var(--warn);
+}
+
+.u-086eb1d4 {
+  background: var(--cleaning);
+}
+
+.u-ff6eee77 {
+  margin-top: 6px;
+}
+
+.u-93b8ea5b {
+  display: none;
+}
+
+.u-1e517e8c {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.u-a2d48c76 {
+  margin-bottom: 0;
+}
+
+.u-d79ce2bc {
+  margin-top: 8px;
+}
+
+.u-6f336748 {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%);
+  border: 1px solid #1e3a5f;
+}
+
+.u-ccef810b {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+}
+
+.u-5ee8f8e3 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.u-dfd3c6c5 {
+  font-size: 11px;
+  color: #475569;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.u-857b4b40 {
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.u-c33eb399 {
+  font-size: 32px;
+  font-weight: 900;
+  color: #f1f5f9;
+  letter-spacing: 2px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.u-a1293635 {
+  font-size: 28px;
+  font-weight: 900;
+  color: #3b82f6;
+  margin: 0 2px;
+  line-height: 1;
+}
+
+.u-f187dbf8 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #334155;
+  margin: 0 2px;
+  line-height: 1;
+}
+
+.u-bfd6f56a {
+  font-size: 20px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  align-self: flex-end;
+  padding-bottom: 3px;
+}
+
+.u-08a0ed40 {
+  text-align: right;
+}
+
+.u-deaf6c1e {
+  font-size: 12px;
+  color: #60a5fa;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin-bottom: 4px;
+}
+
+.u-843ba6cf {
+  font-size: 16px;
+  color: #e2e8f0;
+  font-weight: 800;
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+
+.u-fce1753e {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.u-bdebad69 {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+  flex-shrink: 0;
+  animation: kpulse 2s infinite;
+}
+
+.u-f0fdde4b {
+  font-size: 10px;
+  color: #4ade80;
+  font-weight: 600;
+  letter-spacing: .5px;
+}
+
+.u-861d1ed7 {
+  font-weight: 900;
+  font-size: 15px;
+  color: #0284c7;
+  letter-spacing: -1px;
+  font-family: 'Inter', sans-serif;
+}
+
+.u-f669fa51 {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 28px 24px 90px;
+}
+
+.u-5a6660b4 {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+
+.u-5d036b78 {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.u-112b16cb {
+  grid-column: 1/-1;
+}
+
+.u-8690fe6e {
+  border-color: rgba(0, 0, 0, .12);
+  border-top-color: var(--accent);
+}

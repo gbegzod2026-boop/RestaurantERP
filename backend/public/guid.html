@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-i18n="m_page_title">Nesta ERP — Operatsion qo'llanma</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  :root{
+    --green:#10b981; --green-dark:#0d9668; --green-light:#ecfdf5;
+    --navy:#0D1B2A; --ink:#1f2937; --muted:#6b7280; --border:#e5e7eb;
+    --bg:#f7f9fc; --card:#ffffff; --sidebar-w:280px; --toc-w:220px;
+    --warn-bg:#fffbeb; --warn-border:#fbbf24; --warn-text:#92400e;
+    --tip-bg:#eff6ff; --tip-border:#60a5fa; --tip-text:#1e40af;
+    --code-bg:#f1f5f9; --code-text:#0f172a;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0b1220; --card:#111a2b; --ink:#e5e9f0; --muted:#93a1b7; --border:#22314a;
+    --green-light:#0d2b22; --warn-bg:#2b2410; --warn-text:#fbbf24; --tip-bg:#0d2038; --tip-text:#93c5fd;
+    --code-bg:#0d1526; --code-text:#c7d2e0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0b1220; --card:#111a2b; --ink:#e5e9f0; --muted:#93a1b7; --border:#22314a;
+      --green-light:#0d2b22; --warn-bg:#2b2410; --warn-text:#fbbf24; --tip-bg:#0d2038; --tip-text:#93c5fd;
+      --code-bg:#0d1526; --code-text:#c7d2e0;
+    }
+  }
+  body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);line-height:1.7;}
+  a{color:var(--green-dark);}
+  code{font-family:'JetBrains Mono',monospace;background:var(--code-bg);color:var(--code-text);padding:0.15em 0.45em;border-radius:5px;font-size:0.86em;}
+
+  .topbar{
+    position:sticky; top:0; z-index:300; height:60px; background:var(--card); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; padding:0 1.2rem; gap:1rem;
+  }
+  .topbar-left{display:flex;align-items:center;gap:0.8rem;}
+  .topbar-logo{font-weight:800; font-size:1.05rem; color:var(--navy); display:flex; align-items:center; gap:0.4rem;}
+  :root[data-theme="dark"] .topbar-logo{color:#fff;}
+  .topbar-logo span{color:var(--green);}
+  .badge-manual{font-size:0.66rem; font-weight:800; background:var(--green-light); color:var(--green-dark); padding:0.15rem 0.5rem; border-radius:100px; letter-spacing:0.03em; text-transform:uppercase;}
+  .menu-toggle{display:none; background:none; border:none; font-size:1.2rem; color:var(--ink); cursor:pointer;}
+  .topbar-search{position:relative; flex:1; max-width:360px;}
+  .topbar-search input{
+    width:100%; padding:0.55rem 0.9rem 0.55rem 2.2rem; border-radius:9px; border:1px solid var(--border);
+    background:var(--bg); color:var(--ink); font-size:0.85rem; font-family:inherit; outline:none;
+  }
+  .topbar-search input:focus{border-color:var(--green);}
+  .topbar-search i{position:absolute; left:0.8rem; top:50%; transform:translateY(-50%); color:var(--muted); font-size:0.85rem;}
+  .topbar-right{display:flex; align-items:center; gap:0.6rem;}
+  .icon-btn{
+    width:36px; height:36px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--ink);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:0.9rem;
+  }
+  .icon-btn:hover{border-color:var(--green);}
+  select#langSelect{padding:0.45rem 0.6rem; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--ink); font-family:inherit; font-weight:600; font-size:0.8rem; cursor:pointer;}
+  .back-link{display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; font-weight:700; color:var(--ink); text-decoration:none; padding:0.5rem 0.8rem; border:1px solid var(--border); border-radius:8px;}
+  .back-link:hover{border-color:var(--green); color:var(--green-dark);}
+
+  .doc-layout{display:grid; grid-template-columns:var(--sidebar-w) 1fr var(--toc-w); max-width:1440px; margin:0 auto; align-items:start;}
+
+  .sidebar{
+    position:sticky; top:60px; height:calc(100vh - 60px); overflow-y:auto; padding:1.6rem 1rem 3rem;
+    border-right:1px solid var(--border);
+  }
+  .sidebar-section-label{font-size:0.68rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); padding:0.9rem 0.7rem 0.4rem;}
+  .sidebar-link{
+    display:flex; align-items:center; gap:0.65rem; padding:0.5rem 0.7rem; border-radius:8px;
+    color:var(--muted); text-decoration:none; font-size:0.84rem; font-weight:600; cursor:pointer;
+  }
+  .sidebar-link i{width:16px; text-align:center; font-size:0.8rem;}
+  .sidebar-link:hover{background:var(--bg); color:var(--ink);}
+  .sidebar-link.active{background:var(--green-light); color:var(--green-dark);}
+
+  .doc-main{padding:1.6rem 2.4rem 6rem; min-width:0;}
+  .doc-section{padding-top:0.5rem; margin-bottom:3.4rem; scroll-margin-top:76px;}
+  .doc-section h2{font-size:1.42rem; font-weight:800; color:var(--navy); margin-bottom:1.1rem; padding-bottom:0.7rem; border-bottom:2px solid var(--border);}
+  :root[data-theme="dark"] .doc-section h2{color:#fff;}
+  .doc-section h4{font-size:0.92rem; font-weight:800; margin:1.3rem 0 0.5rem; color:var(--green-dark);}
+  .doc-section p{margin-bottom:0.9rem; color:var(--ink); font-size:0.94rem;}
+  .doc-section ul, .doc-section ol{margin:0 0 0.9rem 1.4rem; font-size:0.94rem;}
+  .doc-section ol{counter-reset:none;}
+  .doc-section li{margin-bottom:0.4rem;}
+  .doc-section li ul{margin-top:0.4rem;}
+
+  .doc-tip, .doc-warning{border-radius:10px; padding:0.9rem 1.1rem; margin:1rem 0; font-size:0.88rem; border-left:4px solid;}
+  .doc-tip{background:var(--tip-bg); border-color:var(--tip-border); color:var(--tip-text);}
+  .doc-warning{background:var(--warn-bg); border-color:var(--warn-border); color:var(--warn-text);}
+
+  .doc-glossary dt{font-weight:800; margin-top:0.9rem; color:var(--navy); font-size:0.95rem;}
+  :root[data-theme="dark"] .doc-glossary dt{color:#fff;}
+
+  /* Role-guide grid */
+  .rg-grid{display:grid; grid-template-columns:1fr; gap:0.6rem; margin-top:0.8rem;}
+  .rg-card{background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden;}
+  .rg-head{display:flex; align-items:center; gap:0.8rem; padding:0.9rem 1.1rem; cursor:pointer; user-select:none;}
+  .rg-icon{width:34px; height:34px; border-radius:9px; background:var(--green-light); color:var(--green-dark); display:flex; align-items:center; justify-content:center; font-size:0.95rem; flex-shrink:0;}
+  .rg-title{font-weight:700; font-size:0.9rem; flex:1;}
+  .rg-chevron{color:var(--muted); transition:transform 0.2s; font-size:0.78rem;}
+  .rg-card.open .rg-chevron{transform:rotate(180deg);}
+  .rg-body{display:none; padding:0 1.1rem 1.1rem 4.5rem;}
+  .rg-card.open .rg-body{display:block;}
+  .rg-body p{font-size:0.87rem;}
+
+  .faq-item{border-bottom:1px solid var(--border);}
+  .faq-q{padding:1rem 0; font-weight:700; font-size:0.92rem; cursor:pointer; display:flex; justify-content:space-between; gap:1rem;}
+  .faq-q::after{content:'+'; color:var(--green); font-size:1.2rem; flex-shrink:0;}
+  .faq-item.open .faq-q::after{content:'−';}
+  .faq-a{display:none; padding:0 0 1.1rem; color:var(--muted); font-size:0.88rem;}
+  .faq-item.open .faq-a{display:block;}
+
+  .ts-grid{display:grid; grid-template-columns:1fr; gap:0.6rem;}
+  .ts-card{background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden;}
+  .ts-head{display:flex; align-items:center; gap:0.8rem; padding:0.9rem 1.1rem; cursor:pointer; user-select:none;}
+  .ts-icon{width:34px; height:34px; border-radius:9px; background:#fef2f2; color:#dc2626; display:flex; align-items:center; justify-content:center; font-size:0.95rem; flex-shrink:0;}
+  :root[data-theme="dark"] .ts-icon{background:#3b1414;}
+  .ts-title{font-weight:700; font-size:0.9rem; flex:1;}
+  .ts-chevron{color:var(--muted); transition:transform 0.2s; font-size:0.78rem;}
+  .ts-card.open .ts-chevron{transform:rotate(180deg);}
+  .ts-body{display:none; padding:0 1.1rem 1.1rem 4.5rem; font-size:0.87rem;}
+  .ts-card.open .ts-body{display:block;}
+
+  .toc{position:sticky; top:60px; height:calc(100vh - 60px); overflow-y:auto; padding:1.6rem 1rem 3rem;}
+  .toc-title{font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; color:var(--muted); margin-bottom:0.8rem;}
+  .toc a{display:block; font-size:0.78rem; color:var(--muted); text-decoration:none; padding:0.28rem 0; border-left:2px solid transparent; padding-left:0.7rem;}
+  .toc a:hover, .toc a.active{color:var(--green-dark); border-color:var(--green);}
+
+  #searchResults{
+    position:absolute; top:44px; left:0; right:0; background:var(--card); border:1px solid var(--border);
+    border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,0.15); max-height:340px; overflow-y:auto; display:none; z-index:50;
+  }
+  #searchResults.show{display:block;}
+  .search-result-item{padding:0.7rem 1rem; border-bottom:1px solid var(--border); cursor:pointer; font-size:0.84rem;}
+  .search-result-item:last-child{border-bottom:none;}
+  .search-result-item:hover{background:var(--bg);}
+  .search-result-item b{display:block; color:var(--ink); margin-bottom:2px;}
+  .search-result-item span{color:var(--muted); font-size:0.78rem;}
+  .search-empty{padding:1rem; text-align:center; color:var(--muted); font-size:0.82rem;}
+
+  @media (max-width: 1180px){
+    .doc-layout{grid-template-columns:var(--sidebar-w) 1fr;}
+    .toc{display:none;}
+  }
+  @media (max-width: 880px){
+    .menu-toggle{display:flex; align-items:center; justify-content:center;}
+    .topbar-search{display:none;}
+    .doc-layout{grid-template-columns:1fr;}
+    .sidebar{
+      position:fixed; left:0; top:60px; bottom:0; width:280px; background:var(--card); z-index:250;
+      transform:translateX(-100%); transition:transform 0.25s ease; box-shadow:0 0 40px rgba(0,0,0,0.2);
+    }
+    .sidebar.open{transform:translateX(0);}
+    .doc-main{padding:1.4rem 1.2rem 4rem;}
+    .rg-body, .ts-body{padding-left:1.2rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <button class="menu-toggle" id="menuToggle"><i class="fas fa-bars"></i></button>
+    <div class="topbar-logo"><i class="fas fa-book" style="color:var(--green);"></i> Nesta<span>ERP</span></div>
+    <span class="badge-manual">MANUAL</span>
+  </div>
+  <div class="topbar-search">
+    <i class="fas fa-search"></i>
+    <input type="text" id="docSearch" data-i18n-placeholder="m_search_placeholder" placeholder="Qo'llanmadan qidirish...">
+    <div id="searchResults"></div>
+  </div>
+  <div class="topbar-right">
+    <button class="icon-btn" id="darkToggle" data-i18n-title="m_dark_mode" title="Tungi rejim"><i class="fas fa-moon"></i></button>
+    <select id="langSelect">
+      <option value="uz">UZ</option>
+      <option value="ru">RU</option>
+      <option value="en">EN</option>
+    </select>
+    <a href="login.html" class="back-link"><i class="fas fa-arrow-left"></i> <span data-i18n="m_back_to_login">Tizimga qaytish</span></a>
+  </div>
+</div>
+
+<div class="doc-layout">
+
+  <aside class="sidebar" id="sidebar">
+    <a class="sidebar-link" data-target="intro"><i class="fas fa-house"></i> <span data-i18n="m_nav_intro">Kirish</span></a>
+    <a class="sidebar-link" data-target="getting-started"><i class="fas fa-flag-checkered"></i> <span data-i18n="m_nav_getting_started">Boshlash</span></a>
+
+    <div class="sidebar-section-label">SETUP</div>
+    <a class="sidebar-link" data-target="create-restaurant"><i class="fas fa-store"></i> <span data-i18n="m_nav_create_restaurant">Restoran yaratish</span></a>
+    <a class="sidebar-link" data-target="add-employees"><i class="fas fa-user-plus"></i> <span data-i18n="m_nav_add_employees">Xodim qo'shish</span></a>
+    <a class="sidebar-link" data-target="roles"><i class="fas fa-user-shield"></i> <span data-i18n="m_nav_roles">Rollarni boshqarish</span></a>
+
+    <div class="sidebar-section-label">OPERATIONS</div>
+    <a class="sidebar-link" data-target="menu"><i class="fas fa-book-open"></i> <span data-i18n="m_nav_menu">Menyu boshqaruvi</span></a>
+    <a class="sidebar-link" data-target="warehouse"><i class="fas fa-boxes-stacked"></i> <span data-i18n="m_nav_warehouse">Ombor</span></a>
+    <a class="sidebar-link" data-target="tables"><i class="fas fa-table-cells"></i> <span data-i18n="m_nav_tables">Stollar</span></a>
+    <a class="sidebar-link" data-target="orders"><i class="fas fa-receipt"></i> <span data-i18n="m_nav_orders">Buyurtmalar</span></a>
+    <a class="sidebar-link" data-target="kitchen"><i class="fas fa-fire-burner"></i> <span data-i18n="m_nav_kitchen">Oshxona (Chef)</span></a>
+    <a class="sidebar-link" data-target="cashier"><i class="fas fa-cash-register"></i> <span data-i18n="m_nav_cashier">Kassir</span></a>
+    <a class="sidebar-link" data-target="waiter"><i class="fas fa-concierge-bell"></i> <span data-i18n="m_nav_waiter">Ofitsiant</span></a>
+    <a class="sidebar-link" data-target="delivery"><i class="fas fa-motorcycle"></i> <span data-i18n="m_nav_delivery">Kuryer va yetkazish</span></a>
+    <a class="sidebar-link" data-target="reservations"><i class="fas fa-calendar-check"></i> <span data-i18n="m_nav_reservations">Bronlar</span></a>
+
+    <div class="sidebar-section-label">BUSINESS</div>
+    <a class="sidebar-link" data-target="finance"><i class="fas fa-sack-dollar"></i> <span data-i18n="m_nav_finance">Moliya</span></a>
+    <a class="sidebar-link" data-target="reports"><i class="fas fa-chart-pie"></i> <span data-i18n="m_nav_reports">Hisobot va tahlil</span></a>
+    <a class="sidebar-link" data-target="telegram"><i class="fab fa-telegram"></i> <span data-i18n="m_nav_telegram">Telegram bot</span></a>
+    <a class="sidebar-link" data-target="notifications"><i class="fas fa-bell"></i> <span data-i18n="m_nav_notifications">Bildirishnoma markazi</span></a>
+    <a class="sidebar-link" data-target="settings"><i class="fas fa-gear"></i> <span data-i18n="m_nav_settings">Sozlamalar</span></a>
+    <a class="sidebar-link" data-target="unavailable"><i class="fas fa-triangle-exclamation"></i> <span data-i18n="m_nav_unavailable">Hozircha mavjud emas</span></a>
+
+    <div class="sidebar-section-label">GUIDES</div>
+    <a class="sidebar-link" data-target="workflow"><i class="fas fa-arrow-right-arrow-left"></i> <span data-i18n="m_nav_workflow">Ish jarayoni qo'llanmasi</span></a>
+    <a class="sidebar-link" data-target="roleguides"><i class="fas fa-users"></i> <span data-i18n="m_nav_roleguides">Rol bo'yicha qo'llanmalar</span></a>
+    <a class="sidebar-link" data-target="faq"><i class="fas fa-circle-question"></i> <span data-i18n="m_nav_faq">Savol-javob</span></a>
+    <a class="sidebar-link" data-target="troubleshooting"><i class="fas fa-screwdriver-wrench"></i> <span data-i18n="m_nav_troubleshooting">Muammolarni bartaraf etish</span></a>
+    <a class="sidebar-link" data-target="bestpractices"><i class="fas fa-star"></i> <span data-i18n="m_nav_bestpractices">Tavsiyalar</span></a>
+  </aside>
+
+  <main class="doc-main">
+
+    <section class="doc-section" id="intro">
+      <h2 data-i18n="m_intro_title">1. Kirish</h2>
+      <div data-i18n="m_intro_body"></div>
+    </section>
+
+    <section class="doc-section" id="getting-started">
+      <h2 data-i18n="m_gs_title">2. Boshlash</h2>
+      <div data-i18n="m_gs_body"></div>
+    </section>
+
+    <section class="doc-section" id="create-restaurant">
+      <h2 data-i18n="m_cr_title">3. Restoran yaratish</h2>
+      <div data-i18n="m_cr_body"></div>
+    </section>
+
+    <section class="doc-section" id="add-employees">
+      <h2 data-i18n="m_ae_title">4. Xodim qo'shish</h2>
+      <div data-i18n="m_ae_body"></div>
+    </section>
+
+    <section class="doc-section" id="roles">
+      <h2 data-i18n="m_roles_title">5. Rollarni boshqarish</h2>
+      <div data-i18n="m_roles_body"></div>
+    </section>
+
+    <section class="doc-section" id="menu">
+      <h2 data-i18n="m_menu_title">6. Menyu boshqaruvi</h2>
+      <div data-i18n="m_menu_body"></div>
+    </section>
+
+    <section class="doc-section" id="warehouse">
+      <h2 data-i18n="m_wh_title">7. Ombor</h2>
+      <div data-i18n="m_wh_body"></div>
+    </section>
+
+    <section class="doc-section" id="tables">
+      <h2 data-i18n="m_tables_title">8. Stollar</h2>
+      <div data-i18n="m_tables_body"></div>
+    </section>
+
+    <section class="doc-section" id="orders">
+      <h2 data-i18n="m_orders_title">9. Buyurtmalar</h2>
+      <div data-i18n="m_orders_body"></div>
+    </section>
+
+    <section class="doc-section" id="kitchen">
+      <h2 data-i18n="m_kitchen_title">10. Oshxona</h2>
+      <div data-i18n="m_kitchen_body"></div>
+    </section>
+
+    <section class="doc-section" id="cashier">
+      <h2 data-i18n="m_cashier_title">11. Kassir</h2>
+      <div data-i18n="m_cashier_body"></div>
+    </section>
+
+    <section class="doc-section" id="waiter">
+      <h2 data-i18n="m_waiter_title">12. Ofitsiant</h2>
+      <div data-i18n="m_waiter_body"></div>
+    </section>
+
+    <section class="doc-section" id="delivery">
+      <h2 data-i18n="m_delivery_title">13. Kuryer va yetkazib berish</h2>
+      <div data-i18n="m_delivery_body"></div>
+    </section>
+
+    <section class="doc-section" id="reservations">
+      <h2 data-i18n="m_resv_title">14. Bronlar</h2>
+      <div data-i18n="m_resv_body"></div>
+    </section>
+
+    <section class="doc-section" id="finance">
+      <h2 data-i18n="m_finance_title">15. Moliya</h2>
+      <div data-i18n="m_finance_body"></div>
+    </section>
+
+    <section class="doc-section" id="reports">
+      <h2 data-i18n="m_reports_title">16. Hisobot va tahlil</h2>
+      <div data-i18n="m_reports_body"></div>
+    </section>
+
+    <section class="doc-section" id="telegram">
+      <h2 data-i18n="m_tg_title">17. Telegram bot</h2>
+      <div data-i18n="m_tg_body"></div>
+    </section>
+
+    <section class="doc-section" id="notifications">
+      <h2 data-i18n="m_notif_title">18. Bildirishnoma markazi</h2>
+      <div data-i18n="m_notif_body"></div>
+    </section>
+
+    <section class="doc-section" id="settings">
+      <h2 data-i18n="m_settings_title">19. Sozlamalar</h2>
+      <div data-i18n="m_settings_body"></div>
+    </section>
+
+    <section class="doc-section" id="unavailable">
+      <h2 data-i18n="m_na_title">20. Hozircha mavjud emas</h2>
+      <div data-i18n="m_na_body"></div>
+    </section>
+
+    <section class="doc-section" id="workflow">
+      <h2 data-i18n="m_flow_title">21. Ish jarayoni qo'llanmasi</h2>
+      <div data-i18n="m_flow_body"></div>
+    </section>
+
+    <section class="doc-section" id="roleguides">
+      <h2 data-i18n="m_rg_title">22. Rol bo'yicha qo'llanmalar</h2>
+      <div class="rg-grid" id="roleGuideGrid">
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-crown"></i></div><div class="rg-title" data-i18n="m_rg_owner_t">Egasi / Admin</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_owner"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-user-tie"></i></div><div class="rg-title" data-i18n="m_rg_admin_t">Menejer</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_admin"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-cash-register"></i></div><div class="rg-title" data-i18n="m_rg_cashier_t">Kassir</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_cashier"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-utensils"></i></div><div class="rg-title" data-i18n="m_rg_chef_t">Oshpaz</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_chef"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-concierge-bell"></i></div><div class="rg-title" data-i18n="m_rg_waiter_t">Ofitsiant</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_waiter"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-motorcycle"></i></div><div class="rg-title" data-i18n="m_rg_courier_t">Kuryer</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_courier"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-boxes-stacked"></i></div><div class="rg-title" data-i18n="m_rg_warehouse_t">Ombor menejeri</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_warehouse"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-sack-dollar"></i></div><div class="rg-title" data-i18n="m_rg_finance_t">Moliyachi</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_finance"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-id-badge"></i></div><div class="rg-title" data-i18n="m_rg_hr_t">HR</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_hr"></div></div>
+        <div class="rg-card"><div class="rg-head"><div class="rg-icon"><i class="fas fa-user"></i></div><div class="rg-title" data-i18n="m_rg_customer_t">Mijoz</div><i class="fas fa-chevron-down rg-chevron"></i></div><div class="rg-body" data-i18n="m_rg_customer"></div></div>
+      </div>
+    </section>
+
+    <section class="doc-section" id="faq">
+      <h2 data-i18n="m_faq_title">23. Savol-javob</h2>
+      <div id="faqList">
+        <div class="faq-item open"><div class="faq-q" data-i18n="m_faq1_q"></div><div class="faq-a" data-i18n="m_faq1_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq2_q"></div><div class="faq-a" data-i18n="m_faq2_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq3_q"></div><div class="faq-a" data-i18n="m_faq3_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq4_q"></div><div class="faq-a" data-i18n="m_faq4_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq5_q"></div><div class="faq-a" data-i18n="m_faq5_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq6_q"></div><div class="faq-a" data-i18n="m_faq6_a"></div></div>
+        <div class="faq-item"><div class="faq-q" data-i18n="m_faq7_q"></div><div class="faq-a" data-i18n="m_faq7_a"></div></div>
+      </div>
+    </section>
+
+    <section class="doc-section" id="troubleshooting">
+      <h2 data-i18n="m_ts_title">24. Muammolarni bartaraf etish</h2>
+      <div class="ts-grid" id="tsGrid">
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fas fa-right-to-bracket"></i></div><div class="ts-title" data-i18n="m_ts1_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts1"></div></div>
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fas fa-fire-burner"></i></div><div class="ts-title" data-i18n="m_ts2_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts2"></div></div>
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fas fa-print"></i></div><div class="ts-title" data-i18n="m_ts3_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts3"></div></div>
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fab fa-telegram"></i></div><div class="ts-title" data-i18n="m_ts4_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts4"></div></div>
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fas fa-motorcycle"></i></div><div class="ts-title" data-i18n="m_ts5_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts5"></div></div>
+        <div class="ts-card"><div class="ts-head"><div class="ts-icon"><i class="fas fa-boxes-stacked"></i></div><div class="ts-title" data-i18n="m_ts6_t"></div><i class="fas fa-chevron-down ts-chevron"></i></div><div class="ts-body" data-i18n="m_ts6"></div></div>
+      </div>
+    </section>
+
+    <section class="doc-section" id="bestpractices">
+      <h2 data-i18n="m_bp_title">25. Tavsiyalar</h2>
+      <h4 data-i18n="m_bp1_t">Har kuni</h4>
+      <div data-i18n="m_bp1"></div>
+      <h4 data-i18n="m_bp2_t">Har hafta</h4>
+      <div data-i18n="m_bp2"></div>
+      <h4 data-i18n="m_bp3_t">Xavfsizlik</h4>
+      <div data-i18n="m_bp3"></div>
+    </section>
+
+  </main>
+
+  <aside class="toc">
+    <div class="toc-title" data-i18n="m_toc_title">Ushbu bo'limda</div>
+    <a href="#intro" data-i18n="m_nav_intro">Kirish</a>
+    <a href="#getting-started" data-i18n="m_nav_getting_started">Boshlash</a>
+    <a href="#create-restaurant" data-i18n="m_nav_create_restaurant">Restoran yaratish</a>
+    <a href="#add-employees" data-i18n="m_nav_add_employees">Xodim qo'shish</a>
+    <a href="#roles" data-i18n="m_nav_roles">Rollarni boshqarish</a>
+    <a href="#menu" data-i18n="m_nav_menu">Menyu boshqaruvi</a>
+    <a href="#warehouse" data-i18n="m_nav_warehouse">Ombor</a>
+    <a href="#tables" data-i18n="m_nav_tables">Stollar</a>
+    <a href="#orders" data-i18n="m_nav_orders">Buyurtmalar</a>
+    <a href="#kitchen" data-i18n="m_nav_kitchen">Oshxona</a>
+    <a href="#cashier" data-i18n="m_nav_cashier">Kassir</a>
+    <a href="#waiter" data-i18n="m_nav_waiter">Ofitsiant</a>
+    <a href="#delivery" data-i18n="m_nav_delivery">Kuryer va yetkazish</a>
+    <a href="#reservations" data-i18n="m_nav_reservations">Bronlar</a>
+    <a href="#finance" data-i18n="m_nav_finance">Moliya</a>
+    <a href="#reports" data-i18n="m_nav_reports">Hisobot va tahlil</a>
+    <a href="#telegram" data-i18n="m_nav_telegram">Telegram bot</a>
+    <a href="#notifications" data-i18n="m_nav_notifications">Bildirishnoma markazi</a>
+    <a href="#settings" data-i18n="m_nav_settings">Sozlamalar</a>
+    <a href="#unavailable" data-i18n="m_nav_unavailable">Hozircha mavjud emas</a>
+    <a href="#workflow" data-i18n="m_nav_workflow">Ish jarayoni</a>
+    <a href="#roleguides" data-i18n="m_nav_roleguides">Rol qo'llanmalari</a>
+    <a href="#faq" data-i18n="m_nav_faq">Savol-javob</a>
+    <a href="#troubleshooting" data-i18n="m_nav_troubleshooting">Muammolar</a>
+    <a href="#bestpractices" data-i18n="m_nav_bestpractices">Tavsiyalar</a>
+  </aside>
+
+</div>
+
+<script type="module">
+  import { applyLang, getLang, setLang, t } from './js/i18n.js';
+  import './js/langs.js';
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const langSelect = document.getElementById("langSelect");
+    langSelect.value = getLang();
+    applyLang();
+    langSelect.addEventListener("change", (e) => { setLang(e.target.value); applyLang(); });
+
+    const sidebar = document.getElementById("sidebar");
+    const menuToggle = document.getElementById("menuToggle");
+    menuToggle.addEventListener("click", () => sidebar.classList.toggle("open"));
+
+    const links = Array.from(document.querySelectorAll(".sidebar-link"));
+    links.forEach(link => {
+      link.addEventListener("click", () => {
+        const target = document.getElementById(link.dataset.target);
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+        sidebar.classList.remove("open");
+      });
+    });
+
+    const sections = Array.from(document.querySelectorAll(".doc-section"));
+    const tocLinks = Array.from(document.querySelectorAll(".toc a"));
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        const id = entry.target.id;
+        links.forEach(l => l.classList.toggle("active", l.dataset.target === id));
+        tocLinks.forEach(l => l.classList.toggle("active", l.getAttribute("href") === "#" + id));
+      });
+    }, { rootMargin: "-20% 0px -70% 0px" });
+    sections.forEach(s => io.observe(s));
+
+    document.querySelectorAll(".rg-head").forEach(head => {
+      head.addEventListener("click", () => head.parentElement.classList.toggle("open"));
+    });
+    document.querySelectorAll(".ts-head").forEach(head => {
+      head.addEventListener("click", () => head.parentElement.classList.toggle("open"));
+    });
+    const firstRg = document.querySelector(".rg-card");
+    if (firstRg) firstRg.classList.add("open");
+    const firstTs = document.querySelector(".ts-card");
+    if (firstTs) firstTs.classList.add("open");
+
+    document.querySelectorAll(".faq-q").forEach(q => {
+      q.addEventListener("click", () => {
+        const item = q.parentElement;
+        const wasOpen = item.classList.contains("open");
+        document.querySelectorAll(".faq-item").forEach(i => i.classList.remove("open"));
+        if (!wasOpen) item.classList.add("open");
+      });
+    });
+
+    const darkToggle = document.getElementById("darkToggle");
+    const THEME_KEY = "nestacrm_doc_theme";
+    function applyTheme(theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      darkToggle.innerHTML = theme === "dark" ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    }
+    applyTheme(localStorage.getItem(THEME_KEY) || "light");
+    darkToggle.addEventListener("click", () => {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
+
+    const searchInput = document.getElementById("docSearch");
+    const resultsBox = document.getElementById("searchResults");
+
+    function buildSearchIndex() {
+      const index = [];
+      sections.forEach(section => {
+        const heading = section.querySelector("h2");
+        section.querySelectorAll(":scope > [data-i18n], :scope > h4 + [data-i18n]").forEach(el => {
+          const text = el.textContent.trim();
+          if (text.length > 20) index.push({ sectionId: section.id, heading: heading ? heading.textContent : section.id, text, el });
+        });
+        section.querySelectorAll(".rg-card").forEach(card => {
+          const title = card.querySelector(".rg-title");
+          const body = card.querySelector(".rg-body");
+          if (title && body) index.push({ sectionId: section.id, heading: title.textContent, text: body.textContent.trim(), el: card, isCollapsible: true });
+        });
+        section.querySelectorAll(".ts-card").forEach(card => {
+          const title = card.querySelector(".ts-title");
+          const body = card.querySelector(".ts-body");
+          if (title && body) index.push({ sectionId: section.id, heading: title.textContent, text: body.textContent.trim(), el: card, isCollapsible: true });
+        });
+        section.querySelectorAll(".faq-item").forEach(item => {
+          const q = item.querySelector(".faq-q");
+          const a = item.querySelector(".faq-a");
+          if (q && a) index.push({ sectionId: section.id, heading: q.textContent, text: a.textContent.trim(), el: item, isCollapsible: true });
+        });
+      });
+      return index;
+    }
+
+    function runSearch(query) {
+      const q = query.trim().toLowerCase();
+      if (q.length < 2) { resultsBox.classList.remove("show"); return; }
+      const index = buildSearchIndex();
+      const matches = index.filter(item =>
+        item.heading.toLowerCase().includes(q) || item.text.toLowerCase().includes(q)
+      ).slice(0, 12);
+
+      resultsBox.innerHTML = "";
+      if (!matches.length) {
+        resultsBox.innerHTML = `<div class="search-empty">${t("m_search_noresults", "Hech narsa topilmadi")}</div>`;
+      } else {
+        matches.forEach(m => {
+          const div = document.createElement("div");
+          div.className = "search-result-item";
+          const snippet = m.text.length > 90 ? m.text.slice(0, 90) + "…" : m.text;
+          div.innerHTML = `<b>${m.heading}</b><span>${snippet}</span>`;
+          div.addEventListener("click", () => {
+            if (m.isCollapsible) m.el.classList.add("open");
+            m.el.scrollIntoView({ behavior: "smooth", block: "center" });
+            resultsBox.classList.remove("show");
+            searchInput.value = "";
+          });
+          resultsBox.appendChild(div);
+        });
+      }
+      resultsBox.classList.add("show");
+    }
+
+    searchInput.addEventListener("input", (e) => runSearch(e.target.value));
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".topbar-search")) resultsBox.classList.remove("show");
+    });
+
+    if (location.hash) {
+      const target = document.querySelector(location.hash);
+      if (target) setTimeout(() => target.scrollIntoView({ behavior: "smooth" }), 200);
+    }
+  });
+</script>
+
+</body>
+</html>

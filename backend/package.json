@@ -27,7 +27,8 @@
     "auth:emulator": "npx --yes firebase-tools emulators:start --only auth --project nesta-staging",
     "auth:probe": "node db/scripts/step1-runtime-env-probe.mjs",
     "test:pg-http": "node --test db/tests/pg-http-errors.test.mjs",
-    "test:security": "node --test db/tests/security-authority.test.mjs"
+    "test:security": "node --test db/tests/security-authority.test.mjs",
+    "sync-frontend": "node scripts/sync-frontend.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

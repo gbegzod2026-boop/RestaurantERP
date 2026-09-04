@@ -1,0 +1,1078 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   design-system.css — Nesta ERP GLOBAL DESIGN SYSTEM
+   ═══════════════════════════════════════════════════════════════════════
+   Stage 1 of the full-product UI/UX redesign (see the redesign task for
+   the full 30-point spec). This file is the single foundation every panel
+   (Superadmin/Admin/Chef/Waiter/Cashier/Courier/Client) migrates onto,
+   panel by panel, in later stages.
+
+   LOADING ORDER (important — additive-only, zero risk to existing pages):
+     <link rel="stylesheet" href="css/design-system.css">   <!-- NEW, first -->
+     <link rel="stylesheet" href="css/<panel>.css">          <!-- existing -->
+     <link rel="stylesheet" href="css/header.css">           <!-- existing -->
+   Loading this FIRST means every existing panel .css file's rules still
+   win the cascade unchanged (later rules of equal specificity beat earlier
+   ones) — nothing currently rendered moves or changes color until a page
+   is deliberately migrated to actually USE these tokens/classes.
+
+   NAMING: every new reusable class is prefixed `nesta-` (matching the
+   existing `nesta-header*` convention already shipped in header.css) —
+   deliberately NOT `.btn`, `.card`, `.badge`, `.input`, etc., because an
+   audit of the current 11 panel .css files (admin.css alone is 240KB)
+   found those bare names already reused with different meanings in
+   several places (e.g. styles.css's landing-page section already defines
+   its own `.btn-primary`). The `nesta-` prefix guarantees zero collision
+   with anything that exists today, so this file can be linked on every
+   page immediately without auditing all ~800KB of existing CSS first.
+
+   BRAND SOURCE: colors derived from the Nesta ERP logo
+   (admin-frontend/public/img/image.png) — a green gradient "N"
+   chevron/bar-chart mark (bright grass-green → deep forest-green) + black
+   "Nesta" + green "ERP" wordmark, on white. No full dashboard mockup was
+   provided, so the actual layout/component decisions below (sidebar, KPI
+   cards, tables, kitchen-display dark mode, etc.) follow the written
+   30-point spec plus standard premium-SaaS/ERP conventions, using this
+   brand palette. This project ALREADY had three different, undocumented
+   "brand greens" in use (styles.css: #168a5f AND #1DB954; login.css:
+   #2EBC58) — this file replaces the ambiguity with one decided standard.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────
+   1. DESIGN TOKENS
+   ─────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Brand — green (from the Nesta logo gradient) */
+  --brand-primary: #16A34A;
+  --brand-primary-dark: #15803D;
+  --brand-primary-darker: #14532D;
+  --brand-primary-light: #DCFCE7;
+  --brand-primary-rgb: 22, 163, 74;
+  /* for rgba() shadows/rings */
+
+  /* Text */
+  --text-primary: #111827;
+  /* near-black charcoal — the logo's "Nesta" black, softened for body text */
+  --text-secondary: #475569;
+  --text-muted: #94A3B8;
+  --text-inverse: #FFFFFF;
+
+  /* Surfaces */
+  --bg-page: #F5F7F6;
+  /* soft off-white, faint green undertone — not stark white */
+  --bg-card: #FFFFFF;
+  --bg-subtle: #F1F5F4;
+  /* zebra rows, hover fills, subtle panels */
+  --border-color: #E2E8E4;
+  --border-color-soft: #EEF2F0;
+
+  /* Status */
+  --success: #16A34A;
+  --success-bg: #DCFCE7;
+  --success-text: #14532D;
+  --warning: #F59E0B;
+  --warning-bg: #FEF3C7;
+  --warning-text: #92400E;
+  --danger: #DC2626;
+  --danger-bg: #FEE2E2;
+  --danger-text: #991B1B;
+  --info: #2563EB;
+  --info-bg: #DBEAFE;
+  --info-text: #1E40AF;
+  --neutral: #6B7280;
+  --neutral-bg: #F1F5F9;
+  --neutral-text: #334155;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --radius-full: 999px;
+
+  /* Shadow — subtle, per spec ("very light shadows", no heavy drama) */
+  --shadow-sm: 0 1px 2px rgba(17, 24, 39, 0.05), 0 1px 3px rgba(17, 24, 39, 0.06);
+  --shadow-md: 0 4px 14px rgba(17, 24, 39, 0.08), 0 2px 4px rgba(17, 24, 39, 0.04);
+  --shadow-lg: 0 16px 40px rgba(17, 24, 39, 0.12);
+  --shadow-focus: 0 0 0 4px rgba(var(--brand-primary-rgb), 0.16);
+
+  /* Spacing scale (4px base) */
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-5: 20px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-10: 40px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+
+  /* Typography */
+  --font-family: 'Inter', 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+  --font-display: 800 clamp(1.9rem, 1.5rem + 2vw, 2.75rem)/1.15 var(--font-family);
+  --font-h1: 800 clamp(1.5rem, 1.3rem + 1vw, 1.875rem)/1.2 var(--font-family);
+  --font-h2: 700 1.375rem/1.28 var(--font-family);
+  --font-h3: 700 1.125rem/1.32 var(--font-family);
+  --font-body: 400 0.9375rem/1.6 var(--font-family);
+  --font-body-sm: 400 0.875rem/1.55 var(--font-family);
+  --font-caption: 500 0.8125rem/1.5 var(--font-family);
+  --font-table: 500 0.875rem/1.5 var(--font-family);
+  --font-button: 700 0.875rem/1 var(--font-family);
+  --font-helper: 500 0.75rem/1.45 var(--font-family);
+
+  /* Layout */
+  --sidebar-width: 264px;
+  --sidebar-width-collapsed: 76px;
+  --topbar-height: 64px;
+  --content-max-width: 1440px;
+
+  /* Motion — fast, non-distracting, per spec */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.22s ease;
+
+  /* z-index scale — one shared scale so new sidebar/modal/toast layers
+     never fight existing panel-specific z-index values */
+  --z-sidebar: 100;
+  --z-topbar: 110;
+  --z-dropdown: 500;
+  --z-modal-backdrop: 900;
+  --z-modal: 901;
+  --z-toast: 950;
+}
+
+/* Dark-mode token overrides — reuses the SAME data-theme="dark" attribute
+   header.css's theme-toggle already sets on <html>, so any page that
+   already has that toggle wired up gets dark-aware nesta-* components for
+   free the moment it adopts them; pages without the toggle are entirely
+   unaffected (attribute never gets set). */
+html[data-theme="dark"] {
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+  --bg-page: #0F172A;
+  --bg-card: #16213A;
+  --bg-subtle: #1B2A47;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-color-soft: rgba(255, 255, 255, 0.05);
+  --brand-primary-light: rgba(22, 163, 74, 0.18);
+  --success-bg: rgba(22, 163, 74, 0.16);
+  --success-text: #6EE7A8;
+  --warning-bg: rgba(245, 158, 11, 0.16);
+  --warning-text: #FCD34D;
+  --danger-bg: rgba(220, 38, 38, 0.16);
+  --danger-text: #FCA5A5;
+  --info-bg: rgba(37, 99, 235, 0.18);
+  --info-text: #93C5FD;
+  --neutral-bg: rgba(148, 163, 184, 0.16);
+  --neutral-text: #CBD5E1;
+}
+
+/* ── Kitchen Display (KDS) dark theme — §14 of the spec: chef/kitchen
+   panel is ALWAYS dark (a fixed presentation choice for a kitchen TV
+   screen viewed from a distance), independent of the light/dark TOGGLE
+   above. Scope this to a `.nesta-kds` wrapper the chef panel opts into in
+   a later migration stage — not applied anywhere yet. */
+.nesta-kds {
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --bg-page: #0B1220;
+  --bg-card: #16213A;
+  --bg-subtle: #1B2A47;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --brand-primary: #22C55E;
+  --success-bg: rgba(34, 197, 94, 0.18);
+  --success-text: #6EE7A8;
+  --warning-bg: rgba(245, 158, 11, 0.18);
+  --warning-text: #FCD34D;
+  --danger-bg: rgba(220, 38, 38, 0.2);
+  --danger-text: #FCA5A5;
+  background: var(--bg-page);
+  color: var(--text-primary);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   2. TYPOGRAPHY UTILITIES
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-text-display {
+  font: var(--font-display);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.nesta-text-h1 {
+  font: var(--font-h1);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.nesta-text-h2 {
+  font: var(--font-h2);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.nesta-text-h3 {
+  font: var(--font-h3);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.nesta-text-body {
+  font: var(--font-body);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.nesta-text-body-sm {
+  font: var(--font-body-sm);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.nesta-text-caption {
+  font: var(--font-caption);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.nesta-text-helper {
+  font: var(--font-helper);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   3. BUTTONS
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  height: 42px;
+  min-width: 44px;
+  /* touch target, §16/20 */
+  padding: 0 var(--spacing-5);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font: var(--font-button);
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast),
+    background var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
+  text-decoration: none;
+}
+
+.nesta-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.nesta-btn:disabled,
+.nesta-btn.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.nesta-btn-sm {
+  height: 34px;
+  padding: 0 var(--spacing-3);
+  font-size: 0.8125rem;
+}
+
+.nesta-btn-lg {
+  height: 48px;
+  padding: 0 var(--spacing-6);
+  font-size: 0.9375rem;
+}
+
+.nesta-btn-primary {
+  background: var(--brand-primary);
+  color: #fff;
+}
+
+.nesta-btn-primary:hover:not(:disabled) {
+  background: var(--brand-primary-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.nesta-btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.nesta-btn-secondary:hover:not(:disabled) {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary-dark);
+}
+
+.nesta-btn-success {
+  background: var(--success);
+  color: #fff;
+}
+
+.nesta-btn-success:hover:not(:disabled) {
+  background: var(--brand-primary-dark);
+  transform: translateY(-1px);
+}
+
+.nesta-btn-warning {
+  background: var(--warning);
+  color: #fff;
+}
+
+.nesta-btn-warning:hover:not(:disabled) {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+
+.nesta-btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.nesta-btn-danger:hover:not(:disabled) {
+  filter: brightness(0.92);
+  transform: translateY(-1px);
+}
+
+.nesta-btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+.nesta-btn-ghost:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.nesta-btn-icon {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.nesta-btn-icon:hover:not(:disabled) {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.nesta-btn-icon.nesta-btn-sm {
+  width: 34px;
+  height: 34px;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   4. BADGES / STATUS
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  padding: 3px var(--spacing-3);
+  border-radius: var(--radius-full);
+  font: var(--font-caption);
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.nesta-badge-success {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
+.nesta-badge-warning {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.nesta-badge-danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.nesta-badge-info {
+  background: var(--info-bg);
+  color: var(--info-text);
+}
+
+.nesta-badge-neutral {
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
+}
+
+.nesta-badge-dot::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   5. CARDS
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.nesta-card-pad {
+  padding: var(--spacing-5);
+}
+
+.nesta-card-hover {
+  transition: transform var(--transition-base), box-shadow var(--transition-base), border-color var(--transition-base);
+}
+
+.nesta-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: rgba(var(--brand-primary-rgb), 0.25);
+}
+
+/* KPI card — §7 */
+.nesta-kpi-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacing-5);
+  min-width: 0;
+}
+
+.nesta-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+
+.nesta-kpi-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.nesta-kpi-value {
+  font: var(--font-h1);
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.nesta-kpi-label {
+  font: var(--font-caption);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.nesta-kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: var(--font-helper);
+  font-weight: 700;
+}
+
+.nesta-kpi-trend.is-up {
+  color: var(--success);
+}
+
+.nesta-kpi-trend.is-down {
+  color: var(--danger);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   6. FORMS
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+
+.nesta-label {
+  font: var(--font-caption);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.nesta-helper {
+  font: var(--font-helper);
+  color: var(--text-muted);
+}
+
+.nesta-helper.is-error {
+  color: var(--danger);
+}
+
+.nesta-input,
+.nesta-select,
+.nesta-textarea {
+  width: 100%;
+  height: 44px;
+  padding: 0 var(--spacing-4);
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font: var(--font-body-sm);
+  font-family: var(--font-family);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.nesta-textarea {
+  height: auto;
+  min-height: 96px;
+  padding: var(--spacing-3) var(--spacing-4);
+  resize: vertical;
+}
+
+.nesta-input::placeholder,
+.nesta-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.nesta-input:focus,
+.nesta-select:focus,
+.nesta-textarea:focus {
+  outline: none;
+  border-color: var(--brand-primary);
+  box-shadow: var(--shadow-focus);
+}
+
+.nesta-input.is-error,
+.nesta-select.is-error,
+.nesta-textarea.is-error {
+  border-color: var(--danger);
+}
+
+.nesta-input:disabled,
+.nesta-select:disabled,
+.nesta-textarea:disabled {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+/* Checkbox / radio — same 20px control, same accent, native for a11y */
+.nesta-checkbox,
+.nesta-radio {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Switch */
+.nesta-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.nesta-switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.nesta-switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border-color);
+  border-radius: var(--radius-full);
+  transition: background var(--transition-fast);
+  pointer-events: none;
+}
+
+.nesta-switch-track::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast);
+}
+
+.nesta-switch input:checked+.nesta-switch-track {
+  background: var(--brand-primary);
+}
+
+.nesta-switch input:checked+.nesta-switch-track::before {
+  transform: translateX(18px);
+}
+
+.nesta-switch input:focus-visible+.nesta-switch-track {
+  box-shadow: var(--shadow-focus);
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   7. TABLES
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  /* §8/30 — never let a table force page-level horizontal scroll */
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.nesta-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 560px;
+}
+
+.nesta-table th {
+  text-align: left;
+  font: var(--font-caption);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: var(--spacing-3) var(--spacing-4);
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.nesta-table td {
+  font: var(--font-table);
+  color: var(--text-primary);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--border-color-soft);
+  vertical-align: middle;
+}
+
+.nesta-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.nesta-table tbody tr {
+  transition: background var(--transition-fast);
+}
+
+.nesta-table tbody tr:hover {
+  background: var(--bg-subtle);
+}
+
+/* Mobile: table -> stacked cards (§8/16). Opt-in per migrated table via
+   data-label on each <td> (row header text) — applied when a panel's
+   tables are actually migrated in a later stage. */
+@media (max-width: 640px) {
+  .nesta-table.nesta-table-stack thead {
+    display: none;
+  }
+
+  .nesta-table.nesta-table-stack,
+  .nesta-table.nesta-table-stack tbody,
+  .nesta-table.nesta-table-stack tr,
+  .nesta-table.nesta-table-stack td {
+    display: block;
+    width: 100%;
+  }
+
+  .nesta-table.nesta-table-stack tr {
+    border-bottom: 1px solid var(--border-color);
+    padding: var(--spacing-3) var(--spacing-4);
+  }
+
+  .nesta-table.nesta-table-stack td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--spacing-3);
+    padding: var(--spacing-1) 0;
+    border-bottom: none;
+    text-align: right;
+  }
+
+  .nesta-table.nesta-table-stack td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--text-muted);
+    text-align: left;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   8. MODALS / DRAWERS
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-4);
+  z-index: var(--z-modal-backdrop);
+}
+
+.nesta-modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-modal);
+  display: flex;
+  flex-direction: column;
+}
+
+.nesta-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  padding: var(--spacing-5);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.nesta-modal-body {
+  padding: var(--spacing-5);
+  overflow-y: auto;
+}
+
+.nesta-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-2);
+  padding: var(--spacing-4) var(--spacing-5);
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .nesta-modal-backdrop {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .nesta-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   9. LAYOUT SHELL — sidebar + topbar (§4)
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  min-height: 100vh;
+  background: var(--bg-page);
+}
+
+.nesta-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border-right: 1px solid var(--border-color);
+  z-index: var(--z-sidebar);
+  display: flex;
+  flex-direction: column;
+}
+
+.nesta-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-3);
+}
+
+.nesta-sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-3);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+  font: var(--font-body-sm);
+  font-weight: 600;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  min-height: 44px;
+}
+
+.nesta-sidebar-link:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
+}
+
+.nesta-sidebar-link.is-active {
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+}
+
+.nesta-sidebar-link .ico {
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nesta-topbar {
+  position: sticky;
+  top: 0;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-4);
+  padding: 0 var(--spacing-5);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-color);
+  z-index: var(--z-topbar);
+}
+
+.nesta-main {
+  min-width: 0;
+}
+
+.nesta-content {
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding: var(--spacing-5);
+}
+
+/* Mobile: sidebar becomes an off-canvas drawer (§16) */
+@media (max-width: 1024px) {
+  .nesta-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .nesta-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-width);
+    transform: translateX(-100%);
+    transition: transform var(--transition-base);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .nesta-sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .nesta-sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.5);
+    z-index: calc(var(--z-sidebar) - 1);
+  }
+
+  .nesta-sidebar-backdrop.is-open {
+    display: block;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   10. GRID / KPI ROW helpers
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--spacing-4);
+}
+
+.nesta-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-4);
+}
+
+.nesta-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-4);
+}
+
+.nesta-grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--spacing-4);
+}
+
+@media (max-width: 1024px) {
+
+  .nesta-grid-3,
+  .nesta-grid-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+
+  .nesta-grid-2,
+  .nesta-grid-3,
+  .nesta-grid-4 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   11. TOAST
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-3) var(--spacing-4);
+  border-radius: var(--radius-sm);
+  background: var(--text-primary);
+  color: #fff;
+  box-shadow: var(--shadow-lg);
+  font: var(--font-body-sm);
+  z-index: var(--z-toast);
+  animation: nesta-toast-in var(--transition-base);
+}
+
+.nesta-toast-success {
+  background: var(--brand-primary-dark);
+}
+
+.nesta-toast-danger {
+  background: var(--danger);
+}
+
+.nesta-toast-warning {
+  background: #92400E;
+}
+
+@keyframes nesta-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   12. SKELETON / LOADING
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-skeleton {
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-color-soft) 37%, var(--bg-subtle) 63%);
+  background-size: 400% 100%;
+  animation: nesta-skeleton-shine 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes nesta-skeleton-shine {
+  0% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+.nesta-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2.5px solid rgba(var(--brand-primary-rgb), 0.25);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  animation: nesta-spin 0.7s linear infinite;
+}
+
+@keyframes nesta-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Respect reduced-motion (§20/23 a11y) */
+@media (prefers-reduced-motion: reduce) {
+
+  .nesta-skeleton,
+  .nesta-spinner,
+  .nesta-toast,
+  .nesta-sidebar,
+  .nesta-btn {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────
+   13. UTILITIES (layout-safety — §15/21: no overflow, RU/EN text-safe)
+   ─────────────────────────────────────────────────────────────────────── */
+.nesta-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.nesta-break-word {
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.nesta-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

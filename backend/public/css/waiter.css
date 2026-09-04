@@ -1,0 +1,4404 @@
+﻿/* ============================================================
+   Nesta ERP — Ofitsiant Paneli | waiter.css
+   Modern Light Theme | Fully Responsive
+   ============================================================ */
+
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ══════════════════════════════════════════
+   CSS VARIABLES
+══════════════════════════════════════════ */
+:root {
+  --bg-base: #F4F6F9;
+  --bg-surface: #EEF1F6;
+  --bg-card: #ffffff;
+  --bg-card-hover: #fbfcfe;
+  --bg-elevated: #ffffff;
+  --border: rgba(15, 23, 42, 0.07);
+  --border-bright: rgba(15, 23, 42, 0.14);
+
+  /* Stage 6 redesign — aligned to design-system.css's --brand-primary
+     (#16A34A), replacing this file's own previous green (#16A34A — the
+     same drift color found and fixed in login/superadmin/admin/chef CSS
+     during Stages 2-5). Fallback literals kept for standalone rendering. */
+  --green: var(--brand-primary, #16A34A);
+  --green-dim: rgba(22, 163, 74, 0.10);
+  --green-glow: rgba(22, 163, 74, 0.28);
+  --green-dark: var(--brand-primary-dark, #15803D);
+
+  --navy: #0F172A;
+  --navy-soft: #1E293B;
+
+  --blue: #2563eb;
+  --blue-dim: rgba(37, 99, 235, 0.10);
+  --indigo: #4f46e5;
+  --cyan: #0891b2;
+
+  --amber: #d97706;
+  --amber-dim: rgba(217, 119, 6, 0.10);
+
+  --orange: #FF7A45;
+  --orange-dim: rgba(255, 122, 69, 0.12);
+  --orange-dark: #E85D2A;
+
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.10);
+  --purple: #7c3aed;
+
+  --text-primary: #0F172A;
+  --text-secondary: #64748B;
+  --text-muted: #94A3B8;
+  --text-accent: var(--brand-primary-dark, #15803D);
+
+  --header-h: 72px;
+  /* 🆕 Yagona staff footer (fixed, viewport pastida) balandligi — bitta
+     joydan boshqariladi, shu bilan har qanday "100vh - header" hisoblovchi
+     layout (order-screen, sidebar, main-container) footer ostida
+     yashiringan kontent/tugma qoldirmaydi (root cause: bu o'zgaruvchi
+     avval umuman yo'q edi — footer qo'shilganda hech qaysi calc()
+     uni hisobga olmagan, shuning uchun "Oshxonaga yuborish" tugmasi
+     footer ostida qolib ketardi). staffFooter.css'dagi haqiqiy render
+     balandligiga mos (~46px, 640px'dan pastda ozroq kichik — shu yerda
+     xavfsizlik uchun bitta, biroz saxiyroq qiymat ishlatiladi). */
+  --staff-footer-height: 46px;
+  --sidebar-w: 300px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 26px;
+
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.05);
+  --shadow-card-hover: 0 4px 10px rgba(15, 23, 42, 0.05), 0 14px 36px rgba(15, 23, 42, 0.09);
+  --shadow-glow: 0 0 0 4px rgba(22, 163, 74, 0.10);
+  --transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+/* ══════════════════════════════════════════
+   DARK MODE — reuses the SAME html[data-theme="dark"] attribute
+   design-system.css/header.css/admin.js's toggleTheme() already set and
+   read (localStorage "app_theme") — no new toggle mechanism, no new
+   storage key. Before this block, waiter.css had ZERO dark-mode rules —
+   every surface/border/text token below stayed at its light value no
+   matter the theme, which is why cards/inputs/header rendered "white on
+   white"/low-contrast whenever data-theme="dark" was set from another
+   panel. Each variable here is the exact same NAME as its light
+   definition above — every existing rule that already reads var(--bg-
+   card)/var(--text-primary)/etc. becomes dark-aware for free, with zero
+   markup or selector changes anywhere else in this file. ══════════════ */
+html[data-theme="dark"] {
+  --bg-base: #0B1220;
+  --bg-surface: #101A2E;
+  --bg-card: #16213A;
+  --bg-card-hover: #1B2A47;
+  --bg-elevated: #1B2A47;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-bright: rgba(255, 255, 255, 0.16);
+
+  --green-dim: rgba(34, 197, 94, 0.16);
+  --green-glow: rgba(34, 197, 94, 0.32);
+
+  --navy: #0B1220;
+  --navy-soft: #16213A;
+
+  --blue-dim: rgba(96, 165, 250, 0.18);
+  --amber-dim: rgba(251, 191, 36, 0.18);
+  --orange-dim: rgba(255, 122, 69, 0.2);
+  --red-dim: rgba(248, 113, 113, 0.18);
+
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-muted: #64748B;
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-card-hover: 0 4px 10px rgba(0, 0, 0, 0.3), 0 14px 36px rgba(0, 0, 0, 0.36);
+}
+
+/* Ba'zi komponentlar token o'rniga qattiq #ffffff fondan foydalanadi edi —
+   shu joylarga aynan shu komponentlar uchun dark-safe fon qo'shildi. */
+html[data-theme="dark"] .lang-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .order-card {
+  background: var(--bg-card);
+}
+
+html[data-theme="dark"] .live-table-card {
+  background: var(--bg-card);
+}
+
+html[data-theme="dark"] .toast {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .u-e2f273e7 {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .u-dc6c12b9 {
+  color: var(--text-primary);
+}
+
+/* ══════════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════════ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.5;
+  overflow-x: hidden;
+  /* 🆕 Yagona staff footer (fixed, viewport pastida) uchun joy —
+     footer balandligiga mos, kontent uning ostiga yashirinib qolmasin. */
+  padding-bottom: var(--staff-footer-height);
+}
+
+/* 🆕 YAGONA STAFF FOOTER — header bilan bir xil fon (waiter header
+   allaqachon --bg tokenidan foydalanadi, ikkala rejimda ham to'q —
+   waiter.css'ning o'z izohiga qarang: --bg ataylab qayta belgilanmagan,
+   allaqachon to'q accent rang, light/dark ikkalasida ham bir xil). */
+.nesta-staff-footer {
+  --staff-footer-bg: var(--bg);
+  --staff-footer-text: #ffffff;
+  --staff-footer-text-secondary: rgba(255, 255, 255, 0.55);
+  --staff-footer-border: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ══════════════════════════════════════════
+   SCROLLBAR
+══════════════════════════════════════════ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ══════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════ */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  height: var(--header-h);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 24px;
+  gap: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.header-left>div:first-child {
+  flex-shrink: 0;
+}
+
+.header-left h1 {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+#dynamicHeaderText {
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 380px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Language Select */
+.lang-select {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-bright);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+}
+
+.lang-select:hover,
+.lang-select:focus {
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+
+.lang-select option {
+  background: #ffffff;
+  color: #0F172A;
+}
+
+/* Logout button */
+.btn-logout {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  border-radius: var(--radius-sm);
+  background: rgba(220, 38, 38, 0.06);
+  color: #dc2626;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.btn-logout:hover {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(220, 38, 38, 0.28);
+  transform: translateY(-1px);
+}
+
+/* TV & Fullscreen buttons (injected by JS) */
+#waiterTVBtn,
+#waiterFSBtn {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  color: #fff;
+}
+
+#waiterTVBtn {
+  background: linear-gradient(135deg, var(--indigo), #4338ca);
+  box-shadow: 0 3px 10px rgba(79, 70, 229, 0.25);
+}
+
+#waiterFSBtn {
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  box-shadow: 0 3px 10px rgba(14, 165, 233, 0.25);
+}
+
+#waiterTVBtn:hover,
+#waiterFSBtn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+}
+
+/* ══════════════════════════════════════════
+   MAIN LAYOUT
+══════════════════════════════════════════ */
+.main-container {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  gap: 0;
+  /* 🩹 Footer balandligi ham ayiriladi — aks holda pastdagi kontent
+     (masalan sidebar ichidagi oxirgi karta) fixed footer ostida
+     yashirinib qolishi mumkin edi. */
+  min-height: calc(100vh - var(--header-h) - var(--staff-footer-height));
+  align-items: start;
+}
+
+/* ══════════════════════════════════════════
+   SIDEBAR
+══════════════════════════════════════════ */
+.sidebar {
+  position: sticky;
+  top: var(--header-h);
+  /* 🩹 Footer balandligi ayiriladi (main-container bilan bir xil sabab). */
+  height: calc(100vh - var(--header-h) - var(--staff-footer-height));
+  overflow-y: auto;
+  padding: 20px 16px;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: transparent;
+}
+
+/* ══════════════════════════════════════════
+   CARD (generic)
+══════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: var(--shadow-card);
+  transition: var(--transition);
+}
+
+.card:hover {
+  border-color: var(--border-bright);
+}
+
+/* ── Alert section cards ── */
+.alert-section {
+  padding: 16px;
+}
+
+.alert-section h2 {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.1px;
+}
+
+/* Calls container */
+.calls-container,
+.cleaning-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Waiter call card */
+.call-item {
+  background: var(--orange-dim);
+  border: 1px solid rgba(255, 122, 69, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b8451f;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  animation: slideInLeft 0.3s ease;
+}
+
+.call-item .call-table {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.call-item .call-dismiss {
+  background: none;
+  border: none;
+  color: var(--orange-dark);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.call-item .call-dismiss:hover {
+  background: rgba(255, 122, 69, 0.18);
+}
+
+/* Cleaning alert item */
+.cleaning-item {
+  background: var(--blue-dim);
+  border: 1px solid rgba(37, 99, 235, 0.22);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e40af;
+  animation: slideInLeft 0.3s ease;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 16px 8px;
+  font-style: normal;
+}
+
+/* ══════════════════════════════════════════
+   MAIN CONTENT
+══════════════════════════════════════════ */
+.content {
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
+/* ══════════════════════════════════════════
+   STATS GRID
+══════════════════════════════════════════ */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 16px 15px;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  background: var(--border-bright);
+  transition: var(--transition);
+}
+
+.stat-card:hover {
+  border-color: var(--border-bright);
+  background: var(--bg-card-hover);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.stat-card:hover::before {
+  background: var(--blue);
+}
+
+.stat-card h4 {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+
+.stat-card b {
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: block;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+/* Highlight stat card */
+.stat-card.highlight {
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.07), rgba(22, 163, 74, 0.02));
+  border-color: rgba(22, 163, 74, 0.22);
+}
+
+.stat-card.highlight::before {
+  background: var(--green);
+}
+
+.stat-card.highlight b {
+  color: var(--green-dark);
+}
+
+.stat-card.highlight:hover {
+  box-shadow: var(--shadow-glow), var(--shadow-card-hover);
+}
+
+/* ══════════════════════════════════════════
+   WAITER TABS
+══════════════════════════════════════════ */
+.waiter-tabs-wrapper {
+  background: var(--navy);
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16);
+}
+
+.waiter-tabs {
+  display: flex;
+  width: 100%;
+}
+
+.waiter-tab-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 28px;
+  height: 58px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #94A3B8;
+  font-family: var(--font-body);
+  font-size: 14.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease;
+  white-space: nowrap;
+  letter-spacing: 0.1px;
+}
+
+.waiter-tab-btn:hover {
+  color: #E2E8F0;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.waiter-tab-btn#wTabBtnAssigned.active {
+  color: #ffffff;
+  border-bottom-color: var(--orange);
+  background: rgba(255, 122, 69, 0.09);
+}
+
+.waiter-tab-btn#wTabBtnDelivered.active {
+  color: #ffffff;
+  border-bottom-color: var(--green);
+  background: rgba(22, 163, 74, 0.09);
+}
+
+.waiter-tab-btn+.waiter-tab-btn {
+  border-left: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.wtab-icon {
+  font-size: 17px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.wtab-label {
+  flex: none;
+}
+
+.wtab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+#wTabBtnAssigned .wtab-count {
+  background: rgba(255, 122, 69, 0.16);
+  border-color: rgba(255, 122, 69, 0.4);
+  color: #FFB088;
+}
+
+#wTabBtnAssigned.active .wtab-count {
+  background: var(--orange);
+  border-color: var(--orange);
+  color: #fff;
+}
+
+#wTabBtnDelivered .wtab-count {
+  background: rgba(22, 163, 74, 0.16);
+  border-color: rgba(22, 163, 74, 0.4);
+  color: #86efac;
+}
+
+#wTabBtnDelivered.active .wtab-count {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+#wTabBtnAssigned.has-assigned .wtab-count {
+  animation: waiterTabPulse 2s ease-in-out infinite;
+}
+
+@keyframes waiterTabPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 122, 69, 0.55);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 122, 69, 0);
+  }
+}
+
+.wtab-count[data-zero="1"] {
+  opacity: 0.4;
+}
+
+@media (max-width: 520px) {
+  .wtab-label {
+    display: none;
+  }
+
+  .waiter-tab-btn {
+    padding: 0 18px;
+    height: 50px;
+  }
+
+  .wtab-count {
+    min-width: 24px;
+    height: 24px;
+    font-size: 11.5px;
+  }
+}
+
+/* ══════════════════════════════════════════
+   ORDERS SECTION
+══════════════════════════════════════════ */
+.orders-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Section card headers */
+.orders-section .card>h2 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.1px;
+}
+
+/* Active assigned orders card — override inline style border color */
+.orders-section .card[style*="#22C55E"],
+.orders-section .card[style*="#16a34a"] {
+  border: 1px solid rgba(255, 122, 69, 0.3) !important;
+  box-shadow: 0 0 0 3px rgba(255, 122, 69, 0.05);
+}
+
+/* ── Orders grid ── */
+.orders-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.orders-grid.compact {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+/* ── Order card ── */
+.order-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 16px 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: var(--transition);
+  animation: fadeInUp 0.35s ease both;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Signature element: colored status rail on the left edge of every order card */
+.order-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--orange);
+  border-radius: 4px 0 0 4px;
+}
+
+.orders-section .card[style*="#22C55E"] .order-card::before,
+.orders-section .card[style*="#16a34a"] .order-card::before {
+  background: var(--orange);
+}
+
+#myDeliveredOrders .order-card::before {
+  background: var(--green);
+}
+
+.order-card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Order card header */
+.order-card-header,
+.order-card h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ── Table status badges ── */
+.table-badge,
+.badge-working,
+.badge-occupied,
+.badge-free,
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.badge-working,
+[class*="working"],
+.status-working {
+  background: var(--amber-dim);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  color: #b45309;
+}
+
+.badge-occupied,
+[class*="occupied"],
+.status-occupied {
+  background: var(--red-dim);
+  border: 1px solid rgba(220, 38, 38, 0.28);
+  color: #b91c1c;
+}
+
+.badge-free,
+.status-free {
+  background: var(--green-dim);
+  border: 1px solid rgba(22, 163, 74, 0.30);
+  color: var(--green-dark);
+}
+
+/* Time display */
+.order-time {
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Order items list */
+.order-items {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.order-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.order-item:last-child {
+  border-bottom: none;
+}
+
+.order-item img {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.order-item-name {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.order-item-category {
+  font-size: 11px;
+  color: var(--green-dark);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.order-qty {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--blue);
+  background: var(--blue-dim);
+  border-radius: 6px;
+  padding: 2px 9px;
+  flex-shrink: 0;
+}
+
+/* Special notes / modifiers */
+.order-notes {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 9px 10px;
+  background: var(--amber-dim);
+  border: 1px solid rgba(217, 119, 6, 0.20);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.order-notes i {
+  color: var(--amber);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Overdue warning */
+.overdue-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--red);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ── Deliver / Pickup button ── */
+.btn-pickup,
+.btn-deliver {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, var(--orange-dark), var(--orange));
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 4px 14px rgba(255, 122, 69, 0.28);
+}
+
+.btn-pickup:hover,
+.btn-deliver:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(255, 122, 69, 0.4);
+  filter: brightness(1.05);
+}
+
+.btn-pickup:active,
+.btn-deliver:active {
+  transform: translateY(0);
+}
+
+/* Delivered badge in compact view */
+.delivered-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: var(--green-dim);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--green-dark);
+}
+
+/* ══════════════════════════════════════════
+   CHART SECTION
+══════════════════════════════════════════ */
+.chart-wrapper {
+  min-height: 320px;
+}
+
+.chart-wrapper h3 {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.1px;
+}
+
+#waiterChart {
+  border-radius: var(--radius-sm);
+}
+
+/* ══════════════════════════════════════════
+   LIVE TABLES GRID
+══════════════════════════════════════════ */
+#liveTablesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.live-table-card {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: var(--transition);
+  cursor: default;
+}
+
+.live-table-card:hover {
+  border-color: var(--border-bright);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.live-table-card.occupied {
+  border-color: rgba(220, 38, 38, 0.26);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.03), #ffffff);
+}
+
+.live-table-card.working {
+  border-color: rgba(217, 119, 6, 0.26);
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.03), #ffffff);
+}
+
+.live-table-card.free {
+  border-color: rgba(22, 163, 74, 0.22);
+}
+
+.live-table-number {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.live-table-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════
+   PAYMENT REQUESTS
+══════════════════════════════════════════ */
+.payment-item {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.06), rgba(79, 70, 229, 0.03));
+  border: 1px solid rgba(124, 58, 237, 0.20);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6d28d9;
+  animation: slideInLeft 0.3s ease;
+}
+
+.payment-amount {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+/* ══════════════════════════════════════════
+   TOAST NOTIFICATIONS
+══════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.toast {
+  min-width: 280px;
+  max-width: 380px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  border: 1px solid var(--border-bright);
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  animation: toastIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toast.toast-success {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: linear-gradient(135deg, rgba(22, 163, 74, 0.06), #ffffff);
+}
+
+.toast.toast-error {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.06), #ffffff);
+}
+
+.toast.toast-info {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.06), #ffffff);
+}
+
+.toast.toast-warning {
+  border-color: rgba(217, 119, 6, 0.35);
+  background: linear-gradient(135deg, rgba(217, 119, 6, 0.06), #ffffff);
+}
+
+/* ══════════════════════════════════════════
+   SYSTEM BLOCK OVERLAY
+══════════════════════════════════════════ */
+#system-block-overlay {
+  font-family: var(--font-body) !important;
+}
+
+/* ══════════════════════════════════════════
+   AVAILABILITY TOGGLE
+══════════════════════════════════════════ */
+.availability-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: #CBD5E1;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: var(--transition);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch input:checked+.toggle-slider {
+  background: var(--green);
+}
+
+.toggle-switch input:checked+.toggle-slider::before {
+  transform: translateX(20px);
+}
+
+#myStatusText {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ══════════════════════════════════════════
+   WAITER TV MODE
+══════════════════════════════════════════ */
+body.tv-mode .sidebar,
+body.tv-mode #myDeliveredOrders,
+body.tv-mode .chart-wrapper,
+body.tv-mode .lang-select {
+  display: none !important;
+}
+
+body.tv-mode .main-container {
+  grid-template-columns: 1fr;
+}
+
+body.tv-mode #myAssignedOrders {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)) !important;
+  gap: 20px !important;
+}
+
+body.tv-mode .order-card {
+  font-size: 17px !important;
+  padding: 22px !important;
+}
+
+body.tv-mode .order-card-header {
+  font-size: 1.15rem;
+}
+
+body.tv-mode .btn-pickup {
+  font-size: 16px !important;
+  padding: 16px !important;
+}
+
+body.tv-mode #waiterTVBtn {
+  background: linear-gradient(135deg, var(--red), #dc2626) !important;
+}
+
+/* ══════════════════════════════════════════
+   ANIMATIONS
+══════════════════════════════════════════ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(40px) scale(0.9);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes glowPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 122, 69, 0.16);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 122, 69, 0);
+  }
+}
+
+/* Staggered card animation */
+.orders-grid .order-card:nth-child(1) {
+  animation-delay: 0.03s;
+}
+
+.orders-grid .order-card:nth-child(2) {
+  animation-delay: 0.07s;
+}
+
+.orders-grid .order-card:nth-child(3) {
+  animation-delay: 0.11s;
+}
+
+.orders-grid .order-card:nth-child(4) {
+  animation-delay: 0.15s;
+}
+
+.orders-grid .order-card:nth-child(5) {
+  animation-delay: 0.19s;
+}
+
+.orders-grid .order-card:nth-child(6) {
+  animation-delay: 0.23s;
+}
+
+/* Active assigned card subtle glow */
+.orders-section .card[style*="#22C55E"] .order-card {
+  animation: fadeInUp 0.35s ease both, glowPulse 3s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — TABLET (≤ 1100px)
+══════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  :root {
+    --sidebar-w: 260px;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  #dynamicHeaderText {
+    max-width: 220px;
+    font-size: 0.75rem;
+  }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — SMALL TABLET (≤ 900px)
+══════════════════════════════════════════ */
+@media (max-width: 900px) {
+  :root {
+    --header-h: 60px;
+  }
+
+  .main-container {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .sidebar .card {
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+
+  .content {
+    padding: 16px 18px;
+  }
+
+  .orders-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — MOBILE (≤ 640px)
+══════════════════════════════════════════ */
+@media (max-width: 640px) {
+  :root {
+    --header-h: 56px;
+  }
+
+  /* Header */
+  .header {
+    padding: 0 14px;
+    gap: 8px;
+  }
+
+  .header-left h1 {
+    font-size: 1.3rem;
+  }
+
+  #dynamicHeaderText {
+    display: none;
+  }
+
+  #waiterTVBtn span,
+  #waiterFSBtn span {
+    display: none;
+  }
+
+  #waiterTVBtn,
+  #waiterFSBtn {
+    padding: 9px 11px;
+    font-size: 15px;
+  }
+
+  .btn-logout span {
+    display: none;
+  }
+
+  .btn-logout {
+    padding: 9px 11px;
+    font-size: 15px;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .sidebar .card {
+    flex: none;
+    width: 100%;
+  }
+
+  /* Stats */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 13px 12px;
+  }
+
+  .stat-card b {
+    font-size: 1.5rem;
+  }
+
+  .stat-card h4 {
+    font-size: 10.5px;
+  }
+
+  /* Orders */
+  .content {
+    padding: 12px 14px;
+    gap: 16px;
+  }
+
+  .orders-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .orders-grid.compact {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  .order-card {
+    padding: 14px 14px 14px 16px;
+  }
+
+  /* Live tables */
+  #liveTablesGrid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  /* Toast */
+  .toast-container {
+    bottom: 14px;
+    right: 10px;
+    left: 10px;
+  }
+
+  .toast {
+    min-width: unset;
+    max-width: 100%;
+  }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — EXTRA SMALL (≤ 400px)
+══════════════════════════════════════════ */
+@media (max-width: 400px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .header-left h1 {
+    font-size: 1.15rem;
+  }
+
+  .lang-select {
+    font-size: 11px;
+    padding: 7px 8px;
+  }
+}
+
+/* ══════════════════════════════════════════
+   UTILITY
+══════════════════════════════════════════ */
+.text-green {
+  color: var(--green-dark);
+}
+
+.text-red {
+  color: var(--red);
+}
+
+.text-amber {
+  color: var(--amber);
+}
+
+.text-blue {
+  color: var(--blue);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.mt-8 {
+  margin-top: 8px;
+}
+
+.mt-12 {
+  margin-top: 12px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+
+  to {
+    background-position: -200% 0;
+  }
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 12px 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html <style> BLOCKS — admin panel CSS audit
+   (mechanical move, Phase 1; each former inline block kept intact and
+   separated below so it can be re-filed into the right named section
+   in a follow-up pass; nothing here has been renamed or altered)
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* ── admin.html style block #1 ── */
+
+/* ══════════════════════════════════════════════
+       NESTA ERP — OFITSIANT PANELI (POS)
+       Faqat: Stol tanlash → Buyurtma oynasi → Holat → Tarix
+    ══════════════════════════════════════════════ */
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #0f172a;
+  --bg-soft: #1e293b;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-soft: #64748b;
+  --brand: #22c55e;
+  --brand-dark: #16a34a;
+  --brand-tint: #f0fdf4;
+  --img-well: #f1f5f9;
+
+  /* Stol holati ranglari */
+  --st-free: #22c55e;
+  --st-busy: #f97316;
+  --st-preparing: #eab308;
+  --st-ready: #3b82f6;
+  --st-paid: #ef4444;
+  --st-closed: #94a3b8;
+  --st-reserved: #a855f7;
+}
+
+/* Bu fayldagi IKKINCHI, "OFITSIANT PANELI (POS)" bo'limiga xos token
+       to'plami (yuqoridagi asosiy :root'dan mustaqil, boshqa nomlar) —
+       shu yerda ham dark-mode qiymatlari kerak (menu-card, kategoriya
+       chip, savat qatori kabi ko'p komponent shulardan foydalanadi).
+       --bg/--bg-soft/--st-* ataylab qayta belgilanmadi — ular allaqachon
+       to'q (dark accent) ranglar, ikkala rejimda ham bir xil ishlaydi. */
+html[data-theme="dark"] {
+  --surface: #16213A;
+  --surface-alt: #1B2A47;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: #F1F5F9;
+  --text-soft: #94A3B8;
+  --brand-tint: rgba(34, 197, 94, 0.16);
+  --img-well: #1B2A47;
+}
+
+/* Quyidagi komponentlar CSS o'zgaruvchilar o'rniga qattiq (hardcoded)
+       och ranglardan foydalanadi edi (modal foni, badge/chip fonlari,
+       to'lov varianti "active" holati) — dark rejimda ular oq/och holicha
+       qolib, fonga qarshi noqulay ko'rinar edi. Bu yerda faqat SHU
+       komponentlar uchun dark-safe qiymatlar qo'shildi; business-logika
+       yoki elementning o'zi o'zgarmadi. */
+html[data-theme="dark"] .variant-modal {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+html[data-theme="dark"] .cr-variant {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .cart-sent-badge {
+  background: rgba(59, 130, 246, 0.18);
+  color: #93c5fd;
+}
+
+html[data-theme="dark"] .item-note-chip.chip-allergy {
+  background: rgba(245, 158, 11, 0.16);
+  color: #fcd34d;
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+html[data-theme="dark"] .pay-confirm-hint {
+  background: var(--surface-alt);
+}
+
+html[data-theme="dark"] .pay-opt.active {
+  background: rgba(34, 197, 94, 0.14);
+}
+
+html[data-theme="dark"] .cr-tag {
+  color: var(--text);
+}
+
+html[data-theme="dark"] .cr-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+html[data-theme="dark"] .mc-qty-minus-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+html[data-theme="dark"] .cart-row {
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+/* .receipt-paper (chek preview) ATAYLAB oq/qora holicha qoldirildi —
+       u haqiqiy qog'oz chekni simulyatsiya qiladi (chop etish uchun ham
+       ishlatiladi), shuning uchun tema o'zgarganda o'zgarmasligi kerak. */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--surface-alt);
+  color: var(--text);
+  font-family: 'Inter', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── HEADER ── */
+.w-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  height: 56px;
+  background: var(--bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  position: sticky;
+  top: 0;
+  z-index: 300;
+  gap: 12px;
+}
+
+.w-header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.w-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.w-brand {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.3px;
+}
+
+.w-brand span {
+  color: var(--brand);
+}
+
+/* w-header foni to'q (--bg) — umumiy nesta-header brend matni shu yerda
+       oq rangda ko'rinishi kerak. */
+.w-header .nesta-header-product {
+  color: #fff;
+}
+
+.w-header .nesta-header-role {
+  color: var(--text-soft, #94a3b8);
+}
+
+.w-staff {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.w-rest {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--brand);
+  white-space: nowrap;
+}
+
+.w-sep {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.w-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Header markazi — restoran nomi + jonli sana/soat */
+.w-header-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 45%;
+}
+
+.w-header-center .w-center-rest {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.w-header-center .w-center-datetime {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 2px;
+}
+
+@media (max-width: 780px) {
+  .w-header-center {
+    display: none;
+  }
+}
+
+.lang-select {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  min-width: 80px;
+  min-height: 40px;
+
+}
+
+.lang-select option {
+  background: var(--bg);
+  color: #fff;
+}
+
+.btn-logout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.1);
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.btn-logout:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Sahifa (page) dark/light rejimini almashtiruvchi tugma — .w-header
+       o'zi doim to'q (navy) fonda qoladi (dizayn tanlovi, POS panellarida
+       keng tarqalgan naqsh), shuning uchun bu tugma HAM rgba(255,255,255,
+       ...) bilan yozilgan — .lang-select/.btn-logout bilan bir xil uslub.
+       Aylanadigan quyosh/oy ikonkasi — admin.css'dagi mavjud naqsh bilan
+       bir xil (:root[data-theme="dark"] emas, bu yerda html[data-theme]
+       — waiter.js'ning toggleTheme() aynan shu atributni o'rnatadi). */
+.theme-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background .15s ease;
+}
+
+.theme-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.theme-toggle-btn .fa-sun {
+  display: none;
+}
+
+html[data-theme="dark"] .theme-toggle-btn .fa-sun {
+  display: inline;
+}
+
+html[data-theme="dark"] .theme-toggle-btn .fa-moon {
+  display: none;
+}
+
+/* ══════════════════════════════
+       VIEW 1 — STOLLAR
+    ══════════════════════════════ */
+.w-view {
+  display: none;
+}
+
+.w-view.active {
+  display: block;
+}
+
+.tables-wrap {
+  padding: 18px 20px 40px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Zallar filteri */
+.hall-filter {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.hall-btn {
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .15s ease;
+}
+
+.hall-btn:hover {
+  border-color: #cbd5e1;
+  color: var(--text);
+}
+
+.hall-btn.active {
+  background: var(--bg);
+  border-color: var(--bg);
+  color: #fff;
+}
+
+.hall-btn .hall-count {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 11.5px;
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+/* Holat legendasi */
+.status-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: var(--text-soft);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Stol kartalari
+       Responsiv ustun soni (redesign spec p.11-13): auto-fill+minmax fluid
+       texnikasi ishlatiladi (belgilangan breakpointlarda minmax kengligi
+       o'zgaradi) — bu qattiq repeat(N) dan ko'ra ko'proq ekran o'lchamlarida
+       tabiiy moslashadi, lekin har bir bosqichda maqsadli ustun soniga
+       (desktop 6-8 / planshet 3-4 / mobil 2 / mayda 1-2) mos keladi. */
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 14px;
+}
+
+@media (min-width: 1440px) {
+  .tables-grid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 16px;
+  }
+}
+
+@media (max-width: 991px) {
+  .tables-grid {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 12px;
+  }
+}
+
+@media (max-width: 599px) {
+  .tables-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 359px) {
+  .tables-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.table-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  overflow: hidden;
+  min-height: 44px;
+  /* teginish nishoni minimal o'lchami */
+}
+
+.table-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--brand-tint, var(--border));
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+}
+
+.table-card .tc-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+/* Sarlavha qatori: 🪑 Stol N + holat plashkasi */
+.table-card .tc-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.table-card .tc-num {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.table-card .tc-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 3px 8px 3px 6px;
+  border-radius: 20px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.table-card .tc-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Bo'sh stol — minimal, markazlashtirilgan holat */
+.table-card.tc-free {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 92px;
+  gap: 6px;
+}
+
+.table-card.tc-free .tc-card-top {
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0;
+}
+
+.table-card.tc-free .tc-open-hint {
+  text-align: center;
+}
+
+/* Sig'im / xodim qatori */
+.table-card .tc-info-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.table-card .tc-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.table-card .tc-meta {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-soft);
+  line-height: 1.5;
+}
+
+.table-card .tc-seats {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.table-card .tc-bell {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 13px;
+}
+
+.table-card .tc-reserved-icon {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 14px;
+}
+
+.table-card .tc-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.tc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 7px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tc-badge-order {
+  background: var(--surface-alt);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+
+.tc-badge-total {
+  background: var(--surface-alt);
+  color: var(--brand);
+  border: 1px solid var(--border);
+}
+
+/* Karta pastki qismi — bo'sh joyni bosib, "ochish" ishorasini
+       doim pastga tekislaydi (barcha kartalar balandligi bir xil bo'ladi) */
+.table-card .tc-open-hint {
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand);
+  text-align: right;
+  opacity: 0.85;
+}
+
+.tc-ready-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 4px;
+  border: none;
+  border-radius: 9px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tc-ready-btn:hover {
+  background: var(--brand-dark);
+}
+
+/* ══════════════════════════════
+       VIEW 2 — BUYURTMA OYNASI
+    ══════════════════════════════ */
+/* 🩹 ROOT CAUSE FIX — "Oshxonaga yuborish" tugmasi footer ostida
+       qolib ketardi: bu balandlik hisobi (100vh - header) yagona staff
+       footer (fixed, viewport pastida) qo'shilishidan OLDIN yozilgan
+       edi va uni umuman hisobga olmasdi — .cart-foot (tugma shu yerda)
+       .os-right ning eng pastki qismida, "order-screen"ning to'liq
+       balandligi footer bilan bir xil joyni band qilardi. Endi footer
+       balandligi ham ayiriladi — kontent hech qachon footer ostiga
+       "sirg'alib" ketmaydi, faqat z-index oshirib yashirilmaydi. */
+.order-screen {
+  display: flex;
+  height: calc(100vh - 56px - var(--staff-footer-height));
+  overflow: hidden;
+}
+
+/* O'NG — MENYU (DOM tartibida .os-right dan keyin, endi visual jihatdan o'ngda) */
+.os-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface-alt);
+}
+
+.os-topbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  min-height: 78px;
+  box-sizing: border-box;
+  background: var(--bg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  flex-shrink: 0;
+}
+
+.os-topbar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.os-topbar-center>* {
+  pointer-events: auto;
+}
+
+.os-topbar-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-back {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btn-back:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.os-info-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.os-served-row {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.os-served-row a,
+.os-served-row .os-link {
+  color: #60a5fa;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.os-served-row a:hover,
+.os-served-row .os-link:hover {
+  text-decoration: underline;
+}
+
+.os-table-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0;
+}
+
+.os-table-title b {
+  font-weight: 800;
+}
+
+.os-table-badge {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  margin-left: 8px;
+}
+
+.os-table-client {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.os-table-client .os-link {
+  color: #60a5fa;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.os-table-client .os-link:hover {
+  text-decoration: underline;
+}
+
+.os-table-client-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.os-client-edit-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 10.5px;
+  opacity: 0.7;
+}
+
+.os-client-edit-btn:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.os-receipt-chip {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 7px 16px;
+  border-radius: 9px;
+  white-space: nowrap;
+}
+
+.os-search-row {
+  flex-shrink: 0;
+  width: 220px;
+}
+
+.os-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1.5px solid rgba(148, 163, 184, 0.35);
+  border-radius: 9px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: inherit;
+}
+
+.os-search::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.os-search:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.os-body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.os-cats {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+
+.cat-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  width: auto;
+  text-align: center;
+  padding: 9px 16px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+/* 🩹 DARK MODE — matn rangi avval hardcoded #334155 (to'q slate) edi.
+       Light rejimda --surface (#fff) ustida o'qilardi, lekin dark rejimda
+       --surface #16213A (to'q navy)ga o'tganda matn deyarli ko'rinmasdi.
+       Endi var(--text-primary) — ikkala rejimda ham theme-aware. */
+.cat-btn:hover {
+  border-color: var(--text-muted);
+}
+
+.cat-btn.active {
+  background: var(--bg);
+  border-color: var(--bg);
+  color: #fff;
+}
+
+.os-subcats {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 150px;
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 12px 10px;
+  border-right: 1px solid var(--border);
+  background: var(--surface-alt);
+  scrollbar-width: thin;
+}
+
+.os-subcats:empty {
+  display: none;
+}
+
+.subcat-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+/* 🩹 DARK MODE — .cat-btn bilan bir xil sabab/fix (avval hardcoded
+       #334155, endi var(--text-primary)/var(--text-muted)). */
+.subcat-btn:hover {
+  border-color: var(--text-muted);
+}
+
+.subcat-btn.active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+       TAOM KARTALARI GRID — endi ustun soni QATTIQ belgilanmaydi (avval
+       "har doim aynan 6 ta" edi — tor konteynerda cardlarni siqib,
+       nomlarni "Osh (nus..." qilib kesib yuborardi). Endi auto-fit +
+       minmax(220px, 1fr) ishlatiladi: brauzer HAR BIR card kamida 220px
+       bo'lishini kafolatlaydi va shu floor'ga qarab NECHTA ustun
+       sig'ishini o'ZI hisoblab chiqadi — .os-right (savat, 400px/340px)
+       va .os-subcats (150px) qancha joy band qilgani muhim emas, real
+       qolgan kenglik asosida ishlaydi. 1fr (260px emas) ishlatilgani
+       sababi: agar oxirgi qatorda faqat 1-2 ta card qolsa (mas. mobil),
+       ular butun qatorni to'ldirib cho'ziladi — qattiq max (mas. 260px)
+       qo'ysak, o'sha cardlar qatorning yarmida "yarim bo'sh" osilib
+       qolardi. O'ta keng monitorda cardning cheksiz cho'zilib ketishi
+       esa pastdagi .menu-card { max-width } orqali cheklanadi (grid
+       katak 1fr bo'yicha cho'ziladi, lekin card o'zi belgilangan
+       maksimaldan oshmaydi — bu holatda qatorlar orasidagi bo'shliq
+       biroz kattaroq ko'rinadi, bu esa "card yopishib ketmasin" (8-band)
+       talabiga ham mos). Pastdagi @media'lar endi ustun sonini emas,
+       faqat gap/padding/card balandligini nozik sozlaydi. ═══════════ */
+.os-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: grid;
+  min-width: 0;
+  width: 100%;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  align-content: start;
+  justify-items: stretch;
+}
+
+.menu-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+  min-height: 300px;
+  border: 1.5px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color .12s ease, box-shadow .12s ease, transform .08s ease;
+  cursor: pointer;
+}
+
+.menu-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.09);
+  transform: translateY(-2px);
+}
+
+.mc-kg-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  padding: 4px 8px;
+  border-radius: 7px;
+}
+
+/* Tanlangan (savatga qo'shilgan) holat — mavjud yashil dizayn saqlandi,
+       endi CSS token orqali (hardcoded hex emas). */
+.menu-card.in-cart {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+  box-shadow: 0 0 0 1px var(--brand) inset;
+}
+
+.menu-card.in-cart:hover {
+  border-color: var(--brand-dark);
+}
+
+.mc-img-wrap {
+  width: 100%;
+  height: 160px;
+  flex-shrink: 0;
+  background: var(--img-well);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.menu-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Rasm yo'q holati — bo'sh joy qoldirish o'rniga professional placeholder */
+.mc-img-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--text-soft);
+}
+
+.mc-img-placeholder .mc-img-icon {
+  font-size: 30px;
+  opacity: .55;
+}
+
+.mc-img-placeholder .mc-img-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  opacity: .65;
+}
+
+/* mc-body ichki tartib: rasm (yuqorida, .mc-img-wrap) → nom+narx bitta
+       qatorda (.mc-top-row) → moslashuvchan bo'sh joy → quantity control
+       har doim pastda (.mc-qty-row, margin-top:auto — nom nechta qatorga
+       tushishidan qat'iy nazar tugma bir xil chiziqda qoladi). */
+.menu-card .mc-body {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.mc-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.menu-card .mc-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--text);
+  line-height: 1.34;
+  /* Uzun nomlar cardni cho'zmasin — 2 qatordan keyin kesiladi (faqat
+         juda uzun nomlarda "..." ko'rinadi), narx esa hech qachon
+         bosilib/ustidan tushib qolmaydi (flex-shrink:0). Card kengligi
+         endi kattaroq bo'lgani uchun ko'pchilik nomlar 2 qatorga ham
+         to'liq sig'adi, kesilmaydi. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.menu-card .mc-price {
+  flex-shrink: 0;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--brand-dark);
+  white-space: nowrap;
+}
+
+.mc-qty-row {
+  margin-top: auto;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── QUANTITY "PILL" — uzun gorizontal control, cardning pastki-markaziy
+       qismida. Ikkala holat (bo'sh/to'ldirilgan) BIR XIL tashqi o'lchamda —
+       shuning uchun "+" bosilganda pill kattaligi sakramaydi, faqat ichi
+       almashadi. Klass nomlari ataylab "mc-qty-" prefiksi bilan — .cr-qty
+       ichidagi savat-qatori stepperi (pastda, "Savatdagi miqdor stepperi")
+       bilan bir xil umumiy nom (.qty-btn/.qty-minus/.qty-plus/.qty-val)
+       ishlatilmadi, aks holda ikkala komponent bir-birining stilini bosib
+       yozib yuborar edi. ── */
+.mc-qty-pill {
+  width: 100%;
+  max-width: 180px;
+  height: 46px;
+  margin: 0 auto;
+  border-radius: 13px;
+  overflow: hidden;
+  display: flex;
+  align-items: stretch;
+  transition: border-color .12s ease;
+}
+
+/* Bo'sh holat — butun pill bo'ylab bosiladigan yagona "+" */
+.mc-qty-pill.mc-qty-empty {
+  background: var(--brand);
+  border: none;
+}
+
+.mc-qty-plus-solo {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: background .12s ease, transform .08s ease;
+}
+
+.mc-qty-plus-solo:hover {
+  background: rgba(255, 255, 255, .16);
+}
+
+.mc-qty-plus-solo:active {
+  transform: scale(.96);
+}
+
+/* To'ldirilgan holat — [ − | son | + ] bitta pill ichida */
+.mc-qty-pill.mc-qty-filled {
+  background: var(--surface-alt);
+  border: 1.5px solid var(--border);
+}
+
+.menu-card.in-cart .mc-qty-pill.mc-qty-filled {
+  border-color: var(--brand);
+}
+
+.mc-qty-minus-btn,
+.mc-qty-plus-btn {
+  flex: 0 0 44px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: background .12s ease, color .12s ease, transform .08s ease;
+}
+
+.mc-qty-minus-btn {
+  color: var(--text);
+}
+
+.mc-qty-minus-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.mc-qty-minus-btn:active {
+  transform: scale(.9);
+}
+
+.mc-qty-plus-btn {
+  color: #fff;
+  background: var(--brand);
+}
+
+.mc-qty-plus-btn:hover {
+  background: var(--brand-dark);
+}
+
+.mc-qty-plus-btn:active {
+  transform: scale(.9);
+}
+
+.mc-qty-num {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.btn-weight {
+  width: 100%;
+  max-width: 180px;
+  height: 46px;
+  margin: 0 auto;
+  border: none;
+  border-radius: 13px;
+  background: var(--brand);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-weight:hover {
+  background: var(--brand-dark);
+}
+
+.btn-variant {
+  width: 100%;
+  max-width: 180px;
+  height: 46px;
+  margin: 0 auto;
+  border: none;
+  border-radius: 13px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-variant:hover {
+  background: #1d4ed8;
+}
+
+/* ── RESPONSIVE — ustun soni endi yuqoridagi auto-fit orqali O'ZI
+       hisoblanadi (qattiq repeat(N) YO'Q), shuning uchun bu yerda faqat
+       kichik ekranlarda floor'ni ozroq pasaytirish (torroq telefonlarda
+       220px ham katta bo'lib, 1 ustunga majburlashi mumkin — buni
+       yumshatish uchun) va gap/padding/card balandligini nozik
+       sozlash qilinadi. Ustunlar soni taxminan: keng desktop (≥1600px,
+       .os-items ~1000px+) → 4–6 ta; laptop (1280–1599px) → 3–4 ta;
+       planshet (992–1279px) → 3 ta; kichik planshet (768–991px) →
+       2–3 ta; mobil (480–767px) → 2 ta; juda tor (<480px) → 1–2 ta —
+       bular auto-fit'ning haqiqiy konteyner kengligidan hisoblagan
+       natijasi, majburiy son emas. ── */
+@media (max-width: 991px) {
+  .os-items {
+    gap: 14px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 767px) {
+
+  /* Floor 150px (avval 180px edi) — odatiy telefon kengliklarida
+         (360-430px, .os-items paddingdan keyin ~330-400px) 180px floor
+         faqat 1 ustunga majburlar edi, holbuki mobil uchun aniq talab
+         "2 ta card / qator". 150px + 10px gap shu kengliklarda ishonchli
+         2 ustun beradi (auto-fit hali ham konteyner haqiqiy kengligiga
+         qarab hisoblaydi — bu qattiq "har doim 2" degani emas). */
+  .os-items {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+
+  .menu-card {
+    min-height: 250px;
+    max-width: 260px;
+  }
+
+  .mc-img-wrap {
+    height: 130px;
+  }
+}
+
+@media (max-width: 479px) {
+  .os-items {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .menu-card {
+    min-height: 230px;
+    max-width: none;
+  }
+
+  .mc-img-wrap {
+    height: 108px;
+  }
+
+  .menu-card .mc-body {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 359px) {
+  .os-items {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-card {
+    min-height: 0;
+    flex-direction: row;
+    max-width: none;
+  }
+
+  .mc-img-wrap {
+    width: 96px;
+    height: 96px;
+    flex-shrink: 0;
+  }
+
+  .menu-card .mc-body {
+    padding: 10px 12px;
+  }
+
+  .menu-card .mc-name {
+    min-height: 0;
+    -webkit-line-clamp: 2;
+  }
+}
+
+/* Savatdagi tanlangan variant ko'rsatkichi */
+.cr-variant {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1d4ed8;
+  background: #eff6ff;
+  border-radius: 6px;
+  padding: 3px 8px;
+  margin-top: 4px;
+}
+
+/* Variant tanlash modali */
+.variant-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.variant-modal {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 380px;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 18px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.variant-modal h4 {
+  margin: 0 0 4px;
+  font-size: 15.5px;
+  font-weight: 800;
+}
+
+.variant-modal .vm-sub {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  margin: 0 0 14px;
+}
+
+.vm-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  background: var(--surface);
+  text-align: left;
+}
+
+.vm-opt:hover {
+  border-color: #cbd5e1;
+  background: var(--surface-alt);
+}
+
+.vm-opt-name {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.vm-opt-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--brand-dark);
+}
+
+.vm-close {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 9px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Savat qatoridagi miqdor stepperi (cart-row ichida ishlatiladi) */
+.qty-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qty-minus {
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.qty-plus {
+  border: none;
+  background: var(--brand);
+  color: #fff;
+}
+
+.qty-val {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+/* O'NG — SAVAT */
+.os-right {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.cart-head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  min-height: 78px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.cart-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.cart-clear {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cart-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 14px;
+}
+
+.cart-row {
+  display: flex;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.cart-row:last-child {
+  border-bottom: none;
+}
+
+.cart-row .cr-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.cr-thumb {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+}
+
+.cr-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: var(--text-soft);
+}
+
+.cart-row .cr-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  margin: 0 0 3px;
+}
+
+.cart-row .cr-cat {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-soft);
+  margin: 0 0 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.cart-row .cr-price {
+  font-size: 12px;
+  color: var(--text-soft);
+  margin: 0;
+}
+
+.cart-row .cr-note {
+  width: 100%;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--surface-alt);
+}
+
+.cart-row .cr-note:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+/* Izoh teglari — rasm 2 uslubida: dumaloq pill, ikon bilan */
+.cr-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.cr-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: all .12s ease;
+  line-height: 1.2;
+}
+
+.cr-tag .cr-tag-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.cr-tag:hover {
+  border-color: #cbd5e1;
+  background: var(--surface-alt);
+}
+
+.cr-tag.active {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.cr-tag.active .cr-tag-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 9px;
+  color: #fff;
+}
+
+.cr-tag-custom.active {
+  border-color: #2563eb;
+  background: #2563eb;
+}
+
+/* Allergiya/izoh panelini ochish-yopish tugmasi — teglar shu bosilganda chiqadi */
+.cr-note-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 0;
+  border: none;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.cr-note-toggle:hover {
+  color: var(--text);
+}
+
+.cr-note-toggle-arrow {
+  display: inline-flex;
+  font-size: 10px;
+  transition: transform .15s ease;
+}
+
+.cr-note-toggle-arrow.open {
+  transform: rotate(180deg);
+}
+
+/* ── Yuborilgan taom ostidagi Allergiya/Izoh — ikkita ixcham,
+       yonma-yon chip (eski bitta-yumaloq "📝 note-text" qatori o'rniga).
+       renderItemNoteChips() parseNoteTags() natijasini (mavjud, o'zgarmagan
+       logika) shu ikki chipga bo'lib chizadi — ma'lumotning o'zi
+       o'zgarmaydi, faqat ko'rinishi. ── */
+.item-note-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.item-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  max-width: 220px;
+}
+
+.item-note-chip .chip-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.item-note-chip .chip-label {
+  flex-shrink: 0;
+  font-weight: 800;
+}
+
+.item-note-chip .chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Allergiya — ogohlantiruvchi (amber/warning) rang, kommentariya — neytral */
+.item-note-chip.chip-allergy {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.item-note-chip.chip-comment {
+  background: var(--surface-alt);
+  color: var(--text-soft);
+  border: 1px solid var(--border);
+}
+
+.cart-row .cr-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cart-row .cr-sum {
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.cart-row .cr-calc {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-soft);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.cart-row .cr-calc b {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.cr-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cr-remove-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.cr-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cart-sent-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 5px;
+  margin-left: 6px;
+  background: #dbeafe;
+  color: #1d4ed8;
+  vertical-align: middle;
+}
+
+.cart-foot {
+  border-top: 1px solid var(--border);
+  padding: 14px 16px;
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
+/* Summa xulosasi: xizmat haqi / chegirma / jami */
+.cart-summary {
+  margin-bottom: 12px;
+}
+
+.cs-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.cs-row .cs-label {
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.cs-row .cs-value {
+  font-weight: 700;
+}
+
+.cs-row.cs-discount .cs-value {
+  color: #dc2626;
+}
+
+.cs-row.cs-service .cs-value {
+  color: var(--text);
+}
+
+.cs-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 8px 0;
+}
+
+.cart-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.cart-total-row .ctr-label {
+  font-size: 13.5px;
+  color: var(--text-soft);
+  font-weight: 600;
+}
+
+.cart-total-row .ctr-value {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.pay-row {
+  margin-bottom: 12px;
+}
+
+.pay-row-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-soft);
+  margin-bottom: 6px;
+}
+
+.pay-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pay-confirm-hint {
+  font-size: 12.5px;
+  color: var(--text-soft);
+  font-weight: 600;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.pay-opt {
+  width: 100%;
+  padding: 13px 10px;
+  text-align: center;
+  cursor: pointer;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--surface);
+  transition: all .12s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pay-opt:hover {
+  border-color: #cbd5e1;
+}
+
+.pay-opt.active {
+  border-color: var(--brand);
+  background: #f0fdf4;
+  color: var(--brand-dark);
+}
+
+.cart-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.cart-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.cart-actions-row .btn-send,
+.cart-actions-row .btn-pay-waiter {
+  flex: 1;
+}
+
+.btn-send,
+.btn-update,
+.btn-kassa {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 11px;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-send {
+  background: var(--brand);
+  color: #fff;
+}
+
+.btn-send:hover {
+  background: var(--brand-dark);
+}
+
+.btn-update {
+  background: #2563eb;
+  color: #fff;
+}
+
+.btn-update:hover {
+  background: #1d4ed8;
+}
+
+.btn-kassa {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.btn-kassa:hover {
+  background: #d97706;
+}
+
+.btn-kassa.is-requested {
+  background: #94a3b8;
+  cursor: default;
+}
+
+.btn-send:disabled,
+.btn-update:disabled,
+.btn-kassa:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.btn-pay-waiter {
+  padding: 13px;
+  border: none;
+  border-radius: 11px;
+  font-size: 14.5px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #7c3aed;
+  color: #fff;
+}
+
+.btn-pay-waiter:hover {
+  background: #6d28d9;
+}
+
+.btn-pay-waiter:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.btn-receipt-menu {
+  flex: 0 0 auto;
+  width: 46px;
+  padding: 13px 0;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all .12s ease;
+}
+
+.btn-receipt-menu:hover {
+  border-color: #cbd5e1;
+  background: var(--surface-alt);
+}
+
+.receipt-menu-dropdown {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  overflow: hidden;
+  z-index: 40;
+  min-width: 220px;
+}
+
+.receipt-menu-dropdown button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 11px 14px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: left;
+  transition: background .12s ease;
+}
+
+.receipt-menu-dropdown button:hover {
+  background: var(--surface-alt);
+}
+
+.receipt-menu-dropdown button+button {
+  border-top: 1px solid var(--border);
+}
+
+/* ── TO'LOV MODALI: usul tugmalari ── */
+.pm-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.pm-methods.pm-hidden {
+  display: none;
+}
+
+.pm-method {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 8px;
+  border: 1.5px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  transition: all .12s ease;
+}
+
+.pm-method:hover {
+  border-color: #cbd5e1;
+  background: var(--surface-alt);
+}
+
+.pm-method .pm-icon {
+  font-size: 20px;
+}
+
+.pm-method:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pm-method.pm-selected {
+  border-color: var(--brand);
+  background: #eff6ff;
+}
+
+/* Karta raqami kiritish bosqichi (naqddan tashqari barcha usullar uchun) */
+.pm-card-step {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pm-card-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-soft);
+  cursor: pointer;
+  padding: 2px 0;
+  align-self: flex-start;
+}
+
+.pm-card-back:hover {
+  color: var(--text);
+}
+
+.pm-card-method-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-alt);
+  border: 1.5px solid var(--border);
+}
+
+.pm-card-method-label .pm-icon {
+  font-size: 18px;
+}
+
+.pm-field-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-soft);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.pm-card-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  background: var(--surface);
+}
+
+.pm-card-input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.pm-card-input.pm-input-error {
+  border-color: #dc2626;
+}
+
+.pm-card-row {
+  display: flex;
+  gap: 8px;
+}
+
+.pm-card-row .pm-field {
+  flex: 1;
+}
+
+.pm-card-err {
+  font-size: 11.5px;
+  color: #dc2626;
+  font-weight: 600;
+  min-height: 14px;
+  margin-top: 2px;
+}
+
+.pm-confirm-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: var(--brand);
+  color: #fff;
+  font-family: inherit;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pm-confirm-btn:hover {
+  background: #1d4ed8;
+}
+
+.pm-confirm-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ── Buyurtma o'zgartirish so'rovi (Bekor qilish/Almashtirish) —
+       mavjud to'lov modali klasslarini (.pm-field/.pm-field-label/
+       .pm-card-input/.pm-confirm-btn/.vm-close) qayta ishlatadi, faqat
+       shu bo'lim uchun kerak bo'lgan bir nechta qo'shimcha qoida. ── */
+.pm-field {
+  margin-bottom: 14px;
+}
+
+select.pm-card-input,
+textarea.pm-card-input {
+  letter-spacing: normal;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+textarea.pm-card-input {
+  resize: vertical;
+  cursor: text;
+  font-family: inherit;
+}
+
+.oc-remaining-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-soft);
+  margin-top: 6px;
+}
+
+/* Savat qatoridagi 🚫/🔀 amal tugmalari (faqat yuborilgan, hali
+       so'rovi bo'lmagan qatorlarda ko'rinadi) */
+.oc-item-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.oc-action-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .12s ease, border-color .12s ease;
+}
+
+.oc-action-btn:hover {
+  background: var(--surface-alt);
+}
+
+.oc-cancel-btn:hover {
+  border-color: #ef4444;
+}
+
+.oc-replace-btn:hover {
+  border-color: #f59e0b;
+}
+
+/* "⏳ kutilmoqda" — mavjud tasdiqlash kutilayotgan so'rov bor bo'lganda */
+.oc-pending-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--amber-dim, rgba(251, 191, 36, .18));
+  color: #d97706;
+  font-size: 13px;
+  cursor: help;
+  animation: ocPendingPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ocPendingPulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: .55;
+  }
+}
+
+/* To'lov jarayoni imitatsiyasi (barcha usullar uchun) */
+.pm-processing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 8px 8px;
+}
+
+.pm-spinner {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 4px solid var(--border);
+  border-top-color: var(--brand);
+  animation: pm-spin 0.8s linear infinite;
+}
+
+@keyframes pm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pm-processing-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.pm-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 8px 8px;
+}
+
+.pm-success-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.pm-success-text {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+}
+
+/* ── CHEK — faqat chop etishda ko'rinadi ──
+       ⚠️ Eslatma: avval visibility:hidden texnikasi ishlatilgan edi, lekin
+       uzun/scroll bo'ladigan ekranlarda (masalan savat paneli) brauzer chop
+       etishni sahifalarga bo'lganda "ko'rinmas" content baribir qog'ozga
+       chiqib qolar edi (ikkinchi "chek" bo'lib ko'rinardi). Shuning uchun
+       endi body'ning barcha bevosita farzandlari to'liq display:none qilinadi
+       — faqat #printReceiptRoot chop etishda DOM'da qoladi. ── */
+.print-receipt-root {
+  display: none;
+}
+
+@media print {
+  body>*:not(#printReceiptRoot) {
+    display: none !important;
+  }
+
+  #printReceiptRoot.print-receipt-root {
+    display: block !important;
+    position: static;
+    width: 100%;
+  }
+}
+
+.receipt-paper {
+  width: 80mm;
+  margin: 0 auto;
+  padding: 8px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #000;
+  background: #fff;
+}
+
+.receipt-paper .rp-stars {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: pre;
+  overflow: hidden;
+  text-align: center;
+}
+
+.receipt-paper .rp-center {
+  text-align: center;
+}
+
+.receipt-paper .rp-logo {
+  max-width: 120px;
+  max-height: 60px;
+  object-fit: contain;
+  margin: 0 auto 6px;
+  display: block;
+}
+
+.receipt-paper .rp-shopname {
+  margin: 3px 0;
+}
+
+.receipt-paper .rp-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.receipt-paper .rp-doctitle {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 8px 0 6px;
+  letter-spacing: 1px;
+}
+
+.receipt-paper .rp-info {
+  font-size: 12px;
+}
+
+.receipt-paper .rp-info-line {
+  font-size: 12px;
+  margin: 1px 0;
+}
+
+.receipt-paper .rp-divider {
+  border-top: 1px dashed #000;
+  margin: 6px 0;
+}
+
+.receipt-paper .rp-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 12px;
+  padding: 1px 0;
+}
+
+.receipt-paper .rp-headrow {
+  font-weight: 700;
+}
+
+.receipt-paper .rp-item-name {
+  flex: 1;
+  text-align: left;
+  word-break: break-word;
+}
+
+.receipt-paper .rp-item-qty {
+  width: 44px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.receipt-paper .rp-item-sum {
+  width: 68px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.receipt-paper .rp-total-row {
+  font-size: 13px;
+  font-weight: 700;
+  padding-top: 6px;
+}
+
+.receipt-paper .rp-qr {
+  width: 100px;
+  height: 100px;
+  margin: 4px auto 2px;
+  display: block;
+}
+
+.receipt-paper .rp-qr-caption {
+  font-size: 10.5px;
+  margin-bottom: 4px;
+}
+
+.receipt-paper .rp-barcode {
+  max-width: 100%;
+  height: 40px;
+  margin: 4px auto;
+  display: block;
+}
+
+.receipt-paper .rp-foot {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 12px;
+}
+
+.action-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.action-divider::before,
+.action-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 13.5px;
+  padding: 30px 16px;
+  margin: 0;
+}
+
+/* ── TOAST ── */
+.toast-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  animation: toastIn .2s ease;
+}
+
+.toast.success {
+  background: var(--brand-dark);
+}
+
+.toast.error {
+  background: #dc2626;
+}
+
+.toast.info {
+  background: #2563eb;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ── MOBIL ── */
+@media (max-width: 900px) {
+  .os-right {
+    width: 340px;
+  }
+}
+
+@media (max-width: 760px) {
+  .order-screen {
+    flex-direction: column;
+    height: auto;
+  }
+
+  /* Mobilda vizual tartib DOM tartibidan farq qiladi — DOM'da .os-right
+         (savat) birinchi, .os-left (menyu) ikkinchi keladi (desktopda savat
+         chapda, menyu o'ngda ko'rinishi uchun). Mobil stack'da esa MENYU
+         TEPADA, BUYURTMA RO'YXATI (savat) PASTDA bo'lishi so'ralgan — bu
+         faqat flex `order` orqali hal qilinadi, DOM/JS/onclick handlerlar,
+         getElementById chaqiruvlari, hech biri o'zgarmaydi (ular DOM
+         joylashuviga bog'liq emas). Desktopda (>760px) bu qoida ishlamaydi,
+         chap/o'ng joylashuv butunlay saqlanadi. */
+  .os-left {
+    order: 1;
+  }
+
+  .os-right {
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    width: 100%;
+  }
+
+  /* Buyurtma yuborish/to'lov/chek tugmalari — teginish uchun kamida 48px */
+  .btn-send,
+  .btn-update,
+  .btn-kassa,
+  .btn-pay-waiter,
+  .btn-receipt-menu {
+    min-height: 48px;
+  }
+
+  /* Taom kartalari ustun soni endi yuqoridagi "TAOM KARTALARI GRID"
+         bo'limidagi @media qoidalari orqali boshqariladi (768px/480px
+         bosqichlari) — bu yerda faqat eski, kartalarni haddan tashqari
+         kichraytiradigan auto-fill(120px) qoidasi olib tashlandi, shu
+         sababli u endi'gi repeat(N, minmax(0,1fr)) ustidan yozib
+         yubormaydi. .tables-grid uchun endi "Stol kartalari" bo'limidagi
+         (991px/599px/359px) breakpointlari ishlaydi — bu yerda ortiqcha,
+         ularni bosib yozadigan eski qoida olib tashlandi. */
+  .w-staff,
+  .w-rest,
+  .w-sep {
+    display: none;
+  }
+
+  /* Tor ekranda vertikal subkategoriya ustuni joy egallab yuboradi —
+         asl gorizontal skroll qatoriga qaytaramiz. */
+  .os-body {
+    flex-direction: column;
+  }
+
+  .os-subcats {
+    flex-direction: row;
+    width: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .subcat-btn {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   MIGRATED FROM admin.html inline style="..." ATTRIBUTES — Phase 2a
+   Each class below corresponds 1:1 to a former inline style string.
+   Identical inline styles were deduplicated into ONE shared class.
+   ══════════════════════════════════════════════════════════════════════ */
+
+.u-034b1c2c {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(255, 255, 255, 0.98);
+  z-index: 9999999;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: not-allowed;
+}
+
+.u-e2f273e7 {
+  background: #fff;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.u-e6608191 {
+  font-size: 80px;
+  color: #ef4444;
+  margin-bottom: 25px;
+  display: block;
+}
+
+.u-dc6c12b9 {
+  color: #1e293b;
+  margin-bottom: 10px;
+}
+
+.u-1d92a040 {
+  color: #64748b;
+  font-size: 18px;
+  max-width: 400px;
+}
+
+.u-820ac905 {
+  margin-top: 30px;
+  font-weight: 600;
+  color: #3b82f6;
+}
+
+.u-93b8ea5b {
+  display: none;
+}
+
+.u-d1e28a34 {
+  background: var(--st-free);
+}
+
+.u-372019a3 {
+  background: var(--st-busy);
+}
+
+.u-1997e962 {
+  background: var(--st-preparing);
+}
+
+.u-833a00f2 {
+  background: var(--st-ready);
+}
+
+.u-d49b3201 {
+  background: var(--st-paid);
+}
+
+.u-670c2592 {
+  background: var(--st-closed);
+}
+
+.u-8bd00123 {
+  background: var(--st-reserved);
+}
+
+.u-112b16cb {
+  grid-column: 1/-1;
+}
+
+.u-40b89493 {
+  max-width: 420px;
+}

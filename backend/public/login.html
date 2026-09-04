@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="login_title">Nesta ERP — Tizimga kirish</title>
+
+  <link rel="stylesheet" href="css/design-system.css">
+  <link rel="stylesheet" href="css/login.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+  <link rel="icon" href="img/logo (2).svg" type="image/svg+xml" />
+</head>
+
+<body>
+
+  <div class="login-lang-wrap">
+    <select id="langSelect" class="login-lang-select">
+      <option value="uz">UZ</option>
+      <option value="ru">RU</option>
+      <option value="en">EN</option>
+    </select>
+  </div>
+
+  <div class="login-wrapper">
+    <div class="login-card">
+
+      <div class="brand-logo">
+        <div class="logo-icon"><img src="img/logo.png" alt="Nesta ERP"></div>
+        Nesta<span>ERP</span>
+      </div>
+      <p class="subtitle" data-i18n="login_subtitle">Boshqaruv paneliga xush kelibsiz</p>
+
+      <div id="errorMsg" class="error-message">
+        <i class="fa-solid fa-circle-exclamation"></i> <span></span>
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════
+             👤 Kirish rejimi: Xodim (4 xonali kod) / Rahbar (login+parol)
+        ══════════════════════════════════════════════════════ -->
+      <div id="loginModeTabs" class="login-mode-tabs">
+        <button type="button" id="loginModeBtnStaff" onclick="window.setLoginMode('staff')" class="login-mode-btn">
+          <i class="fa-solid fa-hashtag" aria-hidden="true"></i> <span data-i18n="login_mode_staff">Xodim</span>
+        </button>
+        <button type="button" id="loginModeBtnManager" onclick="window.setLoginMode('manager')" class="login-mode-btn">
+          <i class="fa-solid fa-key" aria-hidden="true"></i> <span data-i18n="login_mode_manager">Rahbar</span>
+        </button>
+      </div>
+
+      <!-- ── XODIM REJIMI: 4 xonali kod + telefon-uslubidagi raqamli klaviatura ── -->
+      <div id="staffLoginBox">
+        <div class="pin-display-block">
+          <div id="staffPinDisplay" class="pin-dots-row">
+            <span class="pin-dot" data-i="0"></span>
+            <span class="pin-dot" data-i="1"></span>
+            <span class="pin-dot" data-i="2"></span>
+            <span class="pin-dot" data-i="3"></span>
+          </div>
+          <p data-i18n="staff_login_hint" class="pin-hint">4 xonali kodingizni tering</p>
+        </div>
+
+        <div id="staffPinKeypad" class="pin-keypad">
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('1')">1</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('2')">2</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('3')">3</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('4')">4</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('5')">5</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('6')">6</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('7')">7</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('8')">8</button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('9')">9</button>
+          <button type="button" class="pin-key pin-key-fn" onclick="window.pinKeyBackspace()" aria-label="Backspace"><i class="fa-solid fa-delete-left" aria-hidden="true"></i></button>
+          <button type="button" class="pin-key" onclick="window.pinKeyPress('0')">0</button>
+          <button type="button" class="pin-key pin-key-fn" onclick="window.pinKeyClear()">C</button>
+        </div>
+      </div>
+
+      <!-- ── RAHBAR REJIMI: mavjud login+parol forma ── -->
+      <div id="managerLoginBox" class="login-mode-hidden">
+        <div class="nesta-field login-field">
+          <label class="nesta-label" for="loginInput" data-i18n="login_label">Login</label>
+          <div class="input-with-icon">
+            <i class="fa-solid fa-user" aria-hidden="true"></i>
+            <input type="text" id="loginInput" class="nesta-input" data-i18n-placeholder="login_placeholder" placeholder="Loginni kiriting"
+              autocomplete="off">
+          </div>
+        </div>
+
+        <div class="nesta-field login-field">
+          <label class="nesta-label" for="passwordInput" data-i18n="password_label">Parol</label>
+          <div class="input-with-icon">
+            <i class="fa-solid fa-lock" aria-hidden="true"></i>
+            <input type="password" id="passwordInput" class="nesta-input" data-i18n-placeholder="password_placeholder" placeholder="••••••••"
+              autocomplete="new-password">
+            <i class="fa-solid fa-eye login-pw-toggle" id="togglePassword" aria-hidden="true"></i>
+          </div>
+        </div>
+
+        <button class="nesta-btn nesta-btn-primary nesta-btn-lg login-submit-btn" id="loginBtn" data-i18n="login_btn">Tizimga kirish</button>
+      </div>
+
+      <div class="login-guide-link">
+        <a href="guid.html" target="_blank">
+          <i class="fas fa-book" aria-hidden="true"></i> <span data-i18n="system_guide">Tizimdan foydalanish yo'riqnomasi</span>
+        </a>
+      </div>
+
+      <div class="footer-text">
+        <span data-i18n="support_text_1">Dasturiy ta'minot bo'yicha muammo bormi?</span><br>
+        <a href="help.html" target="_blank" data-i18n="support_text_2">Qo'llab-quvvatlash markazi</a>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="js/langs.js"></script>
+  <script type="module" src="js/i18n.js"></script>
+  <script type="module" src="js/login.js"></script>
+</body>
+
+</html>
