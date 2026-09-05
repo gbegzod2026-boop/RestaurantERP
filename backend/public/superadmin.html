@@ -3170,16 +3170,20 @@
     import { loadNestaFirebaseApp } from "./js/nestaFirebaseApp.js";
     import { getDatabase, forceWebSockets } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    window._fbApp = await loadNestaFirebaseApp();
-    forceWebSockets();
-    window._fbDb = getDatabase(window._fbApp);
+    window._nestaFirebaseReady = (async () => {
+      const app = await loadNestaFirebaseApp();
+      forceWebSockets();
+      const db = getDatabase(app);
+      window._fbApp = app;
+      window._fbDb = db;
+      return { app, db };
+    })();
   </script>
 
   <script type="module">
     import { ref, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const app = window._fbApp;
-    const db = window._fbDb;
+    const { app, db } = await window._nestaFirebaseReady;
 
     const STATUS_LABELS = {
       new: { key: 'sa_req_status_new', uz: 'Yangi', color: '#f59e0b', bg: '#fef3c7' },
@@ -3306,7 +3310,7 @@
     };
 
     // "So'rovlar" bo'limiga o'tilganda subscribe qilish
-    document.addEventListener('DOMContentLoaded', () => {
+    function startRequestsListeners() {
       // Sidebar navigatsiya observer
       const reqSection = document.getElementById('requests');
       if (reqSection) {
@@ -3326,7 +3330,12 @@
           setTimeout(subscribeRequests, 300);
         }
       }
-    });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startRequestsListeners);
+    } else {
+      startRequestsListeners();
+    }
 
     // Sidebar nav link bosilganda ham ishlashi uchun
     document.addEventListener('click', e => {
@@ -3367,8 +3376,7 @@
   <script type="module">
     import { ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    const app = window._fbApp;
-    const db = window._fbDb;
+    const { app, db } = await window._nestaFirebaseReady;
 
     const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -3567,7 +3575,7 @@
       });
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
+    function startNotifUi() {
       subscribeNotifSources();
 
       const bellBtn = document.getElementById('notifBellBtn');
@@ -3584,7 +3592,12 @@
           dropdown.style.display = 'none';
         }
       });
-    });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', startNotifUi);
+    } else {
+      startNotifUi();
+    }
   </script>
 
   <!-- ── EXPIRING SUBSCRIPTIONS MODULE ── -->
