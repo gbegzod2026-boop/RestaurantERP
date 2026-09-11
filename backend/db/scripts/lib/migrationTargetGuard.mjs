@@ -1,3 +1,4 @@
+import net from "node:net";
 import {
   CUTOVER_CANDIDATE_TAG,
   HISTORICAL_FROZEN_TAG,
@@ -19,12 +20,74 @@ export const REQUIRED_SCHEMA_VERSION = "0018";
 const DRYRUN_FORBIDDEN_DB = new Set(["postgres", "template0", "template1", "nesta_app"]);
 const TENANT_RLS_TABLES = ["restaurants", "employees", "orders", "order_items", "payments", "custom_roles"];
 
+const IPV6_LOOPBACK = new net.BlockList();
+IPV6_LOOPBACK.addAddress("::1", "ipv6");
+
+function looksLikeNumericIpv4(value) {
+  return /^[0-9.]+$/.test(value);
+}
+
+export function canonicalizePgHost(host) {
+  const raw = String(host || "").trim();
+  if (!raw) {
+    return { ok: false, malformed: true, host: "", loopback: false, socket: false };
+  }
+  if (raw.startsWith("/")) {
+    return { ok: true, malformed: false, host: raw, loopback: true, socket: true };
+  }
+  if (raw.toLowerCase() === "localhost") {
+    return { ok: true, malformed: false, host: "localhost", loopback: true, socket: false };
+  }
+
+  let inner = raw;
+  if (raw.startsWith("[")) {
+    if (!raw.endsWith("]") || raw.length < 4) {
+      return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+    }
+    inner = raw.slice(1, -1);
+    if (!inner || inner.includes("[") || inner.includes("]")) {
+      return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+    }
+  } else if (raw.includes("[") || raw.includes("]")) {
+    return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+  }
+
+  if (net.isIPv4(inner)) {
+    const octets = inner.split(".");
+    if (octets.length !== 4) {
+      return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+    }
+    const first = Number(octets[0]);
+    return {
+      ok: true,
+      malformed: false,
+      host: inner,
+      loopback: first === 127,
+      socket: false,
+    };
+  }
+  if (looksLikeNumericIpv4(inner)) {
+    return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+  }
+  if (net.isIPv6(inner)) {
+    const loopback = IPV6_LOOPBACK.check(inner, "ipv6") === true;
+    return {
+      ok: true,
+      malformed: false,
+      host: loopback ? "::1" : inner,
+      loopback,
+      socket: false,
+    };
+  }
+  if (inner.includes(":")) {
+    return { ok: false, malformed: true, host: raw, loopback: false, socket: false };
+  }
+  return { ok: true, malformed: false, host: inner, loopback: false, socket: false };
+}
+
 export function isLoopbackHost(host) {
-  const h = String(host || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
-  if (!h) return false;
-  if (h === "localhost" || h === "::1" || h === "0:0:0:0:0:0:0:1") return true;
-  if (/^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)) return true;
-  return false;
+  const canon = canonicalizePgHost(host);
+  return canon.ok === true && canon.loopback === true;
 }
 
 export function assertMigrationTarget(masked) {

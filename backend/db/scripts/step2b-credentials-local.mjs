@@ -1,5 +1,10 @@
-// Copy Firebase credentials/$restId/$uid hashes into local employee_credentials.
-// Firebase: GET only. PostgreSQL: dedicated migration DB only.
+// Copy Firebase credentials/$restId/$uid hashes into the dedicated local
+// migration database by default. Firebase: GET only.
+// Target enforcement is shared enforceConnectedApplyTarget: default is
+// loopback + nesta_migration_dryrun. Production is not implicit. It is only
+// possible when NESTA_MIGRATE_TARGET=production plus the existing production
+// confirm phrase, tag, and SSL guards. This file is not the production
+// credential cutover tool (use production-credentials-migrate.mjs).
 // Never prints password, hash, or ciphertext.
 import path from "path";
 import { fileURLToPath } from "url";
