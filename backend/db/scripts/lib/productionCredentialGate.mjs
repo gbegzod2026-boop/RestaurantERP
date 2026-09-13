@@ -1,6 +1,7 @@
 // Production employee-credential copy gate (Firebase credentials/* -> PostgreSQL
 // employee_credentials). Separate from step2b-credentials-local.mjs.
 // Default: read-only dry-run. Apply writes only employee_credentials.
+import { createHash } from "crypto";
 import { isMaintenanceMode } from "../../../security/maintenance.js";
 import { boundedCredentialRollback, throwIfCredentialCliFailed } from "../../postgres.js";
 import { maskedEffectivePgConfig, inspectPgTargetFromEnv } from "./credentialAcceptanceTarget.mjs";
@@ -91,8 +92,10 @@ export function fail(code) {
 }
 
 export function publicErrorCode(err) {
+  // Never expose raw Error text or stack. Only fixed allowlisted GATE_ERROR codes.
   const code = typeof err?.code === "string" ? err.code : GATE_ERROR.GATE_FAILED;
-  return Object.prototype.hasOwnProperty.call(GATE_ERROR, code) ? code : GATE_ERROR.GATE_FAILED;
+  if (Object.prototype.hasOwnProperty.call(GATE_ERROR, code)) return code;
+  return GATE_ERROR.GATE_FAILED;
 }
 
 function isPgSqlState(code) {
@@ -165,16 +168,37 @@ export {
   EXCLUDED_FROM_PROTECTED_FINGERPRINT,
 } from "./credentialProtectedFingerprint.mjs";
 
+// Prefixed / alphanumeric legacy keys (rest_*, chef_*, Firebase Auth UIDs).
 const SAFE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+// Exact Firebase RTDB push ID: leading '-' + 19 charset chars (20 total).
+const FIREBASE_PUSH_ID_RE = /^-[0-9A-Za-z_-]{19}$/;
+// Observed compound employee keys: -<pushId>_<millisTimestamp> only.
+const FIREBASE_PUSH_COMPOUND_RE = /^-[0-9A-Za-z_-]{19}_\d{10,16}$/;
+// Exact legacy percent-encoded phone key: %2B + 8–15 digits (E.164-ish). No other escapes.
+const LEGACY_PERCENT_PHONE_KEY_RE = /^%2[Bb]\d{8,15}$/;
 const SAFE_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const FORBIDDEN_REPORT_KEYS = /^(password|passwordhash|passwordenc|password_hash|password_enc|ciphertext|token|dsn|secret|authorization|postgres_url|database_url|private_key|api_key|copyhash|copyenc)$/i;
-const SECRET_VALUE_RE = /(\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{20,})|(postgres(ql)?:\/\/\S+)|(eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]+\.)/i;
+const OPAQUE_ID_RE = /^id:[0-9a-f]{12}$/;
+const ISO_GENERATED_AT_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const FORBIDDEN_REPORT_KEYS = /^(password|passwordhash|passwordenc|password_hash|password_enc|ciphertext|token|dsn|secret|authorization|postgres_url|database_url|private_key|api_key|copyhash|copyenc|plaintext|pin|encryption_key)$/i;
+// Structural bcrypt / DSN markers (also covered by containsSecretLikeMaterial).
+const SECRET_VALUE_RE = /(\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{20,})|(postgres(ql)?:\/\/\S+)/i;
+// Realistic JWT anywhere (header starts with eyJ = base64url of '{'). Not ordinary dotted IDs.
+const JWT_REALISTIC_ANYWHERE_RE = /eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/i;
+const BEARER_ANYWHERE_RE = /Bearer\s+\S+/i;
+const PEM_LIKE_RE = /-----BEGIN[ A-Z]*PRIVATE KEY-----|-----BEGIN RSA PRIVATE KEY-----/i;
+// Case-insensitive API token prefixes (detection only; originals are never lowercased for emit).
+const API_TOKEN_ANYWHERE_RE = /(?:sk_live_|sk_test_|pk_live_|pk_test_|rk_live_|rk_test_|AIza|ghp_|github_pat_|xox[baprs]-)/i;
+const SECRET_KEY_VALUE_ANYWHERE_RE = /(?:password|passwd|pwd|secret|token|api[_-]?key|encryption[_-]?key|private[_-]?key)\s*=\s*\S+/i;
+const LONG_HEX_ANYWHERE_RE = /[A-Fa-f0-9]{32,}/;
+const LONG_BASE64URL_ANYWHERE_RE = /[A-Za-z0-9_-]{40,}={0,2}/;
+const CREDENTIAL_LEAK_MARKER_RE = /PASSWORD_MARKER|SECRET_PIN_MARKER|ENCRYPTION_KEY_MARKER|TOKEN_MARKER_|PLAINTEXT_PASSWORD|SUPER_SECRET_PIN/i;
 const ALLOWED_REPORT_KEYS = new Set([
   "generatedAt", "mode", "writes", "firebaseWrites",
   "credentialTrees", "credentialUserNodes", "restaurantsInPg", "employeesInPg",
   "currentEmployeeCredentials", "mappable", "hashOnly", "passwordEncOnly", "both",
   "loginCompatible", "expectedInserts", "expectedUpdates", "expectedUnchanged",
-  "expectedConflicts", "expectedShaReset", "credentialWithoutEmployee",
+  "expectedConflicts", "expectedShaReset", "expectedShaResetWithEnc", "expectedShaResetOnly",
+  "credentialWithoutEmployee",
   "employeeWithoutCredential", "missingCredentialNode", "restaurantsWithoutCredentialTree",
   "incompatibleHash", "legacyShaRequiresReset", "destinationConflicts", "planned",
   "incompatibleHashBlocksApply", "reconciliation", "applied", "verdict",
@@ -194,10 +218,70 @@ export function isCredentialApplyRequested(argv = []) {
   return Array.isArray(argv) && argv.includes(CREDENTIAL_APPLY_FLAG);
 }
 
+/** Exact legacy shapes that may suppress ONLY entropy detectors (not explicit markers). */
+export function isExactKnownSafeIdShape(value) {
+  if (typeof value !== "string" || !value) return false;
+  return SAFE_UUID_RE.test(value)
+    || FIREBASE_PUSH_ID_RE.test(value)
+    || FIREBASE_PUSH_COMPOUND_RE.test(value)
+    || LEGACY_PERCENT_PHONE_KEY_RE.test(value)
+    || OPAQUE_ID_RE.test(value);
+}
+
+/**
+ * Realistic JWT heuristic: three base64url segments whose header starts with eyJ
+ * (base64url of JSON `{`). Ordinary dotted app IDs (branch.v1.active) are NOT JWTs.
+ * Short labels like a.b.c are intentionally not treated as tokens.
+ */
+export function containsJwtLikeToken(value) {
+  if (typeof value !== "string" || !value) return false;
+  return JWT_REALISTIC_ANYWHERE_RE.test(value);
+}
+
+/** Explicit credential/token markers — always checked before shape exemptions. */
+export function containsExplicitSecretMarker(value) {
+  if (typeof value !== "string" || !value) return false;
+  if (SECRET_VALUE_RE.test(value)) return true;
+  if (containsJwtLikeToken(value)) return true;
+  if (BEARER_ANYWHERE_RE.test(value)) return true;
+  if (PEM_LIKE_RE.test(value)) return true;
+  if (API_TOKEN_ANYWHERE_RE.test(value)) return true;
+  if (SECRET_KEY_VALUE_ANYWHERE_RE.test(value)) return true;
+  if (CREDENTIAL_LEAK_MARKER_RE.test(value)) return true;
+  return false;
+}
+
+/** Generic high-entropy detectors — exact known-safe shapes may suppress these. */
+export function containsEntropySecretMaterial(value) {
+  if (typeof value !== "string" || !value) return false;
+  if (LONG_HEX_ANYWHERE_RE.test(value)) return true;
+  if (LONG_BASE64URL_ANYWHERE_RE.test(value)) return true;
+  return false;
+}
+
+/**
+ * Secret detection decision order:
+ * 1) explicit secret markers (never bypassed by shape exemption)
+ * 2) exact known-safe shape → skip entropy only
+ * 3) generic entropy / high-randomness detection
+ */
+export function containsSecretLikeMaterial(value) {
+  if (typeof value !== "string" || !value) return false;
+  if (containsExplicitSecretMarker(value)) return true;
+  if (isExactKnownSafeIdShape(value)) return false;
+  if (containsEntropySecretMaterial(value)) return true;
+  return false;
+}
+
+/** @deprecated alias — prefer containsSecretLikeMaterial */
+export function isSecretLikeValue(value) {
+  return containsSecretLikeMaterial(value);
+}
+
 export function assertSecretFree(value, path = "$") {
   if (value == null) return;
   if (typeof value === "string") {
-    if (SECRET_VALUE_RE.test(value)) gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
+    if (containsSecretLikeMaterial(value)) gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
     return;
   }
   if (Array.isArray(value)) {
@@ -212,24 +296,77 @@ export function assertSecretFree(value, path = "$") {
   }
 }
 
+function isPathHazardId(value) {
+  return value.includes("://") || value.includes("/") || value.includes("\\") || value.includes("@");
+}
+
+function isHostileIdShape(value) {
+  if (value.length === 0 || value.length > 128) return true;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return true;
+  if (/\s/.test(value)) return true;
+  return false;
+}
+
+function matchesExactSafeRawId(value) {
+  if (isExactKnownSafeIdShape(value)) return true;
+  if (SAFE_ID_RE.test(value) && !containsSecretLikeMaterial(value)) return true;
+  return false;
+}
+
+/** True when value is a known-safe legacy identifier shape (not opaque correlation). */
+export function isAllowlistedReportId(value) {
+  if (typeof value !== "string") return false;
+  if (isHostileIdShape(value) || isPathHazardId(value) || containsSecretLikeMaterial(value)) return false;
+  return matchesExactSafeRawId(value);
+}
+
+/**
+ * Correlation-only opaque id (sha256 prefix). Not cryptographic anonymization against guessing.
+ * Never embeds the original value.
+ */
+export function opaqueReportId(value) {
+  const digest = createHash("sha256").update(String(value), "utf8").digest("hex").slice(0, 12);
+  return `id:${digest}`;
+}
+
+/**
+ * Raw-ID decision tree:
+ * 1) string/length/hostile shape
+ * 2) path hazards
+ * 3) secret-like material anywhere (before any permissive ID regex)
+ * 4) exact known-safe shapes only
+ * 5) null → caller may opaque non-secrets or fail-closed secrets
+ */
 export function safeReportId(value) {
   if (typeof value !== "string") return null;
-  if (!SAFE_ID_RE.test(value)) return null;
-  if (SECRET_VALUE_RE.test(value)) return null;
-  if (value.includes("://") || value.includes("/") || value.includes("@")) return null;
-  return value;
+  if (isHostileIdShape(value)) return null;
+  if (isPathHazardId(value)) return null;
+  if (containsSecretLikeMaterial(value)) return null;
+  if (SAFE_UUID_RE.test(value)) return value.toLowerCase();
+  if (FIREBASE_PUSH_ID_RE.test(value)) return value;
+  if (FIREBASE_PUSH_COMPOUND_RE.test(value)) return value;
+  if (LEGACY_PERCENT_PHONE_KEY_RE.test(value)) return value;
+  if (OPAQUE_ID_RE.test(value)) return value;
+  if (SAFE_ID_RE.test(value)) return value;
+  return null;
 }
 
 export function safeUuidOrId(value) {
   if (typeof value !== "string") return null;
+  if (isHostileIdShape(value) || isPathHazardId(value) || containsSecretLikeMaterial(value)) return null;
   if (SAFE_UUID_RE.test(value)) return value.toLowerCase();
   return safeReportId(value);
 }
 
 function requireSafeId(value) {
-  const safe = safeReportId(value);
-  if (!safe) gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
-  return safe;
+  const raw = String(value);
+  if (isHostileIdShape(raw) || isPathHazardId(raw) || containsSecretLikeMaterial(raw)) {
+    gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
+  }
+  const safe = safeReportId(raw);
+  if (safe) return safe;
+  // Non-secret, non-allowlisted legacy key: correlate via opaque hash; never echo raw.
+  return opaqueReportId(raw);
 }
 
 function requireSafeUuidOrId(value) {
@@ -323,7 +460,16 @@ function asInt(value) {
 }
 
 export function validateCredentialGateReport(report) {
+  // Scan the entire input (including non-allowlisted fields like metadata) before pick.
+  assertSecretFree(report);
   const picked = allowlistedObject(report, ALLOWED_REPORT_KEYS, (key, value) => {
+    if (key === "generatedAt") {
+      const raw = value == null ? "" : String(value);
+      if (!ISO_GENERATED_AT_RE.test(raw) || containsSecretLikeMaterial(raw)) {
+        gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
+      }
+      return raw;
+    }
     if (Array.isArray(value) && [
       "credentialWithoutEmployee", "employeeWithoutCredential", "missingCredentialNode",
       "incompatibleHash", "legacyShaRequiresReset", "destinationConflicts", "planned",
@@ -338,10 +484,19 @@ export function validateCredentialGateReport(report) {
       if (value == null) return null;
       return allowlistedObject(value, ALLOWED_RECONCILE_KEYS);
     }
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "string" || value == null) {
+    if (typeof value === "string") {
+      if (containsSecretLikeMaterial(value)) gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean" || value == null) {
       return value;
     }
     if (Array.isArray(value) && value.every((item) => typeof item === "string" || typeof item === "number")) {
+      for (const item of value) {
+        if (typeof item === "string" && containsSecretLikeMaterial(item)) {
+          gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
+        }
+      }
       return value;
     }
     gateFail(GATE_ERROR.SECRET_OUTPUT_REJECTED);
@@ -355,7 +510,8 @@ function emptyPlan() {
     credentialTrees: 0, credentialUserNodes: 0, restaurantsInPg: 0, employeesInPg: 0,
     currentEmployeeCredentials: 0, mappable: 0, hashOnly: 0, passwordEncOnly: 0, both: 0,
     loginCompatible: 0, expectedInserts: 0, expectedUpdates: 0, expectedUnchanged: 0,
-    expectedConflicts: 0, expectedShaReset: 0, credentialWithoutEmployee: [],
+    expectedConflicts: 0, expectedShaReset: 0, expectedShaResetWithEnc: 0, expectedShaResetOnly: 0,
+    credentialWithoutEmployee: [],
     employeeWithoutCredential: [], missingCredentialNode: [], restaurantsWithoutCredentialTree: [],
     incompatibleHash: [], legacyShaRequiresReset: [], destinationConflicts: [], planned: [],
   };
@@ -517,8 +673,20 @@ export async function planCredentialCopyInTx({ fb, client } = {}) {
       if (hash) {
         classified = classifyStoredPassword(hash);
         if (classified.kind === "sha256") {
-          plan.legacyShaRequiresReset.push({ restId: restLegacy, userId: uid, kind: classified.kind });
+          const hasEnc = Boolean(enc);
+          // SHA is one-way; do not copy as a usable hash. A paired passwordEnc
+          // may exist, but this gate never reverse-reveals it to rehash — that
+          // would expand migrate privilege. Track hasEnc for ops only; apply
+          // stays blocked until resets clear.
+          plan.legacyShaRequiresReset.push({
+            restId: restLegacy,
+            userId: uid,
+            kind: classified.kind,
+            hasEnc,
+          });
           plan.expectedShaReset += 1;
+          if (hasEnc) plan.expectedShaResetWithEnc += 1;
+          else plan.expectedShaResetOnly += 1;
           continue;
         }
         if (!classified.migratable) {
@@ -679,6 +847,8 @@ function secretFreePlanView(plan) {
     expectedUnchanged: asInt(plan.expectedUnchanged),
     expectedConflicts: asInt(plan.expectedConflicts),
     expectedShaReset: asInt(plan.expectedShaReset),
+    expectedShaResetWithEnc: asInt(plan.expectedShaResetWithEnc),
+    expectedShaResetOnly: asInt(plan.expectedShaResetOnly),
     credentialWithoutEmployee: plan.credentialWithoutEmployee,
     employeeWithoutCredential: plan.employeeWithoutCredential,
     missingCredentialNode: plan.missingCredentialNode,
@@ -743,6 +913,9 @@ export async function applyCredentialCopy({ client, fb, liveFingerprint }) {
     const plan = await planCredentialCopyInTx({ fb, client });
     throwIfCredentialCliFailed();
     if (plan.incompatibleHash.length > 0) gateFail(GATE_ERROR.HASH_FORMAT_UNSUPPORTED);
+    if (plan.expectedShaReset > 0 || plan.legacyShaRequiresReset.length > 0) {
+      gateFail(GATE_ERROR.LEGACY_SHA_REQUIRES_RESET);
+    }
     if (plan.destinationConflicts.length > 0) gateFail(GATE_ERROR.DESTINATION_CONFLICT);
 
     const credBefore = plan.currentEmployeeCredentials;

@@ -41,6 +41,15 @@ import {
   fingerprintColumns,
   publicErrorCode,
   runCredentialGate,
+  safeReportId,
+  opaqueReportId,
+  isSecretLikeValue,
+  containsSecretLikeMaterial,
+  containsExplicitSecretMarker,
+  containsJwtLikeToken,
+  assertSecretFree,
+  validateCredentialGateReport,
+  planCredentialCopyInTx,
   withLoginReader,
   EXCLUDED_FROM_PROTECTED_FINGERPRINT,
 } from "../scripts/lib/productionCredentialGate.mjs";
@@ -415,6 +424,315 @@ test("uppercase SHA is not treated as compatible", () => {
   assert.equal(classified.migratable, false);
 });
 
+test("safeReportId accepts exact legacy Firebase push, compound timestamp, and %2B phone keys", () => {
+  // Synthetic fixtures matching the 3 observed production compound shapes
+  // (pushId_timestamp) without embedding live production identifiers.
+  const compoundA = "-Nabcdefghijklmnopqr_1700000000001";
+  const compoundB = "-O0123456789ABCDEFGH_1785493031293";
+  const compoundC = "-Pzyxwvutsrqponmlkji_1699999999999";
+  const pushExact = "-Nabcdefghijklmnopqr";
+  const prefixed = "chef_1700000000001";
+  const pctPhone = "%2B998901234567";
+  assert.equal(compoundA.split("_")[0].length, 20);
+  assert.equal(pushExact.length, 20);
+  assert.equal(safeReportId(compoundA), compoundA);
+  assert.equal(safeReportId(compoundB), compoundB);
+  assert.equal(safeReportId(compoundC), compoundC);
+  assert.equal(safeReportId(pushExact), pushExact);
+  assert.equal(safeReportId(prefixed), prefixed);
+  assert.equal(safeReportId(pctPhone), pctPhone);
+  assert.equal(safeReportId("%2b998901234567"), "%2b998901234567");
+  assert.equal(safeReportId("rest_1782"), "rest_1782");
+  assert.equal(isSecretLikeValue(pushExact), false);
+  assert.equal(isSecretLikeValue(compoundA), false);
+  assert.equal(containsSecretLikeMaterial(pushExact), false);
+  assert.equal(containsSecretLikeMaterial(compoundA), false);
+  assert.equal(containsSecretLikeMaterial(pctPhone), false);
+  assert.equal(safeReportId("11111111-1111-1111-1111-111111111111"), "11111111-1111-1111-1111-111111111111");
+});
+
+test("containsSecretLikeMaterial: explicit markers before shape; case-insensitive API; narrow JWT", () => {
+  // Push/compound shaped API secrets must NOT bypass via exact-shape exemption.
+  const pushSk = "-sk_live_12345678901";
+  const compoundSk = "-sk_live_12345678901_1700000000001";
+  assert.equal(pushSk.length, 20);
+  assert.equal(containsExplicitSecretMarker(pushSk), true);
+  assert.equal(containsSecretLikeMaterial(pushSk), true);
+  assert.equal(safeReportId(pushSk), null);
+  assert.equal(containsSecretLikeMaterial(compoundSk), true);
+  assert.equal(safeReportId(compoundSk), null);
+  assert.equal(safeReportId("-ghp_abcd12345678901"), null);
+  assert.equal(safeReportId("token:sk_live_abcd1234"), null);
+
+  // Ordering lock: explicit markers before exact-shape exemption.
+  const detFn = gateSrc.slice(
+    gateSrc.indexOf("export function containsSecretLikeMaterial"),
+    gateSrc.indexOf("export function isSecretLikeValue"),
+  );
+  assert.ok(detFn.indexOf("containsExplicitSecretMarker") < detFn.indexOf("isExactKnownSafeIdShape"));
+  assert.ok(detFn.indexOf("isExactKnownSafeIdShape") < detFn.indexOf("containsEntropySecretMaterial"));
+
+  // Case-insensitive API prefixes (detection only).
+  assert.match(gateSrc, /API_TOKEN_ANYWHERE_RE = \/[^\n]+\/i/);
+  for (const value of [
+    "ghp_abcd1234", "GhP_abcd1234", "GHP_abcd1234",
+    "sk_live_abcd1234", "Sk_LiVe_abcd1234", "SK_LIVE_abcd1234",
+    "sk_test_abcd1234", "Sk_Test_abcd1234",
+    "AIzaSyAbCdEfGhIjKlMnOpQr", "aIzASyAbCdEfGhIjKlMnOpQr",
+    "user:GhP_abcd1234", "token:Sk_LiVe_abcd1234",
+  ]) {
+    assert.equal(containsSecretLikeMaterial(value), true, value);
+    assert.equal(safeReportId(value), null, value);
+  }
+
+  // Realistic JWT blocked; ordinary dotted app IDs are not JWT secrets.
+  const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signaturepad";
+  assert.equal(containsJwtLikeToken(jwt), true);
+  assert.equal(containsSecretLikeMaterial(jwt), true);
+  assert.equal(safeReportId(jwt), null);
+  assert.equal(safeReportId(`token:${jwt}`), null);
+  assert.equal(containsJwtLikeToken("a.b.c"), false);
+  assert.equal(containsSecretLikeMaterial("a.b.c"), false);
+  for (const id of [
+    "employee:branch.v1.active",
+    "branch.v1.active",
+    "release:module.v2.ready",
+    "product:section.alpha.enabled",
+  ]) {
+    assert.equal(containsJwtLikeToken(id), false, id);
+    assert.equal(containsSecretLikeMaterial(id), false, id);
+    assert.doesNotThrow(() => validateCredentialGateReport({
+      generatedAt: "2026-01-01T00:00:00.000Z",
+      mode: "dry-run",
+      writes: 0,
+      firebaseWrites: 0,
+      credentialTrees: 0,
+      credentialUserNodes: 0,
+      restaurantsInPg: 0,
+      employeesInPg: 0,
+      currentEmployeeCredentials: 0,
+      mappable: 0,
+      hashOnly: 0,
+      passwordEncOnly: 0,
+      both: 0,
+      loginCompatible: 0,
+      expectedInserts: 0,
+      expectedUpdates: 0,
+      expectedUnchanged: 0,
+      expectedConflicts: 0,
+      expectedShaReset: 0,
+      expectedShaResetWithEnc: 0,
+      expectedShaResetOnly: 0,
+      credentialWithoutEmployee: [],
+      employeeWithoutCredential: [],
+      missingCredentialNode: [],
+      restaurantsWithoutCredentialTree: [],
+      incompatibleHash: [],
+      legacyShaRequiresReset: [],
+      destinationConflicts: [],
+      planned: [{
+        restId: "rest_1",
+        userId: id,
+        restaurantId: "11111111-1111-1111-1111-111111111111",
+        employeeId: "22222222-2222-2222-2222-222222222222",
+        hasHash: true,
+        hasEnc: false,
+        action: "insert",
+      }],
+      incompatibleHashBlocksApply: false,
+      reconciliation: null,
+      verdict: "OK",
+    }));
+  }
+
+  const embedded = [
+    `token:${jwt}`,
+    "user:ghp_1234567890abcdef",
+    "prefix:sk_live_123456789",
+    `id:${"a".repeat(32)}`,
+    `id:${"b".repeat(39)}`,
+    `id:${"c".repeat(64)}`,
+    `prefix:${"G".repeat(40)}`,
+    "x:password=secret",
+    "x:token=secret",
+  ];
+  for (const value of embedded) {
+    assert.equal(containsSecretLikeMaterial(value), true, value);
+    assert.equal(safeReportId(value), null, value);
+  }
+  assert.match(gateSrc, /JWT_REALISTIC_ANYWHERE_RE/);
+  assert.doesNotMatch(gateSrc, /JWT_LIKE_ANYWHERE_RE/);
+});
+
+test("isolated secret detectors: API-prefix, 32-39 hex, and base64url", () => {
+  const apiOnly = ["ghp_abcd1234", "sk_live_abcd1234", "GhP_abcd1234", "Sk_LiVe_abcd1234"];
+  for (const value of apiOnly) {
+    assert.ok(value.length < 32, value);
+    assert.equal(containsSecretLikeMaterial(value), true, value);
+    assert.equal(safeReportId(value), null, value);
+    assert.equal(/[A-Fa-f0-9]{32,}/.test(value), false, value);
+    assert.equal(/[A-Za-z0-9_-]{40,}/.test(value), false, value);
+  }
+  assert.match(gateSrc, /API_TOKEN_ANYWHERE_RE = \/[^\n]+\/i/);
+  assert.match(
+    gateSrc.slice(gateSrc.indexOf("export function containsExplicitSecretMarker"), gateSrc.indexOf("export function containsEntropySecretMaterial")),
+    /API_TOKEN_ANYWHERE_RE\.test/,
+  );
+
+  const hex32 = "a".repeat(32);
+  const hex33 = "b".repeat(33);
+  const hex39 = "c".repeat(39);
+  for (const value of [hex32, hex33, hex39]) {
+    assert.equal(value.length >= 32 && value.length < 40, true, value);
+    assert.equal(/^[A-Fa-f0-9]+$/.test(value), true);
+    assert.equal(containsSecretLikeMaterial(value), true, value);
+    assert.equal(safeReportId(value), null, value);
+    assert.equal(/[A-Za-z0-9_-]{40,}/.test(value), false, value);
+  }
+  assert.match(gateSrc, /LONG_HEX_ANYWHERE_RE\s*=\s*\/\[A-Fa-f0-9\]\{32,\}\//);
+
+  const b64 = "G".repeat(40);
+  assert.equal(/[A-Fa-f0-9]{32,}/.test(b64), false);
+  assert.equal(containsSecretLikeMaterial(b64), true);
+  assert.equal(safeReportId(b64), null);
+  assert.match(gateSrc, /LONG_BASE64URL_ANYWHERE_RE\s*=\s*\/\[A-Za-z0-9_-\]\{40,\}/);
+});
+
+test("safeReportId rejects hostile, pathish, secret-like, broad percent, and broad compound IDs", () => {
+  assert.equal(safeReportId("user@evil"), null);
+  assert.equal(safeReportId("a/b"), null);
+  assert.equal(safeReportId("a\\b"), null);
+  assert.equal(safeReportId("id with space"), null);
+  assert.equal(safeReportId("id\nnewline"), null);
+  assert.equal(safeReportId("id\ttab"), null);
+  assert.equal(safeReportId("id\u0000null"), null);
+  assert.equal(safeReportId(`$2a$10$${BCRYPT_TAIL}`), null);
+  assert.equal(safeReportId("postgres://u:p@h/db"), null);
+  assert.equal(safeReportId(`x${"y".repeat(200)}`), null);
+  assert.equal(safeReportId(""), null);
+  assert.equal(safeReportId("*leading"), null);
+  assert.equal(safeReportId(".leading"), null);
+  assert.equal(safeReportId("+998901234567"), null);
+
+  // Secret-like must never pass raw (realistic JWT / API / entropy / key=value).
+  // Short dotted labels like a.b.c are NOT JWTs (see JWT_REALISTIC_ANYWHERE_RE).
+  assert.equal(containsSecretLikeMaterial("a.b.c"), false);
+  const normalJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signaturepad";
+  const apiToken = "sk_live_51FakeTokenValueForTestsOnly0001";
+  const b64url = `AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-extra`;
+  const longHex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  const bearer = "Bearer abc.def.ghi";
+  const keyVal = "password=SUPER_SECRET_PIN_987654";
+  for (const secret of [normalJwt, apiToken, b64url, longHex, bearer, keyVal]) {
+    assert.equal(isSecretLikeValue(secret), true, secret);
+    assert.equal(safeReportId(secret), null, secret);
+  }
+
+  // Broad / hostile percent encodings — not raw.
+  for (const bad of [
+    "%2e%2e%2f", "%2E%2E%2F", "%0d%0a", "%1b", "%5c", "%41abc",
+    "%2B", "%2B%", "%2B123abc", "%252B998901234567",
+    `%2B${"9".repeat(20)}`,
+  ]) {
+    assert.equal(safeReportId(bad), null, bad);
+  }
+
+  // Broad compound / wrong shapes — not raw.
+  for (const bad of [
+    "-Nabcdefghijklmnopqr_alphasuffix",
+    "-Nabcdefghijklmnopqr_1700000000001_extra",
+    "-Nabcdefghijklmnopqr_1700000000001-extra",
+    "-Nabcdefghijklmnopqr_12345678901234567",
+    "-Nabcdefghijklmnopq_1700000000001",
+    "-Nabcdefghijklmnopqr_/path",
+    "-Nabcdefghijklmnopqr_\n1",
+    "_Nabcdefghijklmnopqr_1700000000001",
+  ]) {
+    assert.equal(safeReportId(bad), null, bad);
+  }
+});
+
+test("validateCredentialGateReport keeps compound push userIds and opaques unknown non-secrets", () => {
+  const compound = "-Nabcdefghijklmnopqr_1700000000001";
+  const report = validateCredentialGateReport({
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    mode: "dry-run",
+    writes: 0,
+    firebaseWrites: 0,
+    credentialTrees: 1,
+    credentialUserNodes: 1,
+    restaurantsInPg: 1,
+    employeesInPg: 1,
+    currentEmployeeCredentials: 0,
+    mappable: 1,
+    hashOnly: 1,
+    passwordEncOnly: 0,
+    both: 0,
+    loginCompatible: 1,
+    expectedInserts: 1,
+    expectedUpdates: 0,
+    expectedUnchanged: 0,
+    expectedConflicts: 0,
+    expectedShaReset: 0,
+    expectedShaResetWithEnc: 0,
+    expectedShaResetOnly: 0,
+    credentialWithoutEmployee: [],
+    employeeWithoutCredential: [],
+    missingCredentialNode: [],
+    restaurantsWithoutCredentialTree: [],
+    incompatibleHash: [],
+    legacyShaRequiresReset: [],
+    destinationConflicts: [],
+    planned: [{
+      restId: "rest_1",
+      userId: compound,
+      restaurantId: "11111111-1111-1111-1111-111111111111",
+      employeeId: "22222222-2222-2222-2222-222222222222",
+      hasHash: true,
+      hasEnc: false,
+      action: "insert",
+    }],
+    incompatibleHashBlocksApply: false,
+    reconciliation: null,
+    verdict: "OK",
+  });
+  assert.equal(report.planned[0].userId, compound);
+  assert.equal(report.planned[0].copyHash, undefined);
+  assert.equal(report.planned[0].password, undefined);
+
+  const weird = validateCredentialGateReport({
+    ...report,
+    planned: [{
+      restId: "rest_1",
+      userId: "weird*legacy*key",
+      restaurantId: "11111111-1111-1111-1111-111111111111",
+      employeeId: "22222222-2222-2222-2222-222222222222",
+      hasHash: true,
+      hasEnc: false,
+      action: "insert",
+    }],
+  });
+  assert.equal(weird.planned[0].userId, opaqueReportId("weird*legacy*key"));
+  assert.match(weird.planned[0].userId, /^id:[0-9a-f]{12}$/);
+  assert.equal(weird.planned[0].userId.includes("*"), false);
+
+  assert.throws(
+    () => validateCredentialGateReport({
+      ...report,
+      planned: [{
+        restId: "rest_1",
+        userId: "user@evil",
+        restaurantId: "11111111-1111-1111-1111-111111111111",
+        employeeId: "22222222-2222-2222-2222-222222222222",
+        hasHash: true,
+        hasEnc: false,
+        action: "insert",
+      }],
+    }),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+});
+
 test("object source hashes are malformed and never stringified", () => {
   assert.equal(sourceHashValue({ password: { nested: true } }), MALFORMED_SOURCE);
   assert.equal(sourceEncValue({ passwordEnc: ["x"] }), MALFORMED_SOURCE);
@@ -652,7 +970,11 @@ test("generated fingerprint SQL covers authorization fields and keeps NULL disti
     () => assertRequiredFingerprintCoverage(unordered, SESSION_PROTECTED_FINGERPRINT_SQL),
     /FINGERPRINT_ORDER_MISSING/,
   );
-  assert.doesNotMatch(gateSrc, /digestProtectedSnapshot|createHash/);
+  assert.doesNotMatch(gateSrc, /digestProtectedSnapshot/);
+  // createHash is allowed only for opaque report-id redaction (import + one call site).
+  assert.equal([...gateSrc.matchAll(/createHash/g)].length, 2);
+  assert.match(gateSrc, /function opaqueReportId/);
+  assert.match(gateSrc, /createHash\("sha256"\)\.update/);
 });
 
 test("rtdbAuthz SQL lookups are not left in the fingerprint exclusion list", () => {
@@ -919,7 +1241,7 @@ test("bcrypt cost 00 and uppercase SHA are not copied", async () => {
   }
 });
 
-test("legacy SHA is classified REQUIRES_RESET and is not copied into PostgreSQL", async () => {
+test("legacy SHA blocks apply and is never copied into PostgreSQL", async () => {
   const sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
   const bcrypt = await hashPassword("4826");
   const world = createWorld({
@@ -929,11 +1251,64 @@ test("legacy SHA is classified REQUIRES_RESET and is not copied into PostgreSQL"
       { id: "e-sha", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_sha" },
     ],
   });
-  const report = await runCredentialGate({
-    argv: ["--apply"], env: applyEnv(), masked: applyMasked(), fb: world.fb, client: world.client, liveFingerprint: FINGERPRINT,
+  await assert.rejects(
+    () => runCredentialGate({
+      argv: ["--apply"], env: applyEnv(), masked: applyMasked(), fb: world.fb, client: world.client, liveFingerprint: FINGERPRINT,
+    }),
+    (err) => publicErrorCode(err) === GATE_ERROR.LEGACY_SHA_REQUIRES_RESET,
+  );
+  assert.equal(world.creds.size, 0);
+  assert.equal(world.mutating.includes("COMMIT"), false);
+});
+
+test("dry-run classifies SHA-only vs SHA+enc without migrating either", async () => {
+  const sha = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  const world = createWorld({
+    fbTree: {
+      rest_1: {
+        waiter_sha: { password: sha },
+        waiter_sha_enc: { password: sha, passwordEnc: "iv.ct.tag" },
+      },
+    },
+    employees: [
+      { id: "e-sha", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_sha" },
+      { id: "e-sha-enc", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_sha_enc" },
+    ],
   });
-  assert.equal(world.creds.has("e-sha"), false);
-  assert.equal(report.legacyShaRequiresReset.some((row) => row.userId === "waiter_sha"), true);
+  const report = await runCredentialGate({
+    argv: [], env: applyEnv(), masked: applyMasked(), fb: world.fb, client: world.client, liveFingerprint: FINGERPRINT,
+  });
+  assert.equal(report.verdict, GATE_ERROR.LEGACY_SHA_REQUIRES_RESET);
+  assert.equal(report.expectedShaReset, 2);
+  assert.equal(report.expectedShaResetOnly, 1);
+  assert.equal(report.expectedShaResetWithEnc, 1);
+  assert.equal(report.expectedInserts, 0);
+  assert.equal(report.both, 0, "SHA+enc must not inflate the bcrypt both counter");
+  assert.equal(report.writes, 0);
+  const shaOnly = report.legacyShaRequiresReset.find((row) => row.userId === "waiter_sha");
+  const shaEnc = report.legacyShaRequiresReset.find((row) => row.userId === "waiter_sha_enc");
+  assert.equal(shaOnly.hasEnc, false);
+  assert.equal(shaEnc.hasEnc, true);
+  const serialized = JSON.stringify(report);
+  assert.equal(serialized.includes(sha), false);
+  assert.equal(serialized.includes("iv.ct.tag"), false);
+});
+
+test("compound Firebase push userIds do not cause SECRET_OUTPUT_REJECTED on dry-run", async () => {
+  const hash = await hashPassword("4826");
+  const compound = "-Nabcdefghijklmnopqr_1700000000001";
+  const world = createWorld({
+    fbTree: { rest_1: { [compound]: { password: hash } } },
+    employees: [
+      { id: "e-push", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: compound },
+    ],
+  });
+  const report = await runCredentialGate({
+    argv: [], env: applyEnv(), masked: applyMasked(), fb: world.fb, client: world.client, liveFingerprint: FINGERPRINT,
+  });
+  assert.equal(report.verdict, "OK");
+  assert.equal(report.expectedInserts, 1);
+  assert.equal(report.planned[0].userId, compound);
 });
 
 test("unsafe source ID fails report validation before COMMIT and rolls back writes", async () => {
@@ -1786,3 +2161,334 @@ test("dry-run sync rollback throw after worker success is PG_ROLLBACK_FAILED", a
 function assertNoRawFullRollback(src) {
   assert.doesNotMatch(src, /(?:await\s+)?(?:client|safeClient|owned)\.query\s*\(\s*[`'"]ROLLBACK[`'"]\s*\)/);
 }
+
+const SENTINEL_PASSWORD = "PLAINTEXT_PASSWORD_MARKER_123";
+const SENTINEL_PIN = "SECRET_PIN_MARKER_456";
+const SENTINEL_ENC_KEY = "ENCRYPTION_KEY_MARKER_789";
+const SENTINEL_TOKEN = "TOKEN_MARKER_ABC";
+const ALL_SENTINELS = [SENTINEL_PASSWORD, SENTINEL_PIN, SENTINEL_ENC_KEY, SENTINEL_TOKEN];
+
+function assertNoSentinels(text, label = "output") {
+  const joined = String(text || "");
+  for (const s of ALL_SENTINELS) {
+    assert.equal(joined.includes(s), false, `${label} leaked ${s}`);
+  }
+}
+
+function withCapturedConsole(fn) {
+  const lines = [];
+  const methods = ["log", "error", "warn", "info", "debug"];
+  const originals = {};
+  const push = (...args) => {
+    lines.push(args.map((a) => {
+      try { return typeof a === "string" ? a : JSON.stringify(a); }
+      catch { return String(a); }
+    }).join(" "));
+  };
+  for (const m of methods) {
+    originals[m] = console[m];
+    const capture = (...args) => push(...args);
+    console[m] = capture;
+    Object.defineProperty(console, m, { value: capture, configurable: true, writable: true });
+  }
+  const origStdout = process.stdout.write.bind(process.stdout);
+  const origStderr = process.stderr.write.bind(process.stderr);
+  process.stdout.write = (chunk, ...rest) => {
+    push(String(chunk));
+    return origStdout(chunk, ...rest);
+  };
+  process.stderr.write = (chunk, ...rest) => {
+    push(String(chunk));
+    return origStderr(chunk, ...rest);
+  };
+  const finish = (result) => {
+    for (const m of methods) {
+      Object.defineProperty(console, m, { value: originals[m], configurable: true, writable: true });
+      console[m] = originals[m];
+    }
+    process.stdout.write = origStdout;
+    process.stderr.write = origStderr;
+    return { result, lines: lines.join("\n") };
+  };
+  try {
+    const result = fn();
+    if (result && typeof result.then === "function") {
+      return result.then((r) => finish(r)).catch((err) => {
+        finish(undefined);
+        throw err;
+      });
+    }
+    return finish(result);
+  } catch (err) {
+    finish(undefined);
+    throw err;
+  }
+}
+
+function emptyGateReport(overrides = {}) {
+  return {
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    mode: "dry-run",
+    writes: 0,
+    firebaseWrites: 0,
+    credentialTrees: 0,
+    credentialUserNodes: 0,
+    restaurantsInPg: 0,
+    employeesInPg: 0,
+    currentEmployeeCredentials: 0,
+    mappable: 0,
+    hashOnly: 0,
+    passwordEncOnly: 0,
+    both: 0,
+    loginCompatible: 0,
+    expectedInserts: 0,
+    expectedUpdates: 0,
+    expectedUnchanged: 0,
+    expectedConflicts: 0,
+    expectedShaReset: 0,
+    expectedShaResetWithEnc: 0,
+    expectedShaResetOnly: 0,
+    credentialWithoutEmployee: [],
+    employeeWithoutCredential: [],
+    missingCredentialNode: [],
+    restaurantsWithoutCredentialTree: [],
+    incompatibleHash: [],
+    legacyShaRequiresReset: [],
+    destinationConflicts: [],
+    planned: [],
+    incompatibleHashBlocksApply: false,
+    reconciliation: null,
+    verdict: "OK",
+    ...overrides,
+  };
+}
+
+test("mutation locks: secret-like detection, exact ID shapes, no decrypt, no plaintext leak, SHA apply block", () => {
+  assert.match(gateSrc, /JWT_REALISTIC_ANYWHERE_RE\s*=\s*\/eyJ/);
+  assert.match(gateSrc, /containsSecretLikeMaterial/);
+  assert.match(gateSrc, /containsExplicitSecretMarker/);
+  const safeFn = gateSrc.slice(gateSrc.indexOf("export function safeReportId"), gateSrc.indexOf("export function safeUuidOrId"));
+  assert.ok(safeFn.indexOf("containsSecretLikeMaterial") < safeFn.indexOf("SAFE_ID_RE.test"));
+  assert.ok(safeFn.indexOf("containsSecretLikeMaterial") < safeFn.indexOf("FIREBASE_PUSH_ID_RE.test"));
+  assert.equal(safeReportId("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signaturepad"), null);
+  assert.equal(containsSecretLikeMaterial("a.b.c"), false);
+  assert.equal(safeReportId("token:sk_live_abcd1234"), null);
+  assert.equal(safeReportId("-sk_live_12345678901"), null);
+  assert.equal(safeReportId("Sk_LiVe_abcd1234"), null);
+
+  assert.match(gateSrc, /LEGACY_PERCENT_PHONE_KEY_RE = \/\^%2\[Bb\]\\d\{8,15\}\$\//);
+  assert.doesNotMatch(gateSrc, /LEGACY_PERCENT_ENCODED_KEY_RE/);
+  assert.doesNotMatch(gateSrc, /decodeURIComponent/);
+  assert.equal(safeReportId("%2e%2e%2f"), null);
+  assert.equal(safeReportId("%2B998901234567"), "%2B998901234567");
+
+  assert.match(gateSrc, /FIREBASE_PUSH_COMPOUND_RE = \/\^-\[0-9A-Za-z_-\]\{19\}_\\d\{10,16\}\$\//);
+  assert.doesNotMatch(gateSrc, /FIREBASE_PUSH_COMPOUND_RE = \/\^[^\n]*_\[A-Za-z0-9_-\]\{1,/);
+  assert.equal(safeReportId("-Nabcdefghijklmnopqr_alphasuffix"), null);
+  assert.equal(safeReportId("-Nabcdefghijklmnopqr_1700000000001"), "-Nabcdefghijklmnopqr_1700000000001");
+
+  assert.doesNotMatch(gateSrc, /process\.env\.ENCRYPTION_KEY|env\[.ENCRYPTION_KEY/);
+  assert.doesNotMatch(gateSrc, /decryptSecret|decryptPassword|\.decrypt\s*\(/);
+  assert.doesNotMatch(cliSrc, /process\.env\.ENCRYPTION_KEY|env\[.ENCRYPTION_KEY/);
+  assert.doesNotMatch(cliSrc, /decryptSecret|decryptPassword|\.decrypt\s*\(/);
+  assert.doesNotMatch(gateSrc, /from\s+["'].*\/crypto\.js["']/);
+
+  assert.doesNotMatch(gateSrc, /console\.(log|info|debug|warn|error)/);
+  assert.doesNotMatch(
+    cliSrc,
+    /console\.(log|info|debug|warn|error)\s*\(\s*[^)]*\b(password|passwordHash|passwordEnc|plaintext|plaintextCredential|ENCRYPTION_KEY|decrypt|pin)\b/i,
+  );
+  const allowedReportSlice = gateSrc.slice(
+    gateSrc.indexOf("ALLOWED_REPORT_KEYS"),
+    gateSrc.indexOf("ALLOWED_ID_ROW_KEYS"),
+  );
+  const allowedIdSlice = gateSrc.slice(
+    gateSrc.indexOf("ALLOWED_ID_ROW_KEYS"),
+    gateSrc.indexOf("ALLOWED_APPLIED_KEYS"),
+  );
+  assert.doesNotMatch(allowedReportSlice, /"(password|passwordHash|passwordEnc|password_hash|password_enc|plaintext|pin|copyHash|copyEnc)"/);
+  assert.doesNotMatch(allowedIdSlice, /"(password|passwordHash|passwordEnc|password_hash|password_enc|plaintext|pin|copyHash|copyEnc)"/);
+  assert.match(allowedReportSlice, /"passwordEncOnly"/);
+
+  const publicFn = gateSrc.slice(gateSrc.indexOf("export function publicErrorCode"), gateSrc.indexOf("function isPgSqlState"));
+  assert.doesNotMatch(publicFn, /return\s+err\.message|return\s+String\(\s*err|err\.message\s*[;,\)]/);
+  assert.doesNotMatch(publicFn.replace(/\/\/[^\n]*/g, ""), /err\.message/);
+  assert.match(publicFn, /GATE_FAILED/);
+  assert.equal(publicErrorCode(new Error(SENTINEL_PASSWORD)), GATE_ERROR.GATE_FAILED);
+  assert.equal(String(publicErrorCode(new Error(SENTINEL_PASSWORD))).includes(SENTINEL_PASSWORD), false);
+
+  assert.throws(
+    () => validateCredentialGateReport(emptyGateReport({ generatedAt: SENTINEL_PASSWORD })),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+
+  const applyFn = gateSrc.slice(
+    gateSrc.indexOf("export async function applyCredentialCopy"),
+    gateSrc.indexOf("export async function loadTerminalAttempt"),
+  );
+  assert.match(applyFn, /expectedShaReset\s*>\s*0/);
+  assert.match(applyFn, /LEGACY_SHA_REQUIRES_RESET/);
+  assert.match(gateSrc, /expectedShaResetWithEnc/);
+  assert.match(gateSrc, /expectedShaResetOnly/);
+});
+
+test("runtime leak harness: console capture, helpers, report, public errors never emit sentinels", async () => {
+  const { materializeMigratableHash, classifyStoredPassword } = await import("../scripts/lib/credentialHashCompatibility.mjs");
+
+  const captured = await withCapturedConsole(async () => {
+    console.log("safe-noise");
+    console["error"]("also-safe");
+    console.warn("warn-safe");
+    classifyStoredPassword(SENTINEL_PASSWORD);
+    await materializeMigratableHash({ kind: "plaintext", migratable: true }, SENTINEL_PIN);
+    const code = publicErrorCode(new Error(SENTINEL_TOKEN));
+    assert.equal(code, GATE_ERROR.GATE_FAILED);
+    const report = validateCredentialGateReport(emptyGateReport({
+      expectedShaReset: 1,
+      expectedShaResetOnly: 1,
+      verdict: GATE_ERROR.LEGACY_SHA_REQUIRES_RESET,
+      legacyShaRequiresReset: [{ restId: "rest_1", userId: "waiter_1", kind: "sha256", hasEnc: false }],
+    }));
+    assertNoSentinels(JSON.stringify(report), "report");
+    return report;
+  });
+
+  assertNoSentinels(captured.lines, "console-capture");
+  assert.equal(captured.lines.includes(SENTINEL_PASSWORD), false);
+  assert.equal(captured.lines.includes(SENTINEL_PIN), false);
+
+  const probe = withCapturedConsole(() => {
+    console["log"](SENTINEL_PASSWORD);
+  });
+  assert.equal(probe.lines.includes(SENTINEL_PASSWORD), true, "harness must observe console[\"log\"]");
+
+  const cliOut = withCapturedConsole(() => {
+    const err = new Error(SENTINEL_ENC_KEY);
+    console.error("PRODUCTION CREDENTIAL GATE FAILED:", publicErrorCode(err));
+  });
+  assertNoSentinels(cliOut.lines, "cli-public-error");
+  assert.match(cliOut.lines, /GATE_FAILED/);
+
+  assert.throws(
+    () => assertSecretFree({ password: SENTINEL_PASSWORD }),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+  assert.throws(
+    () => validateCredentialGateReport(emptyGateReport({
+      planned: [{
+        restId: "rest_1",
+        userId: SENTINEL_TOKEN,
+        restaurantId: "11111111-1111-1111-1111-111111111111",
+        employeeId: "22222222-2222-2222-2222-222222222222",
+        hasHash: true,
+        hasEnc: false,
+        action: "insert",
+      }],
+    })),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+
+  assert.throws(
+    () => validateCredentialGateReport({
+      ...emptyGateReport(),
+      metadata: { anyField: SENTINEL_PASSWORD },
+    }),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+});
+
+test("planner E2E under runtime capture: classify + materialize + plan + report never emit sentinel", async () => {
+  const bcryptHash = await hashPassword("4826");
+  const shaOnly = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  const world = createWorld({
+    fbTree: {
+      rest_1: {
+        waiter_hash: { password: bcryptHash },
+        waiter_enc: { passwordEnc: "enc-cipher-local-only" },
+        waiter_both: { password: SENTINEL_PASSWORD },
+        waiter_missing: { password: shaOnly, passwordEnc: "enc-with-sha" },
+        "employee:branch.v1.active": { password: bcryptHash },
+      },
+    },
+    employees: [
+      { id: "e-hash", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_hash" },
+      { id: "e-enc", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_enc" },
+      { id: "e-both", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_both" },
+      { id: "e-missing", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "waiter_missing" },
+      { id: "e-dotted", restaurant_id: "11111111-1111-1111-1111-111111111111", legacy_rtdb_id: "employee:branch.v1.active" },
+    ],
+  });
+
+  const captured = await withCapturedConsole(async () => {
+    // Direct classify + materialize (same helpers the planner uses).
+    const classifiedPlain = classifyStoredPassword(SENTINEL_PASSWORD);
+    assert.equal(classifiedPlain.kind, "plaintext");
+    const { materializeMigratableHash } = await import("../scripts/lib/credentialHashCompatibility.mjs");
+    const hashed = await materializeMigratableHash(classifiedPlain, SENTINEL_PASSWORD);
+    assert.equal(isHashed(hashed), true);
+    assert.equal(String(hashed).includes(SENTINEL_PASSWORD), false);
+
+    const plan = await planCredentialCopyInTx({ fb: world.fb, client: world.client });
+    assert.ok(plan.expectedInserts >= 1);
+    assert.ok(plan.expectedShaReset >= 1);
+    assert.ok(plan.planned.some((row) => row.userId === "employee:branch.v1.active"));
+
+    // Final report view must strip copyHash/copyEnc and remain secret-free.
+    const reportInput = {
+      generatedAt: new Date().toISOString(),
+      mode: "dry-run",
+      writes: 0,
+      firebaseWrites: 0,
+      credentialTrees: plan.credentialTrees,
+      credentialUserNodes: plan.credentialUserNodes,
+      restaurantsInPg: plan.restaurantsInPg,
+      employeesInPg: plan.employeesInPg,
+      currentEmployeeCredentials: plan.currentEmployeeCredentials,
+      mappable: plan.mappable,
+      hashOnly: plan.hashOnly,
+      passwordEncOnly: plan.passwordEncOnly,
+      both: plan.both,
+      loginCompatible: plan.loginCompatible,
+      expectedInserts: plan.expectedInserts,
+      expectedUpdates: 0,
+      expectedUnchanged: plan.expectedUnchanged,
+      expectedConflicts: plan.expectedConflicts,
+      expectedShaReset: plan.expectedShaReset,
+      expectedShaResetWithEnc: plan.expectedShaResetWithEnc,
+      expectedShaResetOnly: plan.expectedShaResetOnly,
+      credentialWithoutEmployee: plan.credentialWithoutEmployee,
+      employeeWithoutCredential: plan.employeeWithoutCredential,
+      missingCredentialNode: plan.missingCredentialNode,
+      restaurantsWithoutCredentialTree: plan.restaurantsWithoutCredentialTree,
+      incompatibleHash: plan.incompatibleHash,
+      legacyShaRequiresReset: plan.legacyShaRequiresReset,
+      destinationConflicts: plan.destinationConflicts,
+      planned: (plan.planned || []).map((row) => ({
+        restId: row.restId,
+        userId: row.userId,
+        restaurantId: row.restaurantId,
+        employeeId: row.employeeId,
+        hasHash: Boolean(row.hasHash),
+        hasEnc: Boolean(row.hasEnc),
+        action: row.action,
+      })),
+      incompatibleHashBlocksApply: plan.incompatibleHash.length > 0,
+      reconciliation: null,
+      verdict: plan.expectedShaReset > 0 ? GATE_ERROR.LEGACY_SHA_REQUIRES_RESET : "OK",
+    };
+    assertSecretFree(reportInput);
+    const report = validateCredentialGateReport(reportInput);
+    assertSecretFree(report);
+    assertNoSentinels(JSON.stringify(report), "planner-report");
+    return report;
+  });
+
+  assertNoSentinels(captured.lines, "planner-console-capture");
+  assert.equal(captured.lines.includes(SENTINEL_PASSWORD), false);
+
+  // Harness observes bracket access mutations on the planner path.
+  const logProbe = withCapturedConsole(() => { console["log"](SENTINEL_PASSWORD); });
+  assert.equal(logProbe.lines.includes(SENTINEL_PASSWORD), true);
+  const errProbe = withCapturedConsole(() => { console["error"](SENTINEL_PASSWORD); });
+  assert.equal(errProbe.lines.includes(SENTINEL_PASSWORD), true);
+});

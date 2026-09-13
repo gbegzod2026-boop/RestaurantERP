@@ -34,6 +34,12 @@ import {
   GATE_ERROR,
   publicErrorCode,
   planCredentialCopy,
+  safeReportId,
+  opaqueReportId,
+  isSecretLikeValue,
+  containsSecretLikeMaterial,
+  assertSecretFree,
+  validateCredentialGateReport,
 } from "../scripts/lib/productionCredentialGate.mjs";
 import { exampleLiveTargetFingerprint } from "../scripts/lib/pgTargetFingerprint.mjs";
 
@@ -1486,4 +1492,125 @@ test("removing ordinary-worker rollback timeout would hang under the test watchd
   assert.match(finishSrc, /boundedCredentialRollback/);
   assert.match(finishSrc, /PG_CLEANUP_TIMEOUT|PG_ROLLBACK_FAILED/);
   assert.match(finishSrc, /!rb\.ok/);
+});
+
+test("credential report ID sanitizer accepts observed legacy shapes and rejects hostile IDs", () => {
+  const shapes = [
+    "-Nabcdefghijklmnopqr_1700000000001",
+    "-O0123456789ABCDEFGH_1785493031293",
+    "-Pzyxwvutsrqponmlkji_1699999999999",
+  ];
+  for (const id of shapes) {
+    assert.equal(safeReportId(id), id);
+    assert.equal(isSecretLikeValue(id), false);
+  }
+  assert.equal(safeReportId("-Nabcdefghijklmnopqr"), "-Nabcdefghijklmnopqr");
+  assert.equal(safeReportId("chef_1700000000001"), "chef_1700000000001");
+  assert.equal(safeReportId("%2B998901234567"), "%2B998901234567");
+
+  assert.equal(safeReportId("user@evil"), null);
+  assert.equal(safeReportId("a/b"), null);
+  assert.equal(safeReportId("a\\b"), null);
+  assert.equal(safeReportId("has space"), null);
+  assert.equal(safeReportId("has\nnewline"), null);
+  assert.equal(safeReportId("\u0001control"), null);
+  assert.equal(safeReportId(`x${"y".repeat(200)}`), null);
+  assert.equal(safeReportId("postgres://u:p@h/db"), null);
+  // Ordinary dotted labels are not JWTs; SAFE_ID_RE may emit them raw.
+  assert.equal(containsSecretLikeMaterial("a.b.c"), false);
+  assert.equal(safeReportId("a.b.c"), "a.b.c");
+  assert.equal(containsSecretLikeMaterial("token:a.b.c"), false);
+  assert.equal(safeReportId("token:a.b.c"), "token:a.b.c");
+  assert.equal(safeReportId("user:ghp_abcd1234"), null);
+  assert.equal(safeReportId(`id:${"a".repeat(32)}`), null);
+  assert.equal(safeReportId("sk_live_abcd1234"), null);
+  assert.equal(safeReportId("Sk_LiVe_abcd1234"), null);
+  assert.equal(safeReportId("GhP_abcd1234"), null);
+  assert.equal(containsSecretLikeMaterial("ghp_abcd1234"), true);
+  assert.equal(containsSecretLikeMaterial("GhP_abcd1234"), true);
+  assert.equal(containsSecretLikeMaterial("a".repeat(32)), true);
+  assert.equal(containsSecretLikeMaterial("G".repeat(40)), true);
+  assert.equal(isSecretLikeValue("Bearer abc.def.ghi"), true);
+  assert.equal(isSecretLikeValue("password=SUPER_SECRET_PIN_987654"), true);
+  const realisticJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.signaturepad";
+  assert.equal(containsSecretLikeMaterial(realisticJwt), true);
+  assert.equal(safeReportId(realisticJwt), null);
+  assert.equal(containsSecretLikeMaterial("employee:branch.v1.active"), false);
+
+  const gateSrc = readFileSync(path.join(here, "../scripts/lib/productionCredentialGate.mjs"), "utf8");
+  const migrateSrc = readFileSync(path.join(here, "../scripts/production-credentials-migrate.mjs"), "utf8");
+  assert.match(gateSrc, /containsSecretLikeMaterial/);
+  assert.match(gateSrc, /JWT_REALISTIC_ANYWHERE_RE/);
+  assert.doesNotMatch(gateSrc, /JWT_LIKE_ANYWHERE_RE/);
+  assert.match(gateSrc, /API_TOKEN_ANYWHERE_RE/);
+  assert.match(gateSrc, /API_TOKEN_ANYWHERE_RE = \/[^\n]+\/i/);
+  assert.match(gateSrc, /LONG_HEX_ANYWHERE_RE/);
+  assert.match(gateSrc, /LONG_BASE64URL_ANYWHERE_RE/);
+  assert.doesNotMatch(gateSrc, /console\.(log|info|debug|warn|error)/);
+  assert.doesNotMatch(gateSrc, /process\.env\.ENCRYPTION_KEY|decryptSecret|decryptPassword/);
+  assert.doesNotMatch(migrateSrc, /process\.env\.ENCRYPTION_KEY|decryptSecret|decryptPassword/);
+  assert.doesNotMatch(
+    migrateSrc,
+    /console\.(log|info|debug|warn|error)\s*\(\s*[^)]*\b(password|passwordHash|passwordEnc|plaintext|plaintextCredential|ENCRYPTION_KEY|decrypt|pin)\b/i,
+  );
+  const publicFn = gateSrc.slice(gateSrc.indexOf("export function publicErrorCode"), gateSrc.indexOf("function isPgSqlState"));
+  assert.doesNotMatch(publicFn.replace(/\/\/[^\n]*/g, ""), /err\.message/);
+  assert.equal(publicErrorCode(new Error("PLAINTEXT_PASSWORD_MARKER_123")), GATE_ERROR.GATE_FAILED);
+
+  assert.throws(
+    () => assertSecretFree({ password: "PLAINTEXT_PASSWORD_MARKER_123" }),
+    (err) => publicErrorCode(err) === GATE_ERROR.SECRET_OUTPUT_REJECTED,
+  );
+
+  const report = validateCredentialGateReport({
+    generatedAt: "2026-01-01T00:00:00.000Z",
+    mode: "dry-run",
+    writes: 0,
+    firebaseWrites: 0,
+    credentialTrees: 1,
+    credentialUserNodes: 1,
+    restaurantsInPg: 1,
+    employeesInPg: 1,
+    currentEmployeeCredentials: 0,
+    mappable: 1,
+    hashOnly: 1,
+    passwordEncOnly: 0,
+    both: 0,
+    loginCompatible: 1,
+    expectedInserts: 1,
+    expectedUpdates: 0,
+    expectedUnchanged: 0,
+    expectedConflicts: 0,
+    expectedShaReset: 1,
+    expectedShaResetWithEnc: 0,
+    expectedShaResetOnly: 1,
+    credentialWithoutEmployee: [],
+    employeeWithoutCredential: [],
+    missingCredentialNode: [],
+    restaurantsWithoutCredentialTree: [],
+    incompatibleHash: [],
+    legacyShaRequiresReset: [{ restId: "rest_1", userId: shapes[0], kind: "sha256", hasEnc: false }],
+    destinationConflicts: [],
+    planned: [{
+      restId: "rest_1",
+      userId: shapes[0],
+      restaurantId: "11111111-1111-1111-1111-111111111111",
+      employeeId: "22222222-2222-2222-2222-222222222222",
+      hasHash: true,
+      hasEnc: false,
+      action: "insert",
+    }],
+    incompatibleHashBlocksApply: false,
+    reconciliation: null,
+    verdict: GATE_ERROR.LEGACY_SHA_REQUIRES_RESET,
+  });
+  assert.equal(report.planned[0].userId, shapes[0]);
+  assert.equal(report.legacyShaRequiresReset[0].hasEnc, false);
+  const text = JSON.stringify(report);
+  assert.equal(text.includes("$2a$"), false);
+  assert.equal(text.includes("postgres://"), false);
+  assert.equal(text.includes("SUPER_SECRET_PIN_987654"), false);
+  assert.equal(text.includes("PLAINTEXT_PASSWORD_MARKER"), false);
+  assert.equal(text.includes("ENCRYPTION_KEY_MARKER"), false);
+  assert.equal(opaqueReportId("weird*key").startsWith("id:"), true);
 });

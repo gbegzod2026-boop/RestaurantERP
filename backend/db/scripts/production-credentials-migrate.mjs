@@ -70,6 +70,8 @@ export async function main(argv = process.argv.slice(2), env = process.env, deps
     expectedUnchanged: result.expectedUnchanged,
     expectedConflicts: result.expectedConflicts,
     expectedShaReset: result.expectedShaReset,
+    expectedShaResetWithEnc: result.expectedShaResetWithEnc,
+    expectedShaResetOnly: result.expectedShaResetOnly,
     currentEmployeeCredentials: result.currentEmployeeCredentials,
     credentialWithoutEmployee: result.credentialWithoutEmployee.length,
     employeeWithoutCredential: result.employeeWithoutCredential.length,
